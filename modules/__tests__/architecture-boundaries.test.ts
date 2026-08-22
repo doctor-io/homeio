@@ -7,6 +7,7 @@ const SOURCE_ROOTS = ["app", "components", "hooks", "lib", "modules"];
 const FEATURE_MODULES = [
   "modules/apps",
   "modules/files",
+  "modules/onboarding",
   "modules/settings",
   "modules/system",
 ];

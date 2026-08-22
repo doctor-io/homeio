@@ -32,3 +32,12 @@ export function isOnboardingStepNumber(value: unknown): value is OnboardingStepN
     value <= ONBOARDING_LAST_STEP
   );
 }
+
+/**
+ * The single place that decides whether a user is sent to the wizard. Only an
+ * explicitly pending install qualifies: `complete` has been through it, and
+ * `not_applicable` predates it. Anything else falls through to the desktop.
+ */
+export function shouldEnterSetup(status: OnboardingStatus): boolean {
+  return status === "pending";
+}

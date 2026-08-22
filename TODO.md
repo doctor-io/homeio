@@ -68,7 +68,7 @@ both migration paths — see rule 1.
   `authenticateSession` underneath it does nothing, and the test passes while asserting
   nothing.
 
-### [ ] W3 — Redirect gate
+### [x] W3 — Redirect gate
 
 - Root page redirects to `/setup` when status is `pending`.
 - **Never block login, and never trap anyone**: `not_applicable` and `complete` must fall
@@ -77,9 +77,15 @@ both migration paths — see rule 1.
   the desktop shell before the redirect.
 - Tests: pending → redirect; complete → desktop; not_applicable → desktop; DB error → desktop.
 
+  **Landed.** Gate in `app/page.tsx`, guard in `app/setup/page.tsx`, wizard frame in
+  `modules/onboarding/components/setup-wizard.tsx` (steps land in W4–W7; W3 ships the frame
+  plus a working Skip). Both pages are `force-dynamic` — without it Next prerenders the
+  gate and bakes in one answer, the same trap that hid `DEMO_MODE` on /login until 1.7.23.
+  `modules/onboarding` added to `FEATURE_MODULES` in the architecture guard.
+
 ### [ ] W4 — `/setup` shell
 
-- Route outside the desktop shell, reusing `FullScreenShell` (wallpaper, clock card).
+- Route and `FullScreenShell` wrapper already exist from W3 — W4 adds the step machinery.
 - Centred card + 5-bar pill indicator — **continuing `components/auth/register-form.tsx`**,
   not the left rail the roadmap text describes. The two flows run back to back.
 - Resume from the stored `onboarding_step` on load; write progress on every transition.
