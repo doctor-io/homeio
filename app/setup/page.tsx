@@ -17,8 +17,17 @@ export default async function SetupPage() {
 
   return (
     <FullScreenShell
+      // No clock here, unlike /login and /register. It is absolutely positioned
+      // and the wizard's steps vary a lot in height — 2FA enrolment is roughly
+      // twice the time zone step — so on a laptop-height viewport the clock
+      // overlaps the step indicator. The wizard is a task flow, not a lock
+      // screen; the 150px is better spent on the step.
+      showClock={false}
+      // `my-auto` rather than the parent's items-center keeps the top of a tall
+      // step reachable once the content overflows and the container scrolls.
+      centerClassName="overflow-y-auto"
       center={
-        <div className="w-full max-w-md">
+        <div className="my-auto w-full max-w-md py-6">
           <SetupWizard initialState={state} />
         </div>
       }

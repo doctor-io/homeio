@@ -123,13 +123,26 @@ both migration paths — see rule 1.
   whenever the disk list is empty or fails — Docker without host block devices reports an
   empty list rather than an error, and a dev machine has no `lsblk` at all.
 
-### [ ] W6 — Steps 3–4 (Tailscale, 2FA)
+### [x] W6 — Steps 3–4 (Tailscale, 2FA)
 
 - Step 3: embed the existing install-and-activate flow from `modules/integrations`.
   Reuse the `missing_tun` / `service_unavailable` states — do not invent new error handling.
   Ends with the tailnet address + pairing QR (feeds M4).
 - Step 4: embed the v1.7 TOTP enrolment (`useTwoFactor`) rather than duplicating it.
   Show a plain warning when step 3 enabled remote access and the user skips this.
+
+  **Landed.** `steps/remote-access-step.tsx` and `steps/two-factor-step.tsx`, 13 tests.
+  The 2FA step reuses `useStartTwoFactorSetup` / `useVerifyTwoFactor` from
+  `modules/settings/hooks/useTwoFactor` — one implementation of enrolment, two
+  presentations. The settings `TwoFactorCard` itself was **not** reused: it is built from
+  settings-panel chrome (`SETTINGS_PANEL_INSET`, `SectionDivider`) that clashes inside the
+  full-screen wizard.
+
+  **Layout fix that came out of this:** `/setup` now passes `showClock={false}` and scrolls
+  its centre column. The clock in `FullScreenShell` is absolutely positioned, and the 2FA
+  step is roughly twice the height of the time zone step — on a laptop-height viewport the
+  clock sat on top of the step indicator. Worth remembering for W7, whose summary card is
+  taller again.
 
 ### [ ] W7 — Step 5 + finish
 

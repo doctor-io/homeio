@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { RemoteAccessStep } from "@/modules/onboarding/components/steps/remote-access-step";
 import { StorageStep } from "@/modules/onboarding/components/steps/storage-step";
+import { TwoFactorStep } from "@/modules/onboarding/components/steps/two-factor-step";
 import { TimezoneStep } from "@/modules/onboarding/components/steps/timezone-step";
 import {
   ONBOARDING_FIRST_STEP,
@@ -71,6 +73,7 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
   const [storageRoot, setStorageRoot] = useState<string | null>(
     initialState.defaultStorageRoot,
   );
+  const [isRemotelyReachable, setIsRemotelyReachable] = useState(false);
 
   const current = STEPS.find((entry) => entry.step === step) ?? STEPS[0];
   const isFirst = step === ONBOARDING_FIRST_STEP;
@@ -199,6 +202,8 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
       <div className="mb-6">
         {step === 1 && <TimezoneStep value={timezone} onChange={setTimezone} />}
         {step === 2 && <StorageStep value={storageRoot} onChange={setStorageRoot} />}
+        {step === 3 && <RemoteAccessStep onConnectedChange={setIsRemotelyReachable} />}
+        {step === 4 && <TwoFactorStep isRemotelyReachable={isRemotelyReachable} />}
       </div>
 
       {error && (
