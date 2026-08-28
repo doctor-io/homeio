@@ -70,12 +70,38 @@ describe("POST /api/v1/store/custom-apps/install", () => {
       sourceType: "docker-compose",
       sourceText: "services:\n  app:\n    image: nginx:latest",
       repositoryUrl: undefined,
+      // This route predates the risk gate. Defaulting to acknowledged keeps a
+      // 1.7 caller working; the UI opts in to the gate by sending false.
+      acknowledgeRisks: true,
     });
     expect(startAppLifecycleAction).toHaveBeenCalledWith({
       appId: "custom-homepage",
       action: "install",
       displayName: "My Homepage",
     });
+  });
+
+  it("honours an explicit opt-in to the risk gate", async () => {
+    vi.mocked(upsertCustomStoreTemplate).mockResolvedValueOnce({
+      appId: "custom-homepage",
+    } as never);
+
+    await POST(
+      new Request("http://localhost/api/v1/store/custom-apps/install", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "My Homepage",
+          sourceType: "docker-compose",
+          source: "services:\n  app:\n    image: nginx:latest",
+          acknowledgeRisks: false,
+        }),
+      }),
+    );
+
+    expect(upsertCustomStoreTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ acknowledgeRisks: false }),
+    );
   });
 
   it("returns 400 when payload is invalid", async () => {

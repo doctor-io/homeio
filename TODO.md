@@ -194,8 +194,18 @@ There is **no UI anywhere** — that is the missing half.
       differently on the real request. Closing that needs a custom agent with pinned
       lookup — worth doing if this ever accepts URLs from untrusted users, which today it
       does not (the caller is already an authenticated admin).
-- [ ] **C3** — Validation layer: parse YAML, reject unknown top-level keys, require explicit
+- [x] **C3** — Validation layer: parse YAML, reject unknown top-level keys, require explicit
       confirmation for `privileged: true` and host networking. Nothing touches disk until it parses.
+      **Landed.** `lib/server/modules/store/compose-validation.ts`, 22 tests, enforced inside
+      `upsertCustomStoreTemplate` so paste, `docker run` and URL import all pass one gate.
+      Risks detected: privileged, host network, host PID, Docker socket mount, sensitive host
+      bind (`/`, `/etc`, `/root`, …), dangerous capabilities. Each names the service it came from.
+
+      **Deliberate asymmetry — revisit if you disagree:** `/custom-apps/install` defaults
+      `acknowledgeRisks` to **true**, preserving its 1.7 behaviour, because turning a working
+      install into a 409 would break existing callers. The **import** route defaults to
+      **false**, so nothing new installs unseen. The C4 UI must send `acknowledgeRisks: false`
+      on its first attempt, show the returned `risks`, then resend `true` on confirmation.
 - [ ] **C4** — Add-app modal: three tabs (paste compose / docker run / from URL), Monaco in
       YAML mode (already a dependency), live preview card showing images, ports, volumes, env count.
 - [ ] **C5** — Conflict detection before install: port in use, container name taken, bind

@@ -10,6 +10,10 @@ import {
   ComposeImportError,
   fetchComposeFromUrl,
 } from "@/lib/server/modules/store/compose-import";
+import {
+  ComposeRiskError,
+  ComposeValidationError,
+} from "@/lib/server/modules/store/compose-validation";
 import { upsertCustomStoreTemplate } from "@/lib/server/modules/store/custom-apps";
 
 export const runtime = "nodejs";
@@ -19,6 +23,7 @@ const importSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   iconUrl: z.string().trim().max(1024).optional(),
   ref: z.string().trim().max(120).optional(),
+  acknowledgeRisks: z.boolean().optional(),
 });
 
 /** Falls back to the file's directory, since compose files are rarely named usefully. */
@@ -65,12 +70,26 @@ export async function POST(request: Request) {
           sourceText: fetched.content,
           sourceUrl: fetched.url,
           sourceRef: parsed.data.ref,
+          // A URL import is a new entry point, so nothing installs unseen: the
+          // caller must have been shown the risks and said yes.
+          acknowledgeRisks: parsed.data.acknowledgeRisks === true,
         });
 
         return NextResponse.json({ data: template }, { status: 201 });
       },
     );
   } catch (error) {
+    if (error instanceof ComposeRiskError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, risks: error.risks },
+        { status: 409 },
+      );
+    }
+
+    if (error instanceof ComposeValidationError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 422 });
+    }
+
     if (error instanceof ComposeImportError) {
       return NextResponse.json(
         { error: error.message, code: error.code },

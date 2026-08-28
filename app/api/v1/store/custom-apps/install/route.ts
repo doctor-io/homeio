@@ -11,6 +11,10 @@ import {
 import { startAppLifecycleAction } from "@/lib/server/modules/store/service";
 import { requireApiSession } from "@/lib/server/modules/auth/api";
 import { StoreOperationError } from "@/lib/server/modules/apps/operations";
+import {
+  ComposeRiskError,
+  ComposeValidationError,
+} from "@/lib/server/modules/store/compose-validation";
 
 export const runtime = "nodejs";
 
@@ -20,6 +24,7 @@ const installCustomAppSchema = z.object({
   repositoryUrl: z.string().trim().max(1024).optional(),
   sourceType: z.enum(["docker-compose", "docker-run"]),
   source: z.string().trim().min(1).max(50_000),
+  acknowledgeRisks: z.boolean().optional(),
 });
 
 function isCustomAppRequestError(error: unknown) {
@@ -65,6 +70,12 @@ export async function POST(request: Request) {
           sourceType: parsed.data.sourceType,
           sourceText: parsed.data.source,
           repositoryUrl: parsed.data.repositoryUrl,
+          // Defaults to true here, unlike the import route. This endpoint
+          // shipped before the risk gate existed, and turning an install that
+          // worked in 1.7 into a 409 would break callers that never got the
+          // chance to acknowledge anything. The UI sends false and shows the
+          // risks first; a script keeps its old behaviour.
+          acknowledgeRisks: parsed.data.acknowledgeRisks ?? true,
         });
 
         const operation = await startAppLifecycleAction({
@@ -83,6 +94,17 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+    if (error instanceof ComposeRiskError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, risks: error.risks },
+        { status: 409 },
+      );
+    }
+
+    if (error instanceof ComposeValidationError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 422 });
+    }
+
     if (error instanceof StoreOperationError) {
       return NextResponse.json(
         {

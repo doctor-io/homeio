@@ -11,6 +11,11 @@ import {
   parseComposeContentToApp,
   type AppDefinition,
 } from "@/lib/server/modules/store/casaos-compose-mapper";
+import {
+  analyzeComposeDocument,
+  assertComposeAcknowledged,
+  type ComposeAnalysis,
+} from "@/lib/server/modules/store/compose-validation";
 import type { StoreCatalogTemplate } from "@/lib/server/modules/store/catalog";
 
 export type CustomStoreSourceType = "docker-compose" | "docker-run" | "url";
@@ -38,6 +43,13 @@ type UpsertCustomStoreTemplateInput = {
   sourceUrl?: string;
   /** Commit SHA or tag the import was pinned to, when the caller pinned one. */
   sourceRef?: string;
+  /**
+   * Whether the caller has seen and accepted the host-level access this
+   * compose file asks for. Callers pass this deliberately: the pre-existing
+   * install route defaults it to true to keep its 1.7 behaviour, while new
+   * entry points default to false so a risky file cannot install unseen.
+   */
+  acknowledgeRisks?: boolean;
 };
 
 const CUSTOM_SOURCE_TYPES: CustomStoreSourceType[] = ["docker-compose", "docker-run", "url"];
@@ -467,8 +479,10 @@ function normalizeComposeContent(input: {
   }
 
   // "url" carries the fetched document, so it validates as compose like a
-  // pasted one — the difference is provenance, not format.
-  parseComposeDocument(sourceText);
+  // pasted one — the difference is provenance, not format. Going through the
+  // analyzer rather than a bare parse means the caller gets "Unexpected
+  // top-level keys: sevices" instead of a generic failure.
+  analyzeComposeDocument(sourceText);
   return sourceText;
 }
 
@@ -543,6 +557,11 @@ export async function upsertCustomStoreTemplate(input: UpsertCustomStoreTemplate
         sourceText: input.sourceText,
         fallbackServiceName: name,
       });
+
+      // Validate before anything is written: a file that cannot work, or that
+      // quietly asks for the host, must not reach the database or the disk.
+      const analysis: ComposeAnalysis = analyzeComposeDocument(composeContent);
+      assertComposeAcknowledged(analysis, input.acknowledgeRisks === true);
       // Provenance is recorded only for imports. Re-saving a pasted app must
       // not invent a source URL, and must not leave a stale one behind either.
       const sourceUrl = normalize(input.sourceUrl);
