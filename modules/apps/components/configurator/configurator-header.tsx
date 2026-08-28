@@ -13,6 +13,7 @@ type ConfiguratorHeaderProps = {
 function formatViewLabel(view: ConfiguratorView) {
   if (view === "classic") return "Classic";
   if (view === "compose") return "Docker Compose";
+  if (view === "import_url") return "From URL";
   return "Docker Run";
 }
 

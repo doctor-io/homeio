@@ -4,7 +4,9 @@ import type { StoreAppDetail } from "@/lib/shared/contracts/apps";
 import type { AppActionTarget } from "@/modules/apps/components/app-grid";
 import { ClassicFormView } from "@/modules/apps/components/configurator/classic-form-view";
 import { ComposeEditorView } from "@/modules/apps/components/configurator/compose-editor-view";
+import { ComposeRiskNotice } from "@/modules/apps/components/configurator/compose-risk-notice";
 import { ConfiguratorHeader } from "@/modules/apps/components/configurator/configurator-header";
+import { ImportUrlView } from "@/modules/apps/components/configurator/import-url-view";
 import {
   buildInitialComposeDraft,
   buildInitialDockerRunState,
@@ -21,6 +23,9 @@ import {
 import { DockerRunView } from "@/modules/apps/components/configurator/docker-run-view";
 import { useAppCompose } from "@/modules/apps/hooks/useAppCompose";
 import {
+  ComposeRisksError,
+  type ComposeRiskDetail,
+  type ImportCustomAppInput,
   type InstallAppInput,
   type InstallCustomAppInput,
   type SaveAppSettingsInput,
@@ -46,6 +51,7 @@ export type AppConfiguratorPanelProps = {
   actions?: {
     installApp?: (input: InstallAppInput) => Promise<unknown>;
     installCustomApp?: (input: InstallCustomAppInput) => Promise<unknown>;
+    importCustomApp?: (input: ImportCustomAppInput) => Promise<unknown>;
     saveAppSettings?: (input: SaveAppSettingsInput) => Promise<unknown>;
   };
   onClose?: () => void;
@@ -230,6 +236,8 @@ export function AppConfiguratorPanel({
   const [didSave, setDidSave] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingRisks, setPendingRisks] = useState<ComposeRiskDetail[] | null>(null);
+  const [importState, setImportState] = useState({ url: "", ref: "", name: "" });
   const [installingAppId, setInstallingAppId] = useState<string | null>(null);
 
   const initialClassicRef = useRef<ClassicConfigState>(initialClassicState);
@@ -258,6 +266,8 @@ export function AppConfiguratorPanel({
   const installApp = actions?.installApp ?? fallbackActions.installApp;
   const installCustomApp =
     actions?.installCustomApp ?? fallbackActions.installCustomApp;
+  const importCustomApp =
+    actions?.importCustomApp ?? fallbackActions.importCustomApp;
 
   useEffect(() => {
     setActiveView(defaultViewForContext(context));
@@ -280,7 +290,7 @@ export function AppConfiguratorPanel({
 
   const availableViews = useMemo<ConfiguratorView[]>(() => {
     if (context === "custom_install") {
-      return ["classic", "compose", "docker_run"];
+      return ["classic", "compose", "docker_run", "import_url"];
     }
 
     return ["classic", "compose"];
@@ -365,12 +375,13 @@ export function AppConfiguratorPanel({
     !effectiveTemplate &&
     detailQuery.isLoading;
 
-  async function handleSubmit() {
+  async function handleSubmit(acknowledgeRisks = false) {
     if (isSaving || !canSubmit) return;
 
     setIsSaving(true);
     setDidSave(false);
     setSaveError(null);
+    if (!acknowledgeRisks) setPendingRisks(null);
 
     try {
       if (context === "installed_edit") {
@@ -395,6 +406,19 @@ export function AppConfiguratorPanel({
             composeSource: composeDraft,
           }),
         );
+      } else if (activeView === "import_url") {
+        const result = (await importCustomApp({
+          url: importState.url.trim(),
+          name: importState.name.trim() || undefined,
+          ref: importState.ref.trim() || undefined,
+          acknowledgeRisks,
+        })) as { data?: { appId: string } } | undefined;
+        setPendingRisks(null);
+        setDidSave(true);
+        // Import adds the app to the store rather than installing it, so there
+        // is no operation to follow — the store list is where it shows up.
+        setInstallingAppId(result?.data?.appId ?? null);
+        return;
       } else if (activeView === "docker_run") {
         const result = (await installCustomApp({
           name: dockerRunState.name.trim(),
@@ -402,6 +426,7 @@ export function AppConfiguratorPanel({
           repositoryUrl: dockerRunState.repositoryUrl.trim() || undefined,
           sourceType: "docker-run",
           source: dockerRunState.source,
+          acknowledgeRisks,
         })) as { appId: string } | undefined;
         setInstallingAppId(result?.appId ?? null);
         return;
@@ -411,6 +436,7 @@ export function AppConfiguratorPanel({
           iconUrl: classicState.iconUrl.trim() || undefined,
           sourceType: "docker-compose",
           source: composeDraft,
+          acknowledgeRisks,
         })) as { appId: string } | undefined;
         setInstallingAppId(result?.appId ?? null);
         return;
@@ -419,11 +445,17 @@ export function AppConfiguratorPanel({
       setDidSave(true);
       onClose?.();
     } catch (error) {
-      setSaveError(
-        error instanceof Error
-          ? error.message
-          : "Unable to submit app configuration.",
-      );
+      // A refusal to install unseen is not an error to report — it is a
+      // question to put to the user, with the list the server sent back.
+      if (error instanceof ComposeRisksError) {
+        setPendingRisks(error.risks);
+      } else {
+        setSaveError(
+          error instanceof Error
+            ? error.message
+            : "Unable to submit app configuration.",
+        );
+      }
     } finally {
       setIsSaving(false);
     }
@@ -476,6 +508,20 @@ export function AppConfiguratorPanel({
             />
           ) : null}
 
+          {activeView === "import_url" && context === "custom_install" ? (
+            <ImportUrlView
+              url={importState.url}
+              ref={importState.ref}
+              name={importState.name}
+              onChange={(next) => {
+                setDidSave(false);
+                setSaveError(null);
+                setPendingRisks(null);
+                setImportState((current) => ({ ...current, ...next }));
+              }}
+            />
+          ) : null}
+
           {activeView === "docker_run" && context === "custom_install" ? (
             <DockerRunView
               state={dockerRunState}
@@ -522,6 +568,13 @@ export function AppConfiguratorPanel({
               </span>
             ) : null}
           </div>
+        ) : pendingRisks ? (
+          <ComposeRiskNotice
+            risks={pendingRisks}
+            isBusy={isSaving}
+            onConfirm={() => void handleSubmit(true)}
+            onCancel={() => setPendingRisks(null)}
+          />
         ) : (
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-0.5">

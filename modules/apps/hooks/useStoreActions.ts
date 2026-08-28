@@ -49,7 +49,46 @@ type InstallCustomAppInput = {
   repositoryUrl?: string;
   sourceType: "docker-compose" | "docker-run";
   source: string;
+  /** Set once the user has seen the host access the file asks for. */
+  acknowledgeRisks?: boolean;
 };
+
+type ImportCustomAppInput = {
+  url: string;
+  name?: string;
+  ref?: string;
+  acknowledgeRisks?: boolean;
+};
+
+export type ComposeRiskDetail = {
+  code: string;
+  service: string;
+  detail: string;
+};
+
+/**
+ * Thrown when the server refuses an install until its risks are acknowledged.
+ * Carries the list so the caller can show exactly what was asked for instead
+ * of a flattened message.
+ */
+export class ComposeRisksError extends Error {
+  readonly risks: ComposeRiskDetail[];
+
+  constructor(message: string, risks: ComposeRiskDetail[]) {
+    super(message);
+    this.name = "ComposeRisksError";
+    this.risks = risks;
+  }
+}
+
+function riskErrorFrom(payload: ErrorResponsePayload | null) {
+  const risks = (payload as { risks?: ComposeRiskDetail[] } | null)?.risks;
+  if (!Array.isArray(risks) || risks.length === 0) return null;
+  return new ComposeRisksError(
+    payload?.error?.trim() || "This compose file asks for privileged access",
+    risks,
+  );
+}
 
 type SaveAppSettingsInput = {
   appId: string;
@@ -64,6 +103,7 @@ type StoreActionsHandle = {
   operationsByApp: Record<string, AppOperationState>;
   installApp: (input: InstallAppInput) => Promise<unknown>;
   installCustomApp: (input: InstallCustomAppInput) => Promise<unknown>;
+  importCustomApp: (input: ImportCustomAppInput) => Promise<unknown>;
   updateApp: (input: { appId: string }) => Promise<unknown>;
   redeployApp: (input: {
     appId: string;
@@ -509,6 +549,37 @@ export function useStoreActions(): StoreActionsHandle {
     },
   });
 
+  const importCustomMutation = useMutation({
+    mutationFn: async (input: ImportCustomAppInput) => {
+      const result = await fetch("/api/v1/store/custom-apps/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      });
+
+      if (!result.ok) {
+        const errorPayload = await parseErrorPayload(result);
+        const riskError = riskErrorFrom(errorPayload);
+        if (riskError) throw riskError;
+
+        throw new Error(
+          toStoreActionErrorMessage(
+            "/api/v1/store/custom-apps/import",
+            result.status,
+            errorPayload,
+          ),
+        );
+      }
+
+      return (await result.json()) as { data: { appId: string; name: string } };
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storeCatalog });
+    },
+  });
+
   const installCustomMutation = useMutation({
     mutationFn: async (input: {
       name: string;
@@ -516,6 +587,7 @@ export function useStoreActions(): StoreActionsHandle {
       repositoryUrl?: string;
       sourceType: "docker-compose" | "docker-run";
       source: string;
+      acknowledgeRisks?: boolean;
     }) => {
       const result = await fetch("/api/v1/store/custom-apps/install", {
         method: "POST",
@@ -527,6 +599,9 @@ export function useStoreActions(): StoreActionsHandle {
 
       if (!result.ok) {
         const errorPayload = await parseErrorPayload(result);
+        const riskError = riskErrorFrom(errorPayload);
+        if (riskError) throw riskError;
+
         throw new Error(
           toStoreActionErrorMessage(
             "/api/v1/store/custom-apps/install",
@@ -615,6 +690,7 @@ export function useStoreActions(): StoreActionsHandle {
     operationsByApp,
     installApp: installMutation.mutateAsync,
     installCustomApp: installCustomMutation.mutateAsync,
+    importCustomApp: importCustomMutation.mutateAsync,
     updateApp: updateMutation.mutateAsync,
     redeployApp: redeployMutation.mutateAsync,
     startApp: async (appId: string) => {
@@ -681,6 +757,7 @@ export function useStoreActions(): StoreActionsHandle {
 export type { AppOperationState };
 export type {
   InstallAppInput,
+  ImportCustomAppInput,
   InstallCustomAppInput,
   SaveAppSettingsInput,
   StoreActionsHandle,

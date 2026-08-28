@@ -3,7 +3,7 @@ import yaml from "js-yaml";
 import type { AppComposeData } from "@/modules/apps/hooks/useAppCompose";
 import type { StoreAppDetail } from "@/lib/shared/contracts/apps";
 
-export type ConfiguratorView = "classic" | "compose" | "docker_run";
+export type ConfiguratorView = "classic" | "compose" | "docker_run" | "import_url";
 
 export type PortProtocol = "TCP" | "UDP" | "TCP + UDP";
 

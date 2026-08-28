@@ -206,8 +206,21 @@ There is **no UI anywhere** — that is the missing half.
       install into a 409 would break existing callers. The **import** route defaults to
       **false**, so nothing new installs unseen. The C4 UI must send `acknowledgeRisks: false`
       on its first attempt, show the returned `risks`, then resend `true` on confirmation.
-- [ ] **C4** — Add-app modal: three tabs (paste compose / docker run / from URL), Monaco in
-      YAML mode (already a dependency), live preview card showing images, ports, volumes, env count.
+- [x] **C4** — Add-app UI: **From URL** tab + risk confirmation.
+      **Correction to this file's own premise:** a custom-app UI already shipped. The
+      "Install Custom App" menu item opens `AppConfiguratorPanel` (`custom_install`) with
+      Classic / Docker Compose / Docker Run views and install progress. C4 therefore
+      *extended* it rather than building a modal. (`CustomInstallForm` in
+      `custom-app-install-dialog.tsx` is dead code from an earlier attempt — referenced
+      nowhere. Worth deleting.)
+      **Landed.** `import-url-view.tsx`, `compose-risk-notice.tsx`, `importCustomApp` +
+      `ComposeRisksError` in `useStoreActions`, 7 tests. The panel now sends
+      `acknowledgeRisks: false` first, renders the returned risks, and resends `true` on
+      confirmation — the C3 gate finally has a human on the other end.
+      **Still open from the original C4 scope:** the live preview card (images, ports,
+      volumes, env count) parsed as you type. Needs the analyzer moved out of
+      `lib/server/` (it is `server-only`) into `lib/shared/` so the client can reuse it
+      instead of duplicating the risk rules.
 - [ ] **C5** — Conflict detection before install: port in use, container name taken, bind
       mount outside the storage root.
 - [ ] **C6** — Custom badge in the store list, edit-compose action, re-import with a diff view,
