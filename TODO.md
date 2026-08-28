@@ -173,8 +173,14 @@ both migration paths — see rule 1.
 `lib/server/modules/store/custom-apps.ts`, and `POST /api/v1/store/custom-apps/install`.
 There is **no UI anywhere** — that is the missing half.
 
-- [ ] **C1** — Columns `source_url`, `source_ref`, `source_checksum`, `last_imported_at`;
+- [x] **C1** — Columns `source_url`, `source_ref`, `source_checksum`, `last_imported_at`;
       `source_type` gains `"url"`. Existing routes keep their contracts.
+      **Landed.** Migration `0010_custom_app_source_url.sql`, provenance written in
+      `upsertCustomStoreTemplate`, 6 tests. Provenance is set only for imports and
+      explicitly nulled otherwise on *both* the insert and conflict branches — an imported
+      app edited by hand must stop claiming a URL it no longer tracks.
+      `checksumSource()` (sha256 of the fetched body) is what C6's update check will
+      compare against.
 - [ ] **C2** — `POST /api/v1/store/custom-apps/import`: server-side fetch with 5 MB cap,
       10 s timeout, redirect limit, private-IP-range block (with an opt-in setting for LAN
       sources — homelabbers legitimately host on their own network).

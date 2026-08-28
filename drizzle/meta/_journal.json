@@ -64,6 +64,13 @@
       "when": 1787000000000,
       "tag": "0009_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0010_custom_app_source_url",
+      "breakpoints": true
     }
   ]
 }

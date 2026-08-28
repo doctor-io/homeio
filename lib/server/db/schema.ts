@@ -108,6 +108,13 @@ export const customStoreApps = pgTable(
     sourceText: text("source_text").notNull(),
     composeContent: text("compose_content").notNull(),
     repositoryUrl: text("repository_url"),
+    // URL-sourced custom apps (v2.0 Track 2). Null for apps pasted by hand:
+    // only an import knows where its compose came from, which ref it was
+    // pinned to, and what the body hashed to when it was last fetched.
+    sourceUrl: text("source_url"),
+    sourceRef: text("source_ref"),
+    sourceChecksum: text("source_checksum"),
+    lastImportedAt: timestamp("last_imported_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

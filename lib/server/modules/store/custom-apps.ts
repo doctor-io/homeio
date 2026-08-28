@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { desc, eq, sql } from "drizzle-orm";
 import yaml from "js-yaml";
@@ -13,13 +13,17 @@ import {
 } from "@/lib/server/modules/store/casaos-compose-mapper";
 import type { StoreCatalogTemplate } from "@/lib/server/modules/store/catalog";
 
-export type CustomStoreSourceType = "docker-compose" | "docker-run";
+export type CustomStoreSourceType = "docker-compose" | "docker-run" | "url";
 
 export type CustomStoreTemplate = AppDefinition & {
   isCustom: true;
   sourceType: CustomStoreSourceType;
   composeContent: string;
   sourceText: string;
+  sourceUrl: string | null;
+  sourceRef: string | null;
+  sourceChecksum: string | null;
+  lastImportedAt: string | null;
 };
 
 export type StoreTemplateSource = StoreCatalogTemplate | CustomStoreTemplate;
@@ -30,7 +34,18 @@ type UpsertCustomStoreTemplateInput = {
   sourceType: CustomStoreSourceType;
   sourceText: string;
   repositoryUrl?: string;
+  /** Where an imported compose file came from. Absent for pasted sources. */
+  sourceUrl?: string;
+  /** Commit SHA or tag the import was pinned to, when the caller pinned one. */
+  sourceRef?: string;
 };
+
+const CUSTOM_SOURCE_TYPES: CustomStoreSourceType[] = ["docker-compose", "docker-run", "url"];
+
+/** Detects an upstream change between imports without storing the whole body twice. */
+export function checksumSource(sourceText: string) {
+  return createHash("sha256").update(sourceText).digest("hex");
+}
 
 type ComposeLike = {
   name?: unknown;
@@ -377,7 +392,9 @@ function augmentCustomComposeMetadata(input: {
             en_us:
               input.sourceType === "docker-run"
                 ? "Custom app installed from docker run"
-                : "Custom app installed from docker compose",
+                : input.sourceType === "url"
+                  ? "Custom app imported from a compose URL"
+                  : "Custom app installed from docker compose",
           },
     tips:
       existingCasaos.tips && typeof existingCasaos.tips === "object"
@@ -407,10 +424,9 @@ function augmentCustomComposeMetadata(input: {
 }
 
 function mapRow(row: typeof customStoreApps.$inferSelect): CustomStoreTemplate {
-  const sourceType =
-    row.sourceType === "docker-run" || row.sourceType === "docker-compose"
-      ? row.sourceType
-      : "docker-compose";
+  const sourceType = CUSTOM_SOURCE_TYPES.includes(row.sourceType as CustomStoreSourceType)
+    ? (row.sourceType as CustomStoreSourceType)
+    : "docker-compose";
   const virtualComposePath = path.join(process.cwd(), "custom", row.appId, "docker-compose.yml");
   const parsed = parseComposeContentToApp(virtualComposePath, row.composeContent);
 
@@ -422,6 +438,10 @@ function mapRow(row: typeof customStoreApps.$inferSelect): CustomStoreTemplate {
     sourceType,
     composeContent: row.composeContent,
     sourceText: row.sourceText,
+    sourceUrl: row.sourceUrl ?? null,
+    sourceRef: row.sourceRef ?? null,
+    sourceChecksum: row.sourceChecksum ?? null,
+    lastImportedAt: row.lastImportedAt?.toISOString() ?? null,
   };
 }
 
@@ -446,6 +466,8 @@ function normalizeComposeContent(input: {
     return convertDockerRunToCompose(sourceText, input.fallbackServiceName);
   }
 
+  // "url" carries the fetched document, so it validates as compose like a
+  // pasted one — the difference is provenance, not format.
   parseComposeDocument(sourceText);
   return sourceText;
 }
@@ -521,6 +543,18 @@ export async function upsertCustomStoreTemplate(input: UpsertCustomStoreTemplate
         sourceText: input.sourceText,
         fallbackServiceName: name,
       });
+      // Provenance is recorded only for imports. Re-saving a pasted app must
+      // not invent a source URL, and must not leave a stale one behind either.
+      const sourceUrl = normalize(input.sourceUrl);
+      const importOrigin = sourceUrl
+        ? {
+            sourceUrl,
+            sourceRef: normalize(input.sourceRef),
+            sourceChecksum: checksumSource(input.sourceText.trim()),
+            lastImportedAt: new Date(),
+          }
+        : { sourceUrl: null, sourceRef: null, sourceChecksum: null, lastImportedAt: null };
+
       const casaosComposeContent = augmentCustomComposeMetadata({
         appId,
         name,
@@ -540,6 +574,10 @@ export async function upsertCustomStoreTemplate(input: UpsertCustomStoreTemplate
           sourceText: input.sourceText.trim(),
           composeContent: casaosComposeContent,
           repositoryUrl: normalize(input.repositoryUrl),
+          sourceUrl: importOrigin.sourceUrl,
+          sourceRef: importOrigin.sourceRef,
+          sourceChecksum: importOrigin.sourceChecksum,
+          lastImportedAt: importOrigin.lastImportedAt,
           updatedAt: sql`NOW()`,
         })
         .onConflictDoUpdate({
@@ -552,6 +590,10 @@ export async function upsertCustomStoreTemplate(input: UpsertCustomStoreTemplate
             sourceText: input.sourceText.trim(),
             composeContent: casaosComposeContent,
             repositoryUrl: normalize(input.repositoryUrl),
+            sourceUrl: importOrigin.sourceUrl,
+            sourceRef: importOrigin.sourceRef,
+            sourceChecksum: importOrigin.sourceChecksum,
+            lastImportedAt: importOrigin.lastImportedAt,
             updatedAt: sql`NOW()`,
           },
         })

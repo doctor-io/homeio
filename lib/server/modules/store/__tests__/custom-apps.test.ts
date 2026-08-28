@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  checksumSource,
   convertDockerRunToCompose,
 } from "@/lib/server/modules/store/custom-apps";
 
@@ -22,5 +23,17 @@ describe("custom store app helpers", () => {
     expect(() =>
       convertDockerRunToCompose("docker pull nginx:latest", "Bad Command"),
     ).toThrow("docker run");
+  });
+});
+
+describe("custom store app provenance", () => {
+  it("hashes the source so a later import can tell whether upstream changed", () => {
+    const a = checksumSource("services:\n  web:\n    image: nginx\n");
+    const b = checksumSource("services:\n  web:\n    image: nginx\n");
+    const c = checksumSource("services:\n  web:\n    image: caddy\n");
+
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+    expect(a).toHaveLength(64);
   });
 });
