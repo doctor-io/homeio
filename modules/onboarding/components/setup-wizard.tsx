@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { StorageStep } from "@/modules/onboarding/components/steps/storage-step";
+import { TimezoneStep } from "@/modules/onboarding/components/steps/timezone-step";
 import {
   ONBOARDING_FIRST_STEP,
   ONBOARDING_LAST_STEP,
@@ -65,13 +67,17 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
   const [step, setStep] = useState<OnboardingStepNumber>(clampStep(initialState.step));
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState<string | null>(initialState.timezone);
+  const [storageRoot, setStorageRoot] = useState<string | null>(
+    initialState.defaultStorageRoot,
+  );
 
   const current = STEPS.find((entry) => entry.step === step) ?? STEPS[0];
   const isFirst = step === ONBOARDING_FIRST_STEP;
   const isLast = step === ONBOARDING_LAST_STEP;
 
   const goTo = useCallback(
-    async (next: OnboardingStepNumber) => {
+    async (next: OnboardingStepNumber, answer?: Record<string, string | null>) => {
       setIsBusy(true);
       setError(null);
 
@@ -79,7 +85,7 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
         const response = await fetch("/api/v1/setup/step", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ step: next }),
+          body: JSON.stringify({ step: next, ...answer }),
         });
         if (!response.ok) throw new Error(`Step save failed (${response.status})`);
 
@@ -113,11 +119,28 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
     }
   }, [onFinished]);
 
-  const advance = useCallback(() => {
-    if (isBusy) return;
-    if (isLast) void finish();
-    else void goTo(clampStep(step + 1));
-  }, [finish, goTo, isBusy, isLast, step]);
+  // Skipping a step is the same navigation without that step's answer, so a
+  // skipped question never quietly writes a value the user did not choose.
+  const advance = useCallback(
+    (keepAnswer = true) => {
+      if (isBusy) return;
+      if (isLast) {
+        void finish();
+        return;
+      }
+
+      const answer = !keepAnswer
+        ? undefined
+        : step === 1
+          ? { timezone }
+          : step === 2
+            ? { defaultStorageRoot: storageRoot }
+            : undefined;
+
+      void goTo(clampStep(step + 1), answer);
+    },
+    [finish, goTo, isBusy, isLast, step, storageRoot, timezone],
+  );
 
   const back = useCallback(() => {
     if (isBusy || isFirst) return;
@@ -134,7 +157,7 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
       }
 
       if (event.key === "Enter") advance();
-      else if (event.key === "Escape") advance();
+      else if (event.key === "Escape") advance(false);
       else if (event.key === "ArrowLeft") back();
     }
 
@@ -169,9 +192,14 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
       <p className="mb-5 mt-1 text-[11px] tracking-[0.18em] text-muted-foreground/78 uppercase">
         Step {step} of {ONBOARDING_LAST_STEP}
       </p>
-      <p className="mx-auto mb-7 max-w-[22rem] text-[12px] leading-relaxed text-muted-foreground/72">
+      <p className="mx-auto mb-5 max-w-[22rem] text-[12px] leading-relaxed text-muted-foreground/72">
         {current.blurb}
       </p>
+
+      <div className="mb-6">
+        {step === 1 && <TimezoneStep value={timezone} onChange={setTimezone} />}
+        {step === 2 && <StorageStep value={storageRoot} onChange={setStorageRoot} />}
+      </div>
 
       {error && (
         <p className="system-error-capsule mx-auto mb-4 text-[12px]" role="alert">
@@ -182,7 +210,7 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
       <div className="flex flex-col items-center gap-3">
         <button
           type="button"
-          onClick={advance}
+          onClick={() => advance()}
           disabled={isBusy}
           className="system-primary-action w-full cursor-pointer rounded-[var(--system-radius-control)] px-8 py-2.5 text-sm font-medium transition-all hover:brightness-110 disabled:opacity-60"
         >
@@ -202,7 +230,7 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
           )}
           <button
             type="button"
-            onClick={advance}
+            onClick={() => advance(false)}
             disabled={isBusy}
             className="cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-60"
           >

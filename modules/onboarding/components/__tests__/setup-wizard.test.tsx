@@ -16,9 +16,19 @@ function state(step: number): OnboardingState {
 }
 
 function mockFetch(ok = true) {
-  const fetchMock = vi.fn().mockResolvedValue({ ok, status: ok ? 200 : 500 });
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => ({ data: { disks: [] } }),
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function savedBodies(fetchMock: ReturnType<typeof mockFetch>) {
+  return fetchMock.mock.calls
+    .filter(([url]) => url === "/api/v1/setup/step")
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
 }
 
 function savedSteps(fetchMock: ReturnType<typeof mockFetch>) {
@@ -141,6 +151,55 @@ describe("SetupWizard", () => {
     fireEvent.keyDown(window, { key: "ArrowLeft" });
 
     await waitFor(() => expect(screen.getByText("Step 1 of 5")).toBeTruthy());
+  });
+
+  it("carries the detected time zone when step 1 is confirmed", async () => {
+    const fetchMock = mockFetch();
+    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(savedBodies(fetchMock)).toHaveLength(1));
+    const body = savedBodies(fetchMock)[0];
+    expect(body.step).toBe(2);
+    expect(typeof body.timezone).toBe("string");
+    expect(body.timezone.length).toBeGreaterThan(0);
+  });
+
+  it("writes no answer when a step is skipped", async () => {
+    // Skipping must not quietly store a value the user never chose.
+    const fetchMock = mockFetch();
+    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+
+    fireEvent.click(screen.getByText("Skip this step"));
+
+    await waitFor(() => expect(savedBodies(fetchMock)).toHaveLength(1));
+    expect(savedBodies(fetchMock)[0]).toEqual({ step: 2 });
+  });
+
+  it("carries the storage choice when step 2 is confirmed", async () => {
+    const fetchMock = mockFetch();
+    render(
+      <SetupWizard
+        initialState={{ ...state(2), defaultStorageRoot: "/DATA" }}
+        onFinished={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(savedBodies(fetchMock)).toHaveLength(1));
+    expect(savedBodies(fetchMock)[0]).toEqual({ step: 3, defaultStorageRoot: "/DATA" });
+  });
+
+  it("escape skips without writing the answer", async () => {
+    const fetchMock = mockFetch();
+    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => expect(savedBodies(fetchMock)).toHaveLength(1));
+    expect(savedBodies(fetchMock)[0]).toEqual({ step: 2 });
   });
 
   it("leaves keys alone while the user is typing in a step's own field", async () => {

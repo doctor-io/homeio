@@ -99,13 +99,29 @@ both migration paths — see rule 1.
   step rather than advancing past an answer the server never stored.
   Step panels are still empty — W5-W7 fill them in.
 
-### [ ] W5 — Steps 1–2 (time zone, storage)
+### [x] W5 — Steps 1–2 (time zone, storage)
 
 - Step 1: timezone (default from `Intl.DateTimeFormat().resolvedOptions().timeZone`),
   12/24h, week start.
 - Step 2: drive list from the existing disk manager with free space; warn when the choice
   is the system partition; offer the existing SMB/USB mount flows.
 - Both steps must be skippable without leaving a broken install.
+
+  **Landed.** `modules/onboarding/components/steps/{timezone,storage}-step.tsx`, 9 step
+  tests + 4 wizard tests for answer handling.
+
+  **Deferred, not dropped:** 12/24-hour clock and first-day-of-week. `AppearanceSettings`
+  has no field for either, so they need new appearance keys plus the appearance API — a
+  change to a shipped settings surface, which does not belong inside a wizard commit.
+  Open a separate item before W7 if you want them in the release.
+
+  **Also note:** the stored `timezone` is recorded but nothing consumes it yet. Making
+  scheduled tasks and log timestamps actually honour it is its own work item.
+
+  Two constraints worth keeping: skipping sends no answer (a skipped question must never
+  write a value the user did not choose), and the storage step falls back to a path field
+  whenever the disk list is empty or fails — Docker without host block devices reports an
+  empty list rather than an error, and a dev machine has no `lsblk` at all.
 
 ### [ ] W6 — Steps 3–4 (Tailscale, 2FA)
 
