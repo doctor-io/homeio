@@ -1,50 +1,176 @@
 "use client";
 
-import { useState } from "react";
-import type { OnboardingState } from "@/lib/shared/contracts/onboarding";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ONBOARDING_FIRST_STEP,
+  ONBOARDING_LAST_STEP,
+  type OnboardingState,
+  type OnboardingStepNumber,
+} from "@/lib/shared/contracts/onboarding";
 
 type SetupWizardProps = {
   initialState: OnboardingState;
+  /** Injected so tests can observe the handoff without a real navigation. */
+  onFinished?: () => void;
 };
 
-/**
- * Wizard shell. W3 ships the frame and the escape hatch only — the five steps
- * land in W4/W5/W6/W7. Skipping must always be possible: an install that skips
- * every step has to end up exactly where 1.7.24 leaves it.
- */
-export function SetupWizard({ initialState }: SetupWizardProps) {
-  const [isFinishing, setIsFinishing] = useState(false);
+type StepDefinition = {
+  step: OnboardingStepNumber;
+  title: string;
+  blurb: string;
+};
+
+// Copy lives here rather than in each step component so the frame can render a
+// step before its content exists. W5-W7 fill in the panels.
+const STEPS: StepDefinition[] = [
+  {
+    step: 1,
+    title: "Set your time zone",
+    blurb:
+      "Scheduled tasks and log timestamps depend on this. Detected from your browser — change it if the server sits elsewhere.",
+  },
+  {
+    step: 2,
+    title: "Choose where data lives",
+    blurb:
+      "App data and the file manager root. Both can be moved later from Settings.",
+  },
+  {
+    step: 3,
+    title: "Reach it from anywhere",
+    blurb:
+      "Tailscale gives your server a private address on every device you own — no port forwarding, no firewall rules.",
+  },
+  {
+    step: 4,
+    title: "Add a second factor",
+    blurb:
+      "Two-factor authentication means a stolen password is not enough on its own.",
+  },
+  {
+    step: 5,
+    title: "Install your first app",
+    blurb:
+      "Pick something to start with — it installs in the background while you finish here.",
+  },
+];
+
+function clampStep(value: number): OnboardingStepNumber {
+  if (value < ONBOARDING_FIRST_STEP) return ONBOARDING_FIRST_STEP;
+  if (value > ONBOARDING_LAST_STEP) return ONBOARDING_LAST_STEP;
+  return value as OnboardingStepNumber;
+}
+
+export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
+  const [step, setStep] = useState<OnboardingStepNumber>(clampStep(initialState.step));
+  const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function finish() {
-    setIsFinishing(true);
+  const current = STEPS.find((entry) => entry.step === step) ?? STEPS[0];
+  const isFirst = step === ONBOARDING_FIRST_STEP;
+  const isLast = step === ONBOARDING_LAST_STEP;
+
+  const goTo = useCallback(
+    async (next: OnboardingStepNumber) => {
+      setIsBusy(true);
+      setError(null);
+
+      try {
+        const response = await fetch("/api/v1/setup/step", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ step: next }),
+        });
+        if (!response.ok) throw new Error(`Step save failed (${response.status})`);
+
+        setStep(next);
+      } catch {
+        // Stay put on failure. Advancing the UI past a step the server did not
+        // record would silently lose the answer on resume.
+        setError("Could not save that step. Check the server and try again.");
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [],
+  );
+
+  const finish = useCallback(async () => {
+    setIsBusy(true);
     setError(null);
 
     try {
       const response = await fetch("/api/v1/setup/complete", { method: "POST" });
       if (!response.ok) throw new Error(`Setup completion failed (${response.status})`);
 
-      // Full reload rather than a client transition: the desktop shell boots
-      // its realtime streams on mount and should start from a clean slate.
-      window.location.assign("/");
+      // Full load rather than a client transition: the desktop shell opens its
+      // realtime streams on mount and should start from a clean slate.
+      if (onFinished) onFinished();
+      else window.location.assign("/");
     } catch {
       setError("Could not finish setup. Check the server and try again.");
-      setIsFinishing(false);
+      setIsBusy(false);
     }
-  }
+  }, [onFinished]);
+
+  const advance = useCallback(() => {
+    if (isBusy) return;
+    if (isLast) void finish();
+    else void goTo(clampStep(step + 1));
+  }, [finish, goTo, isBusy, isLast, step]);
+
+  const back = useCallback(() => {
+    if (isBusy || isFirst) return;
+    void goTo(clampStep(step - 1));
+  }, [goTo, isBusy, isFirst, step]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      // Never hijack typing: a step's own inputs own their keys.
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) {
+        return;
+      }
+
+      if (event.key === "Enter") advance();
+      else if (event.key === "Escape") advance();
+      else if (event.key === "ArrowLeft") back();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [advance, back]);
 
   return (
     <div className="w-full text-center" data-testid="setup-wizard">
+      <div className="mb-8 flex justify-center gap-2" aria-hidden="true">
+        {STEPS.map((entry) => (
+          <span
+            key={entry.step}
+            data-testid={`setup-rail-${entry.step}`}
+            data-state={
+              entry.step === step ? "current" : entry.step < step ? "done" : "upcoming"
+            }
+            className={`h-[3px] rounded-full transition-all duration-500 ${
+              entry.step === step
+                ? "w-6 bg-white"
+                : entry.step < step
+                  ? "w-4 bg-white/35"
+                  : "w-4 bg-white/12"
+            }`}
+          />
+        ))}
+      </div>
+
       <p className="text-[1.48rem] font-medium tracking-[-0.03em] text-foreground">
-        Set up your server
+        {current.title}
       </p>
       <p className="mb-5 mt-1 text-[11px] tracking-[0.18em] text-muted-foreground/78 uppercase">
-        Step {initialState.step} of 5
+        Step {step} of {ONBOARDING_LAST_STEP}
       </p>
-
       <p className="mx-auto mb-7 max-w-[22rem] text-[12px] leading-relaxed text-muted-foreground/72">
-        A few questions to get your time zone, storage, remote access, and first app in
-        place. You can skip any of it and change everything later in Settings.
+        {current.blurb}
       </p>
 
       {error && (
@@ -53,18 +179,37 @@ export function SetupWizard({ initialState }: SetupWizardProps) {
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={finish}
-        disabled={isFinishing}
-        className="system-primary-action inline-flex cursor-pointer items-center gap-2 rounded-full px-8 py-2.5 text-sm font-medium transition-all hover:brightness-110 disabled:opacity-60"
-      >
-        {isFinishing ? "Finishing…" : "Skip setup"}
-      </button>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={advance}
+          disabled={isBusy}
+          className="system-primary-action w-full cursor-pointer rounded-[var(--system-radius-control)] px-8 py-2.5 text-sm font-medium transition-all hover:brightness-110 disabled:opacity-60"
+        >
+          {isLast ? "Finish setup" : "Continue"}
+        </button>
 
-      <p className="mt-3 text-[11px] text-muted-foreground/60">
-        Everything here is optional.
-      </p>
+        <div className="flex items-center gap-4 text-[11.5px]">
+          {!isFirst && (
+            <button
+              type="button"
+              onClick={back}
+              disabled={isBusy}
+              className="cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-60"
+            >
+              Back
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={advance}
+            disabled={isBusy}
+            className="cursor-pointer text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-60"
+          >
+            {isLast ? "Skip and finish" : "Skip this step"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

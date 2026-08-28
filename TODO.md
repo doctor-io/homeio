@@ -83,7 +83,7 @@ both migration paths — see rule 1.
   gate and bakes in one answer, the same trap that hid `DEMO_MODE` on /login until 1.7.23.
   `modules/onboarding` added to `FEATURE_MODULES` in the architecture guard.
 
-### [ ] W4 — `/setup` shell
+### [x] W4 — `/setup` shell
 
 - Route and `FullScreenShell` wrapper already exist from W3 — W4 adds the step machinery.
 - Centred card + 5-bar pill indicator — **continuing `components/auth/register-form.tsx`**,
@@ -91,6 +91,13 @@ both migration paths — see rule 1.
 - Resume from the stored `onboarding_step` on load; write progress on every transition.
 - `Skip` is a first-class button next to `Back` on every step, never hidden.
 - Keyboard: Enter continues, Esc skips, ← goes back.
+
+  **Landed.** Step registry, 5-bar rail, resume, Back/Skip/Continue, keyboard handling —
+  all in `modules/onboarding/components/setup-wizard.tsx`, 13 component tests.
+  Every transition (Back included) is recorded server-side before the UI moves, so a
+  refresh always resumes where the user actually was. A failed save keeps the user on the
+  step rather than advancing past an answer the server never stored.
+  Step panels are still empty — W5-W7 fill them in.
 
 ### [ ] W5 — Steps 1–2 (time zone, storage)
 
