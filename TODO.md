@@ -181,9 +181,19 @@ There is **no UI anywhere** — that is the missing half.
       app edited by hand must stop claiming a URL it no longer tracks.
       `checksumSource()` (sha256 of the fetched body) is what C6's update check will
       compare against.
-- [ ] **C2** — `POST /api/v1/store/custom-apps/import`: server-side fetch with 5 MB cap,
+- [x] **C2** — `POST /api/v1/store/custom-apps/import`: server-side fetch with 5 MB cap,
       10 s timeout, redirect limit, private-IP-range block (with an opt-in setting for LAN
       sources — homelabbers legitimately host on their own network).
+      **Landed.** `lib/server/modules/store/compose-import.ts` + the route, 25 tests.
+      The opt-in is an env var (`STORE_IMPORT_ALLOW_PRIVATE_HOSTS`), not a settings column
+      — no schema churn, and it matches how the other operator-level limits are set.
+      Also `STORE_IMPORT_MAX_BYTES` and `STORE_IMPORT_TIMEOUT_MS`, all in `.env.example`.
+      **Every redirect hop is re-checked**, because a public URL that 302s to
+      169.254.169.254 is the actual attack. Known limit, deliberately accepted: the DNS
+      answer is checked before the fetch, so a hostile resolver could still answer
+      differently on the real request. Closing that needs a custom agent with pinned
+      lookup — worth doing if this ever accepts URLs from untrusted users, which today it
+      does not (the caller is already an authenticated admin).
 - [ ] **C3** — Validation layer: parse YAML, reject unknown top-level keys, require explicit
       confirmation for `privileged: true` and host networking. Nothing touches disk until it parses.
 - [ ] **C4** — Add-app modal: three tabs (paste compose / docker run / from URL), Monaco in

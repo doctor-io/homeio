@@ -47,6 +47,20 @@ const envSchema = z.object({
     .min(5_000)
     .default(6 * 60 * 60_000), // 6 hours
   STORE_MAX_CONCURRENT_OPERATIONS: z.coerce.number().int().min(1).max(20).default(3),
+  // Compose imports are fetched by the server, so a URL from the UI could
+  // otherwise reach anything the host can reach. Private ranges are blocked
+  // unless an operator deliberately opts in to LAN sources.
+  STORE_IMPORT_ALLOW_PRIVATE_HOSTS: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  STORE_IMPORT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1_024)
+    .max(50_000_000)
+    .default(5_000_000),
+  STORE_IMPORT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(10_000),
   STORE_STACKS_ROOT: z.string().optional(),
   STORE_APP_DATA_ROOT: z.string().optional(),
   FILES_ROOT: z.string().optional(),
