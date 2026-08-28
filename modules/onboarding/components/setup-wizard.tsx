@@ -167,7 +167,10 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
         return;
       }
 
-      const answer = !keepAnswer
+      // Annotated rather than inferred: a ternary over object literals widens
+      // each branch with the other's keys as `undefined`, which does not fit
+      // the Record the request builder takes.
+      const answer: Record<string, string | null> | undefined = !keepAnswer
         ? undefined
         : step === 1
           ? { timezone }

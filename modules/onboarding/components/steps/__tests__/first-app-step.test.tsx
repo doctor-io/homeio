@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FirstAppStep } from "@/modules/onboarding/components/steps/first-app-step";
 
-function app(id: string, name: string, status = "not-installed") {
+function app(id: string, name: string, status = "not_installed") {
   return {
     id,
     name,

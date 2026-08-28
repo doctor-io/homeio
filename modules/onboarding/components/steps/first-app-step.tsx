@@ -23,7 +23,7 @@ const FALLBACK_STARTERS = [
 const TILE_LIMIT = 6;
 
 function pickStarters(apps: StoreAppSummary[], recommendedIds: string[]): StoreAppSummary[] {
-  const notInstalled = apps.filter((app) => app.status === "not-installed");
+  const notInstalled = apps.filter((app) => app.status === "not_installed");
   const pool = notInstalled.length ? notInstalled : apps;
 
   const recommended = recommendedIds
