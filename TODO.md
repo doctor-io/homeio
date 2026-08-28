@@ -144,11 +144,25 @@ both migration paths — see rule 1.
   clock sat on top of the step indicator. Worth remembering for W7, whose summary card is
   taller again.
 
-### [ ] W7 — Step 5 + finish
+### [x] W7 — Step 5 + finish
 
 - Six starter tiles; install fires in the background so the wizard never waits on a pull.
 - Summary card listing configured vs skipped, then `finishOnboarding()` and into the desktop.
 - Full-flow test: complete all five; skip all five (must equal the v1.7.24 end state).
+
+  **Landed.** `steps/first-app-step.tsx` + the summary screen in the wizard, 8 new tests.
+  Starters come from the catalog's own `meta.recommendedAppIds`, falling back to well-known
+  slugs, then to the first few uninstalled apps — no hardcoded IDs that may not exist in a
+  given catalog. An empty or unreachable catalog stays skippable.
+
+  **Bug the skip-everything test caught:** the summary was reading local step state, and
+  the time zone step seeds itself from the browser on mount — so a *skipped* time zone step
+  still displayed a value the server had never stored. The wizard now tracks what was
+  actually saved (`saved`), separate from what a step is showing.
+
+  **Wizard track complete (W1–W7).** Remaining from the roadmap's Track 1 scope, both
+  deliberately deferred: the 12/24-hour and week-start controls (need `AppearanceSettings`
+  fields), and making anything actually *consume* the stored time zone.
 
 ---
 

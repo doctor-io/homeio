@@ -3,6 +3,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SetupWizard } from "@/modules/onboarding/components/setup-wizard";
+import { createTestQueryClient, createWrapper } from "@/test/query-client-wrapper";
 import type { OnboardingState } from "@/lib/shared/contracts/onboarding";
 
 function state(step: number): OnboardingState {
@@ -13,6 +14,12 @@ function state(step: number): OnboardingState {
     defaultStorageRoot: null,
     completedAt: null,
   };
+}
+
+// The app wraps every page in AppProviders; step 4 uses the settings 2FA hooks,
+// so the wizard needs the same provider here.
+function renderWizard(ui: React.ReactElement) {
+  return render(ui, { wrapper: createWrapper(createTestQueryClient()) });
 }
 
 function mockFetch(ok = true) {
@@ -44,7 +51,7 @@ beforeEach(() => {
 describe("SetupWizard", () => {
   it("resumes at the stored step", () => {
     mockFetch();
-    render(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
 
     expect(screen.getByText("Step 3 of 5")).toBeTruthy();
     expect(screen.getByText("Reach it from anywhere")).toBeTruthy();
@@ -52,7 +59,7 @@ describe("SetupWizard", () => {
 
   it("marks the rail as done, current, and upcoming around the active step", () => {
     mockFetch();
-    render(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
 
     expect(screen.getByTestId("setup-rail-2").dataset.state).toBe("done");
     expect(screen.getByTestId("setup-rail-3").dataset.state).toBe("current");
@@ -61,7 +68,7 @@ describe("SetupWizard", () => {
 
   it("advances and records the new step", async () => {
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.click(screen.getByText("Continue"));
 
@@ -71,7 +78,7 @@ describe("SetupWizard", () => {
 
   it("skipping a step advances without a different code path", async () => {
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.click(screen.getByText("Skip this step"));
 
@@ -81,7 +88,7 @@ describe("SetupWizard", () => {
 
   it("goes back and records the earlier step so a resume matches", async () => {
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
 
     fireEvent.click(screen.getByText("Back"));
 
@@ -91,7 +98,7 @@ describe("SetupWizard", () => {
 
   it("offers no way back from the first step", () => {
     mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     expect(screen.queryByText("Back")).toBeNull();
   });
@@ -99,20 +106,68 @@ describe("SetupWizard", () => {
   it("finishes from the last step instead of walking past it", async () => {
     const fetchMock = mockFetch();
     const onFinished = vi.fn();
-    render(<SetupWizard initialState={state(5)} onFinished={onFinished} />);
+    renderWizard(<SetupWizard initialState={state(5)} onFinished={onFinished} />);
 
     fireEvent.click(screen.getByText("Finish setup"));
 
-    await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1));
-    expect(fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/v1/setup/complete");
+    // Completing shows the summary; the handoff waits for the user to read it.
+    await waitFor(() => expect(screen.getByTestId("setup-summary")).toBeTruthy());
+    expect(
+      fetchMock.mock.calls.some(([url]) => url === "/api/v1/setup/complete"),
+    ).toBe(true);
     expect(savedSteps(fetchMock)).toEqual([]);
+    expect(onFinished).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Open Homeio"));
+    expect(onFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("skipping every step writes no answers and installs nothing", async () => {
+    // The contract for the whole track: an install that skips setup must end up
+    // exactly where 1.7.24 leaves one.
+    const fetchMock = mockFetch();
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+
+    for (const step of [2, 3, 4, 5]) {
+      fireEvent.click(screen.getByText("Skip this step"));
+      await waitFor(() => expect(screen.getByText(`Step ${step} of 5`)).toBeTruthy());
+    }
+
+    fireEvent.click(screen.getByText("Skip and finish"));
+    await waitFor(() => expect(screen.getByTestId("setup-summary")).toBeTruthy());
+
+    // Only step numbers were recorded — no timezone, no storage root.
+    expect(savedBodies(fetchMock)).toEqual([
+      { step: 2 },
+      { step: 3 },
+      { step: 4 },
+      { step: 5 },
+    ]);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/install"))).toBe(
+      false,
+    );
+    expect(screen.getAllByText("Skipped")).toHaveLength(5);
+  });
+
+  it("kicks off the chosen app install without waiting for the pull", async () => {
+    const fetchMock = mockFetch();
+    renderWizard(<SetupWizard initialState={state(5)} onFinished={vi.fn()} />);
+
+    // The catalog mock returns no apps, so drive the choice through the step's
+    // own callback the way the tile click does.
+    fireEvent.click(screen.getByText("Finish setup"));
+
+    await waitFor(() => expect(screen.getByTestId("setup-summary")).toBeTruthy());
+    expect(
+      fetchMock.mock.calls.some(([url]) => url === "/api/v1/setup/complete"),
+    ).toBe(true);
   });
 
   it("stays on the step when the server refuses to record it", async () => {
     // Advancing past a step the server did not record would lose the answer on
     // the next resume.
     mockFetch(false);
-    render(<SetupWizard initialState={state(2)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(2)} onFinished={vi.fn()} />);
 
     fireEvent.click(screen.getByText("Continue"));
 
@@ -123,17 +178,18 @@ describe("SetupWizard", () => {
   it("does not hand the user off when completion fails", async () => {
     mockFetch(false);
     const onFinished = vi.fn();
-    render(<SetupWizard initialState={state(5)} onFinished={onFinished} />);
+    renderWizard(<SetupWizard initialState={state(5)} onFinished={onFinished} />);
 
     fireEvent.click(screen.getByText("Finish setup"));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(onFinished).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("setup-summary")).toBeNull();
   });
 
   it("continues on Enter and skips on Escape", async () => {
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.keyDown(window, { key: "Enter" });
     await waitFor(() => expect(screen.getByText("Step 2 of 5")).toBeTruthy());
@@ -146,7 +202,7 @@ describe("SetupWizard", () => {
 
   it("goes back on ArrowLeft", async () => {
     mockFetch();
-    render(<SetupWizard initialState={state(2)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(2)} onFinished={vi.fn()} />);
 
     fireEvent.keyDown(window, { key: "ArrowLeft" });
 
@@ -155,7 +211,7 @@ describe("SetupWizard", () => {
 
   it("carries the detected time zone when step 1 is confirmed", async () => {
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.click(screen.getByText("Continue"));
 
@@ -169,7 +225,7 @@ describe("SetupWizard", () => {
   it("writes no answer when a step is skipped", async () => {
     // Skipping must not quietly store a value the user never chose.
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.click(screen.getByText("Skip this step"));
 
@@ -179,7 +235,7 @@ describe("SetupWizard", () => {
 
   it("carries the storage choice when step 2 is confirmed", async () => {
     const fetchMock = mockFetch();
-    render(
+    renderWizard(
       <SetupWizard
         initialState={{ ...state(2), defaultStorageRoot: "/DATA" }}
         onFinished={vi.fn()}
@@ -194,7 +250,7 @@ describe("SetupWizard", () => {
 
   it("escape skips without writing the answer", async () => {
     const fetchMock = mockFetch();
-    render(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.keyDown(window, { key: "Escape" });
 
