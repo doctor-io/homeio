@@ -28,6 +28,14 @@ const config: CapacitorConfig = {
     // Cloudflare Tunnel instead of Tailscale.
     allowNavigation: ["*.ts.net", "100.*", "homeio.ahmedtabib.com"],
   },
+  plugins: {
+    App: {
+      // MainActivity owns the back button. Capacitor's own handler drops the
+      // event when a page has no JS listener, which is every page after the
+      // WebView leaves the launcher.
+      disableBackButtonHandler: true,
+    },
+  },
 };
 
 export default config;

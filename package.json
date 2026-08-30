@@ -8,12 +8,13 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "sync": "npm run build && cap sync",
+    "sync": "npm run build && cap sync && npm run apply:native",
     "add:android": "cap add android",
     "add:ios": "cap add ios",
     "run:android": "npm run sync && cap run android",
     "run:ios": "npm run sync && cap run ios",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "apply:native": "node scripts/apply-native.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",

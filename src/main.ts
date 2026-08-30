@@ -1,5 +1,4 @@
 import "./styles.css";
-import { App } from "@capacitor/app";
 import { normalizeAddress, probeServer } from "./connect";
 import {
   loadServers,
@@ -28,12 +27,9 @@ async function init() {
   servers = await loadServers();
   render();
 
-  // Android hardware back button: while on the launcher there's nothing to go
-  // back to, so exit the app. (Once navigated onto a server origin, the WebView
-  // handles its own history.)
-  App.addListener("backButton", () => {
-    void App.exitApp();
-  });
+  // The hardware back button is handled natively in MainActivity: history
+  // first, then back to this launcher, then exit. It cannot live here — this
+  // page's listeners die as soon as the WebView navigates onto a server.
 }
 
 function setBusy(value: boolean) {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icons draw a 108dp canvas but only the middle 72dp is guaranteed
+  visible: launcher masks (circle, squircle, teardrop) crop the rest. Insetting
+  the artwork by 17% keeps it inside that safe zone instead of having its
+  corners shaved off.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:inset="17%" />

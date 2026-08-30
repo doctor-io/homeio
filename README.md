@@ -60,7 +60,15 @@ port (default `3000`), e.g. `homeio.tailnet-name.ts.net:3000`.
 - Passwords are **not** stored by this app; you sign in on the server's first-party login
   page. Silent auto-login is a planned enhancement (see the module doc).
 - `android/` and `ios/` are git-ignored — run `cap add` after cloning.
-- After `cap add android`, add `android:usesCleartextTraffic="true"` to the `<application>`
-  tag in `android/app/src/main/AndroidManifest.xml`. Homeio servers speak plain HTTP on the
-  tailnet (Tailscale encrypts the traffic), and Android blocks cleartext requests by default.
+- `android/` and `ios/` are generated and git-ignored, so the native customisations live in
+  `native/android/` and are applied by `npm run apply:native` (which `npm run sync` runs for
+  you). It copies the overlay, generates launcher icons from `public/icon.png` at every
+  density, and patches the two manifest attributes Capacitor does not write:
+  `usesCleartextTraffic` — Homeio speaks plain HTTP on the tailnet, where Tailscale encrypts
+  at the network layer, and Android blocks cleartext by default — and `adjustResize`, so the
+  WebView shrinks for the keyboard rather than being covered by it.
+- The hardware back button is handled in `native/android/.../MainActivity.java`: WebView
+  history first, then back to the launcher's server list, then exit. It cannot live in the
+  launcher's JavaScript, because those listeners die as soon as the WebView navigates onto a
+  server's origin.
 - Allowed navigation hosts (`*.ts.net`, `100.*`) are configured in `capacitor.config.ts`.

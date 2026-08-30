@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the launcher's own background so the handoff is seamless. -->
+    <color name="splash_background">#0F1115</color>
+</resources>
