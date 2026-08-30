@@ -60,4 +60,7 @@ port (default `3000`), e.g. `homeio.tailnet-name.ts.net:3000`.
 - Passwords are **not** stored by this app; you sign in on the server's first-party login
   page. Silent auto-login is a planned enhancement (see the module doc).
 - `android/` and `ios/` are git-ignored — run `cap add` after cloning.
+- After `cap add android`, add `android:usesCleartextTraffic="true"` to the `<application>`
+  tag in `android/app/src/main/AndroidManifest.xml`. Homeio servers speak plain HTTP on the
+  tailnet (Tailscale encrypts the traffic), and Android blocks cleartext requests by default.
 - Allowed navigation hosts (`*.ts.net`, `100.*`) are configured in `capacitor.config.ts`.

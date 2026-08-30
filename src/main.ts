@@ -13,6 +13,14 @@ import {
 const root = document.getElementById("app");
 if (!root) throw new Error("Missing #app root");
 
+// Lucide outline icons, matching the web login form's field icons.
+const ICON_ATTRS =
+  'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+const ICON_SERVER = `<svg ${ICON_ATTRS}><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`;
+const ICON_TAG = `<svg ${ICON_ATTRS}><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>`;
+const ICON_USER = `<svg ${ICON_ATTRS}><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>`;
+const ICON_ARROW = `<svg ${ICON_ATTRS}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`;
+
 let servers: SavedServer[] = [];
 let busy = false;
 
@@ -86,9 +94,10 @@ async function handleRemove(id: string) {
 
 function showError(message: string) {
   const el = document.getElementById("error");
-  if (el) {
+  const wrap = document.getElementById("error-wrap");
+  if (el && wrap) {
     el.textContent = message;
-    el.hidden = false;
+    wrap.hidden = false;
   }
 }
 
@@ -99,57 +108,69 @@ function render() {
 
   root!.innerHTML = `
     <main class="screen">
-      <header class="brand">
-        <h1>Homeio</h1>
-        <p class="subtitle">Connect to your home server over Tailscale</p>
-      </header>
+      <div class="panel">
+        <div class="hero">
+          <div class="hero-surface">
+            <img src="/icon.png" alt="Homeio" width="64" height="64" />
+          </div>
+          <div class="hero-pill">Home server</div>
+        </div>
 
-      <p id="error" class="error" hidden></p>
+        <p class="title">Welcome back</p>
+        <p class="subtitle">Connect to your server</p>
 
-      ${
-        sorted.length
-          ? `<section class="servers" aria-label="Saved servers">
-              ${sorted.map(renderServerCard).join("")}
-            </section>`
-          : `<p class="empty">No servers yet. Add your Homeio server below.</p>`
-      }
+        <div id="error-wrap" class="error-wrap" hidden>
+          <div class="error"><span id="error"></span></div>
+        </div>
 
-      <form id="add-form" class="add-form" novalidate>
-        <h2>Add a server</h2>
-        <label>
-          <span>Server address</span>
-          <input
-            name="address"
-            inputmode="url"
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            placeholder="homeio.tailnet-name.ts.net:3000"
-            required
-          />
-        </label>
-        <label>
-          <span>Name <em>(optional)</em></span>
-          <input name="label" placeholder="Home server" autocapitalize="words" />
-        </label>
-        <label>
-          <span>Username <em>(optional)</em></span>
-          <input
-            name="username"
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            placeholder="admin"
-          />
-        </label>
-        <button type="submit" ${busy ? "disabled" : ""}>
-          ${busy ? "Connecting…" : "Add &amp; Connect"}
+        ${
+          sorted.length
+            ? `<section class="servers" aria-label="Saved servers">
+                ${sorted.map(renderServerCard).join("")}
+              </section>`
+            : ""
+        }
+
+        <form id="add-form" class="add-form" novalidate>
+          <div class="field">
+            <div class="field-icon">${ICON_SERVER}</div>
+            <input
+              name="address"
+              inputmode="url"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              placeholder="Server address"
+              required
+            />
+          </div>
+          <div class="field">
+            <div class="field-icon">${ICON_TAG}</div>
+            <input name="label" placeholder="Name (optional)" autocapitalize="words" />
+          </div>
+          <div class="field">
+            <div class="field-icon">${ICON_USER}</div>
+            <input
+              name="username"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              placeholder="Username (optional)"
+            />
+          </div>
+        </form>
+
+        <button type="submit" form="add-form" class="submit" ${busy ? "disabled" : ""}>
+          <span>${busy ? "Connecting..." : "Connect"}</span>
+          ${ICON_ARROW}
         </button>
+
         <p class="hint">
-          You'll sign in with your password on the next screen. Make sure the
-          Tailscale app is connected first.
+          Use your tailnet address (<code>homeio.tailnet.ts.net:3000</code>) with the
+          Tailscale app connected, or your public server URL
+          (<code>https://…</code>). You'll sign in on the next screen.
         </p>
-      </form>
+      </div>
     </main>
   `;
 
@@ -179,8 +200,11 @@ function renderServerCard(server: SavedServer): string {
   return `
     <article class="server-card">
       <button class="server-main" data-connect="${server.id}" ${busy ? "disabled" : ""}>
-        <span class="server-label">${escapeHtml(server.label)}</span>
-        <span class="server-meta">${escapeHtml(meta)}</span>
+        <span class="field-icon">${ICON_SERVER}</span>
+        <span class="server-text">
+          <span class="server-label">${escapeHtml(server.label)}</span>
+          <span class="server-meta">${escapeHtml(meta)}</span>
+        </span>
       </button>
       <button
         class="server-remove"

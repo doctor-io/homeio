@@ -46,9 +46,14 @@ export type ProbeResult =
   | { ok: false; error: string };
 
 /**
- * Probe `<origin>/api/health`. A reachable Homeio server answers 200.
- * Network failures almost always mean Tailscale isn't connected / the address
- * is wrong, so we surface a Tailscale-aware hint.
+ * Probe `<origin>/api/health`. The launcher runs on the WebView's local
+ * `http://localhost` origin and Homeio servers don't send CORS headers, so a
+ * normal fetch is blocked before we can read anything. `mode: "no-cors"`
+ * returns an opaque response instead: we can't inspect the status, but the
+ * promise resolving at all means the server answered — which is all the
+ * reachability check needs. Network failures almost always mean Tailscale
+ * isn't connected / the address is wrong, so we surface a Tailscale-aware
+ * hint.
  */
 export async function probeServer(
   origin: string,
@@ -57,17 +62,13 @@ export async function probeServer(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${origin}/api/health`, {
+    await fetch(`${origin}/api/health`, {
       method: "GET",
+      mode: "no-cors",
       signal: controller.signal,
-      // We only need reachability + status; we don't read cookies here.
       cache: "no-store",
     });
-    if (res.ok) return { ok: true };
-    return {
-      ok: false,
-      error: `Server responded with ${res.status}. Is this a Homeio server?`,
-    };
+    return { ok: true };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       return { ok: false, error: "Timed out reaching the server." };

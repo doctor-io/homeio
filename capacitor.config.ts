@@ -16,10 +16,17 @@ const config: CapacitorConfig = {
   appName: "Homeio",
   webDir: "dist",
   server: {
-    androidScheme: "https",
-    // Tailnet hosts the WebView is allowed to navigate to in-app.
-    // `*.ts.net` covers MagicDNS names; `100.*` covers raw tailnet IPs.
-    allowNavigation: ["*.ts.net", "100.*"],
+    // The launcher must be served from an `http` origin: Homeio servers speak
+    // plain HTTP on the tailnet (Tailscale encrypts at the network layer), and
+    // an `https://localhost` page would block the `http://<server>` health
+    // probe as mixed content.
+    androidScheme: "http",
+    cleartext: true,
+    // Hosts the WebView is allowed to navigate to in-app.
+    // `*.ts.net` covers MagicDNS names; `100.*` covers raw tailnet IPs;
+    // custom domains cover servers published through a reverse proxy /
+    // Cloudflare Tunnel instead of Tailscale.
+    allowNavigation: ["*.ts.net", "100.*", "homeio.ahmedtabib.com"],
   },
 };
 
