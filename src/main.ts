@@ -80,7 +80,12 @@ async function connect(server: SavedServer) {
   // Navigate the WebView onto the server's own origin. From here the existing
   // Homeio web app runs first-party: its `/login` page handles username +
   // password (and TOTP), and the session cookie is stored for this origin.
-  window.location.href = server.address;
+  //
+  // `/m` is the phone UI. A server that predates it serves its own 404, so this
+  // is deliberately not a silent fallback — see the note in TODO.md: telling
+  // the two apart needs a signal the server can send across origins, which
+  // `/api/health` does not carry yet.
+  window.location.href = `${server.address}/m`;
 }
 
 async function handleRemove(id: string) {
