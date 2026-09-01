@@ -65,6 +65,17 @@ if (!manifest.includes("android:usesCleartextTraffic")) {
   patched = true;
 }
 
+// DownloadManager writes into the public Downloads folder. That needs no
+// permission from API 29, but minSdk is 23 and older phones still refuse
+// without it — hence the maxSdkVersion, so nothing is asked for on modern ones.
+if (!manifest.includes("WRITE_EXTERNAL_STORAGE")) {
+  manifest = manifest.replace(
+    '<uses-permission android:name="android.permission.INTERNET" />',
+    '<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission\n        android:name="android.permission.WRITE_EXTERNAL_STORAGE"\n        android:maxSdkVersion="28" />',
+  );
+  patched = true;
+}
+
 if (!manifest.includes("android:windowSoftInputMode")) {
   manifest = manifest.replace(
     'android:name=".MainActivity"',
