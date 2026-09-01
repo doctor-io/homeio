@@ -7,10 +7,13 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.regex.Matcher;
@@ -29,6 +32,9 @@ import java.util.regex.Pattern;
  * The activity also owns downloads: a WebView does nothing at all with a
  * Content-Disposition: attachment response unless a DownloadListener is set, so
  * the Files screen's Download button was silently dead inside the app.
+ *
+ * And it owns the fallback to the desktop shell for servers older than the
+ * phone UI, for the same reason: only the WebView ever sees the status code.
  */
 public class MainActivity extends BridgeActivity {
 
@@ -37,6 +43,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         registerDownloadListener();
+        registerPhoneUiFallback();
 
         getOnBackPressedDispatcher()
             .addCallback(
@@ -136,5 +143,63 @@ public class MainActivity extends BridgeActivity {
         }
 
         return URLUtil.guessFileName(url, contentDisposition, mimeType);
+    }
+
+    /**
+     * Fall back to the desktop shell when a server has no phone UI.
+     *
+     * The launcher sends every server to `<origin>/m`, and one from before that
+     * route existed answers with its own 404. The launcher cannot tell that
+     * apart from a healthy server: it probes cross-origin, where a `no-cors`
+     * response is opaque and carries no status. The WebView is the only place
+     * the status code is visible, so the fallback lives here.
+     *
+     * History is cleared afterwards so Back does not walk straight into the 404
+     * again — with no history left, the activity's Back handler returns to the
+     * server list, which is where Back should go from a server's first page.
+     */
+    private void registerPhoneUiFallback() {
+        WebView webView = getBridge().getWebView();
+
+        webView.setWebViewClient(
+            new BridgeWebViewClient(getBridge()) {
+                private String pendingRoot = null;
+
+                @Override
+                public void onReceivedHttpError(
+                    WebView view,
+                    WebResourceRequest request,
+                    WebResourceResponse errorResponse
+                ) {
+                    super.onReceivedHttpError(view, request, errorResponse);
+
+                    // Subresources 404 for all sorts of harmless reasons; only
+                    // the page itself means "this server has no /m".
+                    if (!request.isForMainFrame() || errorResponse.getStatusCode() != 404) {
+                        return;
+                    }
+
+                    Uri uri = request.getUrl();
+                    String path = uri.getPath();
+                    if (path == null || !(path.equals("/m") || path.startsWith("/m/"))) {
+                        return;
+                    }
+
+                    String root = uri.getScheme() + "://" + uri.getAuthority() + "/";
+                    pendingRoot = root;
+                    view.post(() -> view.loadUrl(root));
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+
+                    if (pendingRoot != null && url != null && url.startsWith(pendingRoot)) {
+                        pendingRoot = null;
+                        view.clearHistory();
+                    }
+                }
+            }
+        );
     }
 }

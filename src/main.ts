@@ -81,10 +81,10 @@ async function connect(server: SavedServer) {
   // Homeio web app runs first-party: its `/login` page handles username +
   // password (and TOTP), and the session cookie is stored for this origin.
   //
-  // `/m` is the phone UI. A server that predates it serves its own 404, so this
-  // is deliberately not a silent fallback — see the note in TODO.md: telling
-  // the two apart needs a signal the server can send across origins, which
-  // `/api/health` does not carry yet.
+  // `/m` is the phone UI. A server that predates it answers with its own 404,
+  // which this page cannot detect — the probe is cross-origin, and a `no-cors`
+  // response is opaque. MainActivity watches the WebView's status codes and
+  // sends those servers on to the desktop shell instead.
   window.location.href = `${server.address}/m`;
 }
 
