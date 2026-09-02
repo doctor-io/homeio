@@ -1,11 +1,15 @@
 package io.homeio.app;
 
 import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 import android.view.View;
@@ -63,12 +67,27 @@ public class MainActivity extends BridgeActivity {
     private boolean prompting = false;
     private long backgroundedAt = 0L;
 
+    /**
+     * The moment the user stopped looking, which is not something the activity
+     * lifecycle can tell us: behind the keyguard Android starts and stops the
+     * activity over and over — measured at 40-90ms per cycle on the test device
+     * — and every stop would reset the clock the re-lock decision runs on. The
+     * screen going off is the one signal that means what it says.
+     */
+    private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            backgroundedAt = System.currentTimeMillis();
+        }
+    };
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         registerDownloadListener();
         registerPhoneUiFallback();
+        registerReceiver(screenOffReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
 
         getOnBackPressedDispatcher()
             .addCallback(
@@ -250,13 +269,27 @@ public class MainActivity extends BridgeActivity {
             unlocked = false;
             hideContent();
             promptForUnlock();
+            return;
         }
+
+        // Back inside the grace window — a screen switched off and on again is
+        // the common case. onStop hid the WebView on the way out, and nothing
+        // else will ever put it back: without this the app returns to a black
+        // rectangle that still has focus and still answers nothing.
+        showContent();
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        backgroundedAt = System.currentTimeMillis();
+
+        // Only while the screen is still on, which means this is a real app
+        // switch. A stop with the screen already off is keyguard churn, and the
+        // receiver above has already recorded the honest timestamp.
+        PowerManager power = getSystemService(PowerManager.class);
+        if (power == null || power.isInteractive()) {
+            backgroundedAt = System.currentTimeMillis();
+        }
 
         // Hidden on the way out, not on the way back: the system takes the
         // recents thumbnail around here, and the dashboard should not be in it.
@@ -314,10 +347,23 @@ public class MainActivity extends BridgeActivity {
                 @Override
                 public void onAuthenticationError(int errorCode, @NonNull CharSequence message) {
                     prompting = false;
-                    // Cancelling is a decision, not a retry: re-prompting in a
-                    // loop is the behaviour people force-quit an app over. The
-                    // app closes, still locked, and asks again next launch.
-                    finish();
+
+                    boolean userWalkedAway = errorCode == BiometricPrompt.ERROR_USER_CANCELED
+                        || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON;
+
+                    if (userWalkedAway) {
+                        // Cancelling is a decision, not a retry: re-prompting in
+                        // a loop is the behaviour people force-quit an app over.
+                        // The app closes, still locked, and asks again next launch.
+                        finish();
+                        return;
+                    }
+
+                    // Everything else — the system cancelling because the screen
+                    // went off, a lockout after too many attempts — leaves the
+                    // app locked and asks again on the next onStart. Closing on
+                    // these would mean the screen timing out mid-prompt quietly
+                    // quit the app.
                 }
             }
         );
@@ -329,5 +375,11 @@ public class MainActivity extends BridgeActivity {
                 .setAllowedAuthenticators(authenticators)
                 .build()
         );
+    }
+
+    @Override
+    public void onDestroy() {
+        unregisterReceiver(screenOffReceiver);
+        super.onDestroy();
     }
 }
