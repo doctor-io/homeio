@@ -44,11 +44,22 @@ let reconnecting: SavedServer | null = null;
 const reachability = new Map<string, Reachability>();
 
 async function init() {
+  const params = new URLSearchParams(window.location.search);
+
   // Arriving from Disconnect: forget where we were before anything can send us
   // back there, and strip the flag so a reload does not re-run it.
-  const disconnected = new URLSearchParams(window.location.search).has("disconnect");
+  const disconnected = params.has("disconnect");
   if (disconnected) {
     await clearLastConnected();
+    window.history.replaceState(null, "", window.location.pathname);
+  }
+
+  // Arriving from Settings inside Homeio, which cannot host these switches
+  // itself. Open the sheet on arrival, and stay here: reconnecting on top of
+  // the request would take the user straight back off the screen they asked for.
+  const wantsSettings = params.has("settings");
+  if (wantsSettings) {
+    settingsOpen = true;
     window.history.replaceState(null, "", window.location.pathname);
   }
 
@@ -58,7 +69,8 @@ async function init() {
     loadAutoReconnect(),
   ]);
 
-  const resume = disconnected ? null : autoReconnect ? lastConnected(servers) : null;
+  const resume =
+    disconnected || wantsSettings ? null : autoReconnect ? lastConnected(servers) : null;
   if (resume) {
     reconnecting = resume;
     render();
