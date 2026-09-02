@@ -360,6 +360,72 @@ body {
   height: 1rem;
 }
 
+/* The app lock row: a settings control, so it sits below the primary action
+   rather than competing with it. */
+.lock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lock-row:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lock-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.lock-label {
+  font-size: 13px;
+}
+
+.lock-meta {
+  font-size: 11px;
+  color: color-mix(in oklab, var(--muted-foreground) 85%, transparent);
+}
+
+.switch {
+  flex: none;
+  width: 2.5rem;
+  height: 1.5rem;
+  padding: 0.1875rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 160ms ease;
+}
+
+.switch .knob {
+  display: block;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+.switch.on {
+  background: var(--primary, #e2601a);
+}
+
+.switch.on .knob {
+  transform: translateX(1rem);
+}
+
 .hint {
   margin: 1rem 0 0;
   font-size: 11px;

@@ -2,16 +2,22 @@ package io.homeio.app;
 
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
+import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 import java.io.UnsupportedEncodingException;
@@ -35,8 +41,27 @@ import java.util.regex.Pattern;
  *
  * And it owns the fallback to the desktop shell for servers older than the
  * phone UI, for the same reason: only the WebView ever sees the status code.
+ *
+ * The optional app lock lives here too, and could not live anywhere else: the
+ * launcher's JavaScript dies the moment the WebView navigates onto a server, so
+ * it cannot be what stands between the phone and a signed-in dashboard.
  */
 public class MainActivity extends BridgeActivity {
+
+    /** Capacitor Preferences writes the launcher's toggle into this file. */
+    private static final String PREFERENCES_FILE = "CapacitorStorage";
+    private static final String LOCK_ENABLED_KEY = "homeio.biometricLock";
+
+    /**
+     * How long the app may sit in the background before it asks again. Short
+     * enough that a lost phone is not an open door, long enough that stepping
+     * out to a password manager and back is not an interrogation.
+     */
+    private static final long RELOCK_AFTER_MS = 60_000L;
+
+    private boolean unlocked = false;
+    private boolean prompting = false;
+    private long backgroundedAt = 0L;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -200,6 +225,109 @@ public class MainActivity extends BridgeActivity {
                     }
                 }
             }
+        );
+    }
+
+    private boolean isLockEnabled() {
+        SharedPreferences preferences = getSharedPreferences(PREFERENCES_FILE, MODE_PRIVATE);
+        return "true".equals(preferences.getString(LOCK_ENABLED_KEY, "false"));
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+
+        if (!isLockEnabled()) {
+            unlocked = true;
+            showContent();
+            return;
+        }
+
+        boolean awayTooLong = backgroundedAt > 0
+            && System.currentTimeMillis() - backgroundedAt > RELOCK_AFTER_MS;
+
+        if (!unlocked || awayTooLong) {
+            unlocked = false;
+            hideContent();
+            promptForUnlock();
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        backgroundedAt = System.currentTimeMillis();
+
+        // Hidden on the way out, not on the way back: the system takes the
+        // recents thumbnail around here, and the dashboard should not be in it.
+        if (isLockEnabled()) {
+            hideContent();
+        }
+    }
+
+    private void showContent() {
+        WebView webView = getBridge().getWebView();
+        webView.setVisibility(View.VISIBLE);
+    }
+
+    private void hideContent() {
+        WebView webView = getBridge().getWebView();
+        webView.setVisibility(View.INVISIBLE);
+    }
+
+    /**
+     * Face or fingerprint, falling back to the device PIN — never to nothing.
+     * A device with no enrolled biometric and no screen lock has nothing to
+     * check against, so the lock stands down rather than locking the owner out
+     * of their own server.
+     */
+    private void promptForUnlock() {
+        if (prompting) {
+            return;
+        }
+
+        int authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK
+            | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+
+        if (BiometricManager.from(this).canAuthenticate(authenticators)
+            != BiometricManager.BIOMETRIC_SUCCESS) {
+            unlocked = true;
+            showContent();
+            return;
+        }
+
+        prompting = true;
+
+        BiometricPrompt prompt = new BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            new BiometricPrompt.AuthenticationCallback() {
+                @Override
+                public void onAuthenticationSucceeded(
+                    @NonNull BiometricPrompt.AuthenticationResult result
+                ) {
+                    prompting = false;
+                    unlocked = true;
+                    showContent();
+                }
+
+                @Override
+                public void onAuthenticationError(int errorCode, @NonNull CharSequence message) {
+                    prompting = false;
+                    // Cancelling is a decision, not a retry: re-prompting in a
+                    // loop is the behaviour people force-quit an app over. The
+                    // app closes, still locked, and asks again next launch.
+                    finish();
+                }
+            }
+        );
+
+        prompt.authenticate(
+            new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock Homeio")
+                .setSubtitle("Your server is signed in on this device")
+                .setAllowedAuthenticators(authenticators)
+                .build()
         );
     }
 }

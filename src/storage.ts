@@ -18,6 +18,14 @@ export type SavedServer = {
 
 const SERVERS_KEY = "homeio.servers";
 
+/**
+ * Read natively as well: `MainActivity` gates the app on this value, and
+ * Capacitor Preferences stores it in the `CapacitorStorage` SharedPreferences
+ * file under this exact key. Keep the string values "true"/"false" — the native
+ * side compares text, not JSON.
+ */
+const BIOMETRIC_LOCK_KEY = "homeio.biometricLock";
+
 export async function loadServers(): Promise<SavedServer[]> {
   const { value } = await Preferences.get({ key: SERVERS_KEY });
   if (!value) return [];
@@ -73,4 +81,13 @@ function isSavedServer(value: unknown): value is SavedServer {
     typeof (value as SavedServer).id === "string" &&
     typeof (value as SavedServer).address === "string"
   );
+}
+
+export async function loadBiometricLock(): Promise<boolean> {
+  const { value } = await Preferences.get({ key: BIOMETRIC_LOCK_KEY });
+  return value === "true";
+}
+
+export async function setBiometricLock(enabled: boolean): Promise<void> {
+  await Preferences.set({ key: BIOMETRIC_LOCK_KEY, value: enabled ? "true" : "false" });
 }

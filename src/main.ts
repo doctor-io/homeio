@@ -1,10 +1,12 @@
 import "./styles.css";
 import { normalizeAddress, probeServer } from "./connect";
 import {
+  loadBiometricLock,
   loadServers,
   markConnected,
   newServerId,
   removeServer,
+  setBiometricLock,
   upsertServer,
   type SavedServer,
 } from "./storage";
@@ -19,12 +21,14 @@ const ICON_SERVER = `<svg ${ICON_ATTRS}><rect width="20" height="8" x="2" y="2" 
 const ICON_TAG = `<svg ${ICON_ATTRS}><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>`;
 const ICON_USER = `<svg ${ICON_ATTRS}><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>`;
 const ICON_ARROW = `<svg ${ICON_ATTRS}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`;
+const ICON_LOCK = `<svg ${ICON_ATTRS}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 
 let servers: SavedServer[] = [];
 let busy = false;
+let biometricLock = false;
 
 async function init() {
-  servers = await loadServers();
+  [servers, biometricLock] = await Promise.all([loadServers(), loadBiometricLock()]);
   render();
 
   // The hardware back button is handled natively in MainActivity: history
@@ -86,6 +90,15 @@ async function connect(server: SavedServer) {
   // response is opaque. MainActivity watches the WebView's status codes and
   // sends those servers on to the desktop shell instead.
   window.location.href = `${server.address}/m`;
+}
+
+async function handleToggleLock() {
+  // Written here, enforced natively: the launcher's JavaScript is gone the
+  // moment the WebView navigates onto a server, so it cannot be what stands
+  // between the phone and the dashboard.
+  biometricLock = !biometricLock;
+  await setBiometricLock(biometricLock);
+  render();
 }
 
 async function handleRemove(id: string) {
@@ -166,6 +179,27 @@ function render() {
           ${ICON_ARROW}
         </button>
 
+        <button
+          type="button"
+          id="lock-toggle"
+          class="lock-row"
+          role="switch"
+          aria-checked="${biometricLock ? "true" : "false"}"
+        >
+          <span class="field-icon">${ICON_LOCK}</span>
+          <span class="lock-text">
+            <span class="lock-label">Require unlock</span>
+            <span class="lock-meta">
+              ${
+                biometricLock
+                  ? "Face or fingerprint when you open Homeio"
+                  : "Anyone with this phone can open your server"
+              }
+            </span>
+          </span>
+          <span class="switch ${biometricLock ? "on" : ""}"><span class="knob"></span></span>
+        </button>
+
         <p class="hint">
           Use your tailnet address (<code>homeio.tailnet.ts.net:3000</code>) with the
           Tailscale app connected, or your public server URL
@@ -186,6 +220,10 @@ function render() {
       const server = servers.find((s) => s.id === btn.dataset.connect);
       if (server && !busy) void connect(server);
     });
+  });
+
+  document.getElementById("lock-toggle")?.addEventListener("click", () => {
+    void handleToggleLock();
   });
 
   root!.querySelectorAll<HTMLButtonElement>("[data-remove]").forEach((btn) => {

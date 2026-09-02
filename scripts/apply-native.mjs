@@ -90,3 +90,20 @@ if (patched) {
 } else {
   console.log("[native] AndroidManifest already patched");
 }
+
+// The app lock needs androidx.biometric, and app/build.gradle is generated —
+// `cap add android` rewrites it, so the dependency has to be re-applied here
+// rather than edited in place, exactly like the manifest attributes above.
+const gradlePath = join(android, "app/build.gradle");
+let gradle = readFileSync(gradlePath, "utf8");
+
+if (!gradle.includes("androidx.biometric")) {
+  gradle = gradle.replace(
+    'implementation project(\':capacitor-android\')',
+    'implementation project(\':capacitor-android\')\n    implementation "androidx.biometric:biometric:1.1.0"',
+  );
+  writeFileSync(gradlePath, gradle);
+  console.log("[native] added androidx.biometric to app/build.gradle");
+} else {
+  console.log("[native] app/build.gradle already has androidx.biometric");
+}
