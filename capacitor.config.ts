@@ -15,6 +15,12 @@ const config: CapacitorConfig = {
   appId: "io.homeio.app",
   appName: "Homeio",
   webDir: "dist",
+  // Stamped on every page the WebView loads, remote ones included. It is how
+  // Homeio's own UI knows it is running inside the app: `/m` shows Disconnect
+  // only when this is present, because a desktop browser has no launcher to go
+  // back to. Capacitor's bridge cannot answer that — it is injected into the
+  // local origin only, never into a server's.
+  appendUserAgent: "HomeioApp",
   server: {
     // The launcher must be served from an `http` origin: Homeio servers speak
     // plain HTTP on the tailnet (Tailscale encrypts at the network layer), and
