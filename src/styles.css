@@ -54,6 +54,8 @@ body {
 }
 
 .panel {
+  /* Anchors the settings gear in the corner. */
+  position: relative;
   width: 100%;
   max-width: 26rem;
   display: flex;
@@ -168,16 +170,67 @@ body {
   margin-bottom: 0.75rem;
 }
 
+/* Each row is a fixed frame: the delete button sits underneath, and the card
+   slides over it. Nothing is destroyed by the swipe itself. */
+.server-row {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--radius-panel);
+  /* Clip the swipe: a card sliding left must disappear at the row's edge
+     rather than sailing out over the panel behind it. */
+  overflow: hidden;
+}
+
+.server-row.dragging {
+  z-index: 2;
+  transition: none;
+  /* The lift shadow belongs outside the row it is lifting off. */
+  overflow: visible;
+}
+
+.server-row.dragging .server-card {
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.75);
+  transform: scale(1.02);
+}
+
+.server-row:not(.dragging) {
+  transition: transform 180ms ease;
+}
+
+.server-delete {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 4.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-panel);
+  background: color-mix(in oklab, var(--status-red, #e5484d) 22%, transparent);
+  color: var(--status-red, #e5484d);
+  cursor: pointer;
+}
+
+.server-delete:active {
+  background: color-mix(in oklab, var(--status-red, #e5484d) 34%, transparent);
+}
+
+.server-delete svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
 .server-card {
   position: relative;
   display: flex;
   align-items: stretch;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(10, 12, 15, 0.92);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(40px);
+  touch-action: pan-y;
 }
 
 .server-card::before {
@@ -191,12 +244,27 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.server-grip {
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem 0 0.625rem;
+  color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+  /* The one place a vertical drag must not scroll the page. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.server-grip svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
 .server-main {
   flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem 1rem;
+  padding: 0.875rem 0.5rem 0.875rem 0.375rem;
   background: transparent;
   border: 0;
   color: inherit;
@@ -230,19 +298,36 @@ body {
   word-break: break-all;
 }
 
-.server-remove {
-  width: 3rem;
-  background: transparent;
-  border: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--muted-foreground);
-  font-size: 15px;
-  cursor: pointer;
+/* Reachability, decided by a probe that runs after the list is already on
+   screen: grey while it is out, then green or red. */
+.server-dot {
+  align-self: center;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 200ms ease;
 }
 
-.server-remove:active {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--status-red);
+.server-dot.checking {
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.server-dot.online {
+  background: var(--status-green, #46a758);
+  animation: none;
+}
+
+.server-dot.offline {
+  background: var(--status-red, #e5484d);
+  animation: none;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 /* Add-server form — soft surface with icon-tile input rows, like the
@@ -438,4 +523,90 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
   color: color-mix(in oklab, var(--foreground) 80%, transparent);
+}
+
+/* Settings live behind a gear rather than under the connect form: they are
+   device settings, consulted rarely, and the form is what people came for. */
+.gear {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+  cursor: pointer;
+}
+
+.gear:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gear svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.sheet {
+  position: fixed;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+  border-top-left-radius: 1.75rem;
+  border-top-right-radius: 1.75rem;
+  background: #14171b;
+  animation: sheet-up 200ms ease;
+}
+
+.sheet .lock-row {
+  margin-top: 0;
+}
+
+.sheet-grabber {
+  align-self: center;
+  width: 2.5rem;
+  height: 4px;
+  margin-bottom: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.ghost-button {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ghost-button:active {
+  background: rgba(255, 255, 255, 0.06);
 }

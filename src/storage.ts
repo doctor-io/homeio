@@ -25,6 +25,7 @@ const SERVERS_KEY = "homeio.servers";
  * side compares text, not JSON.
  */
 const BIOMETRIC_LOCK_KEY = "homeio.biometricLock";
+const AUTO_RECONNECT_KEY = "homeio.autoReconnect";
 
 export async function loadServers(): Promise<SavedServer[]> {
   const { value } = await Preferences.get({ key: SERVERS_KEY });
@@ -62,6 +63,34 @@ export async function removeServer(id: string): Promise<SavedServer[]> {
   return servers;
 }
 
+/**
+ * Move one item to a new index, pure and total: an unknown id or an index off
+ * either end returns the list unchanged rather than dropping an entry.
+ */
+export function reorder<T>(list: T[], fromIndex: number, toIndex: number): T[] {
+  if (fromIndex < 0 || fromIndex >= list.length) return list;
+  if (toIndex < 0 || toIndex >= list.length) return list;
+  if (fromIndex === toIndex) return list;
+
+  const next = [...list];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+/**
+ * Stored order is the order shown. Nothing re-sorts by last-connected any more:
+ * a list the user arranged by hand must not rearrange itself the next time they
+ * connect to something.
+ */
+export async function moveServer(id: string, toIndex: number): Promise<SavedServer[]> {
+  const servers = await loadServers();
+  const fromIndex = servers.findIndex((server) => server.id === id);
+  const next = reorder(servers, fromIndex, toIndex);
+  if (next !== servers) await saveServers(next);
+  return next;
+}
+
 export async function markConnected(id: string): Promise<void> {
   const servers = await loadServers();
   const server = servers.find((s) => s.id === id);
@@ -90,4 +119,37 @@ export async function loadBiometricLock(): Promise<boolean> {
 
 export async function setBiometricLock(enabled: boolean): Promise<void> {
   await Preferences.set({ key: BIOMETRIC_LOCK_KEY, value: enabled ? "true" : "false" });
+}
+
+/**
+ * Opening the app should put you back where you were. Defaults to on: the list
+ * exists for the rare second server, not for the daily case of one.
+ */
+export async function loadAutoReconnect(): Promise<boolean> {
+  const { value } = await Preferences.get({ key: AUTO_RECONNECT_KEY });
+  return value !== "false";
+}
+
+export async function setAutoReconnect(enabled: boolean): Promise<void> {
+  await Preferences.set({ key: AUTO_RECONNECT_KEY, value: enabled ? "true" : "false" });
+}
+
+/** The server to go straight back to, or null when none has been used yet. */
+export function lastConnected(servers: SavedServer[]): SavedServer | null {
+  return (
+    servers
+      .filter((server) => typeof server.lastConnectedAt === "number")
+      .sort((a, b) => (b.lastConnectedAt ?? 0) - (a.lastConnectedAt ?? 0))[0] ?? null
+  );
+}
+
+/**
+ * Forget where we were, without forgetting the server itself. Disconnect has to
+ * do this or auto-reconnect would carry the user straight back in.
+ */
+export async function clearLastConnected(): Promise<SavedServer[]> {
+  const servers = await loadServers();
+  const next = servers.map(({ lastConnectedAt: _dropped, ...server }) => server);
+  await saveServers(next);
+  return next;
 }
