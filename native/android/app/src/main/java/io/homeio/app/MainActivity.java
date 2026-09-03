@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
 import android.view.View;
 import android.webkit.WebResourceRequest;
@@ -55,6 +56,7 @@ public class MainActivity extends BridgeActivity {
     /** Capacitor Preferences writes the launcher's toggle into this file. */
     private static final String PREFERENCES_FILE = "CapacitorStorage";
     private static final String LOCK_ENABLED_KEY = "homeio.biometricLock";
+    private static final String AUTO_RECONNECT_KEY = "homeio.autoReconnect";
 
     /**
      * How long the app may sit in the background before it asks again. Short
@@ -87,6 +89,7 @@ public class MainActivity extends BridgeActivity {
 
         registerDownloadListener();
         registerPhoneUiFallback();
+        registerSettingsBridge();
         registerReceiver(screenOffReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
 
         getOnBackPressedDispatcher()
@@ -381,5 +384,132 @@ public class MainActivity extends BridgeActivity {
     public void onDestroy() {
         unregisterReceiver(screenOffReceiver);
         super.onDestroy();
+    }
+
+    /**
+     * The app's own settings, readable and writable from Homeio's UI.
+     *
+     * These live in the app's storage on its own origin, and /m is served by the
+     * server, so the page cannot reach them by itself — Capacitor injects its
+     * bridge into the local origin only. This is the one thing that crosses that
+     * line, and it is deliberately narrow: two booleans, nothing else.
+     *
+     * A JavaScript interface is exposed to every page the WebView loads,
+     * including a server that has been compromised, so **turning the lock off
+     * requires the fingerprint or PIN**. A hostile page calling this gets a
+     * prompt the owner refuses. Turning it on only strengthens the gate, and
+     * reconnect-on-open is not a security setting, so neither asks.
+     */
+    private class SettingsBridge {
+
+        @JavascriptInterface
+        public String read() {
+            SharedPreferences preferences = getSharedPreferences(PREFERENCES_FILE, MODE_PRIVATE);
+            return "{\"lock\":" + "true".equals(preferences.getString(LOCK_ENABLED_KEY, "false"))
+                + ",\"autoReconnect\":"
+                + !"false".equals(preferences.getString(AUTO_RECONNECT_KEY, "true"))
+                + "}";
+        }
+
+        @JavascriptInterface
+        public void setAutoReconnect(boolean enabled) {
+            write(AUTO_RECONNECT_KEY, enabled);
+            announce();
+        }
+
+        @JavascriptInterface
+        public void setLock(boolean enabled) {
+            if (enabled) {
+                write(LOCK_ENABLED_KEY, true);
+                unlocked = true;
+                announce();
+                return;
+            }
+
+            runOnUiThread(() -> confirmThen(() -> {
+                write(LOCK_ENABLED_KEY, false);
+                announce();
+            }));
+        }
+    }
+
+    private void write(String key, boolean value) {
+        getSharedPreferences(PREFERENCES_FILE, MODE_PRIVATE)
+            .edit()
+            .putString(key, value ? "true" : "false")
+            .apply();
+    }
+
+    /** Tell the page the values changed, so it can redraw from the truth. */
+    private void announce() {
+        WebView webView = getBridge().getWebView();
+        webView.post(() ->
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('homeio:app-settings'))",
+                null
+            )
+        );
+    }
+
+    /** The same authenticators the lock itself accepts, for the same reason. */
+    private void confirmThen(Runnable onConfirmed) {
+        int authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK
+            | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+
+        int canAuth = BiometricManager.from(this).canAuthenticate(authenticators);
+
+        // Two different "no" answers, and treating them alike is a hole. A
+        // device with nothing enrolled could never have enforced the lock, so
+        // refusing there would strand the setting on with no way back. But
+        // "unavailable right now" — the sensor still busy from the unlock a
+        // moment ago, or a lockout after failed attempts — is temporary, and
+        // taking it as permission is how a tap silently turned the lock off
+        // once during testing.
+        boolean permanentlyUnavailable =
+            canAuth == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED
+                || canAuth == BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE
+                || canAuth == BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED;
+
+        if (permanentlyUnavailable) {
+            onConfirmed.run();
+            return;
+        }
+
+        if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
+            // Temporarily unable to ask, so the answer is no. The page is told
+            // so the switch goes back to where the setting actually is.
+            announce();
+            return;
+        }
+
+        new BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            new BiometricPrompt.AuthenticationCallback() {
+                @Override
+                public void onAuthenticationSucceeded(
+                    @NonNull BiometricPrompt.AuthenticationResult result
+                ) {
+                    onConfirmed.run();
+                }
+
+                @Override
+                public void onAuthenticationError(int errorCode, @NonNull CharSequence message) {
+                    // Left as it was, and the page is told so it can put the
+                    // switch back where it belongs.
+                    announce();
+                }
+            }
+        ).authenticate(
+            new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Turn off the app lock?")
+                .setSubtitle("Homeio will open without asking")
+                .setAllowedAuthenticators(authenticators)
+                .build()
+        );
+    }
+
+    private void registerSettingsBridge() {
+        getBridge().getWebView().addJavascriptInterface(new SettingsBridge(), "HomeioApp");
     }
 }
