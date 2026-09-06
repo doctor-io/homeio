@@ -27,6 +27,40 @@ type WindowProps = {
 const BOTTOM_DOCK_CLEARANCE = 88;
 const SIDE_DOCK_CLEARANCE = 80;
 
+/** Below this width there is no room for a window to float; it fills the screen. */
+const COMPACT_VIEWPORT_WIDTH = 640;
+
+/** Never shrink a window past the point where its own chrome stops working. */
+const MIN_WINDOW_WIDTH = 280;
+const MIN_WINDOW_HEIGHT = 320;
+
+function viewportMargin(viewportWidth: number) {
+  return viewportWidth < COMPACT_VIEWPORT_WIDTH ? 8 : 40;
+}
+
+/**
+ * A window asked for 900x580 and got it whatever the screen measured, so on a
+ * phone two thirds of Settings sat off the right edge. Sizes are requests now,
+ * clamped to what the display can actually show.
+ *
+ * Only ever shrinks, so a window the user has resized down stays where they
+ * put it.
+ */
+function fitToViewport(width: number, height: number) {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const margin = viewportMargin(viewportWidth);
+  const topInset = viewportWidth < COMPACT_VIEWPORT_WIDTH ? 56 : 50;
+
+  return {
+    w: Math.max(MIN_WINDOW_WIDTH, Math.min(width, viewportWidth - margin * 2)),
+    h: Math.max(
+      MIN_WINDOW_HEIGHT,
+      Math.min(height, viewportHeight - topInset - BOTTOM_DOCK_CLEARANCE),
+    ),
+  };
+}
+
 export function Window({
   title,
   icon,
@@ -52,11 +86,29 @@ export function Window({
   const windowRef = useRef<HTMLDivElement>(null);
   const preMaxState = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
+  // Fit to the display before centring, and again whenever it changes — a
+  // phone rotating is the same problem as a window opened too large.
+  useEffect(() => {
+    function clampToViewport() {
+      setSize((previous) => {
+        const fitted = fitToViewport(previous.w, previous.h);
+        return fitted.w === previous.w && fitted.h === previous.h
+          ? previous
+          : fitted;
+      });
+    }
+
+    clampToViewport();
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
+  }, []);
+
   // Center on mount
   useEffect(() => {
     if (position.x === -1) {
+      const margin = viewportMargin(window.innerWidth);
       setPosition({
-        x: Math.max(40, (window.innerWidth - size.w) / 2),
+        x: Math.max(margin, (window.innerWidth - size.w) / 2),
         y: Math.max(50, (window.innerHeight - size.h) / 2 - 20),
       });
     }

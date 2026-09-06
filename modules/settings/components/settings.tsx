@@ -1,6 +1,6 @@
 "use client";
 
-import { Star } from "@/components/icons/platform-icons";
+import { ChevronLeftIcon as ChevronLeft, Star } from "@/components/icons/platform-icons";
 import { useDesktopPreferences } from "@/hooks/useDesktopPreferences";
 import { cn } from "@/lib/utils";
 import {
@@ -22,6 +22,10 @@ import {
 } from "@/modules/settings/components/panel/surface";
 import type { SettingsPanelProps } from "@/modules/settings/components/panel/types";
 import { useSettingsBackend } from "@/modules/settings/hooks/useSettingsBackend";
+import { useEffect, useRef, useState } from "react";
+
+/** Under this the 13rem nav leaves too little beside it to show both at once. */
+const COMPACT_PANEL_WIDTH = 576;
 
 export function SettingsPanel({
   appearance,
@@ -79,10 +83,38 @@ export function SettingsPanel({
     sectionDefinitions.find((section) => section.id === activeSection) ??
     sectionDefinitions[0];
 
+  // Measured on the panel, not the viewport: this window is resizable, so it
+  // can be narrow on a wide display and a media query would miss that.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isCompact, setIsCompact] = useState(false);
+  const [compactView, setCompactView] = useState<"nav" | "section">("nav");
+
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+
+    // Below this the 13rem nav leaves too little beside it to be worth showing
+    // both at once.
+    const measure = () => setIsCompact(element.clientWidth < COMPACT_PANEL_WIDTH);
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const showNav = !isCompact || compactView === "nav";
+  const showSection = !isCompact || compactView === "section";
+
   return (
-    <div className="flex h-full">
+    <div ref={rootRef} className="flex h-full">
       <aside
-        className={cn("m-2 flex w-52 shrink-0 flex-col", SETTINGS_PANEL_SHELL)}
+        className={cn(
+          "m-2 flex-col",
+          SETTINGS_PANEL_SHELL,
+          showNav ? "flex" : "hidden",
+          isCompact ? "w-full" : "w-52 shrink-0",
+        )}
       >
         <div className="flex-1 overflow-y-auto px-2 py-3">
           {SETTINGS_SECTION_GROUPS.map((group) => {
@@ -108,7 +140,10 @@ export function SettingsPanel({
                     return (
                       <button
                         key={section.id}
-                        onClick={() => setActiveSection(section.id)}
+                        onClick={() => {
+                          setActiveSection(section.id);
+                          setCompactView("section");
+                        }}
                         className={cn(
                           "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
                           isActive
@@ -172,12 +207,29 @@ export function SettingsPanel({
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
+      <main
+        className={cn(
+          "flex-1 overflow-y-auto",
+          showSection ? "block" : "hidden",
+        )}
+      >
         <div className="max-w-2xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">
-              {activeDefinition.label}
-            </h2>
+            <div className="flex min-w-0 items-center gap-2">
+              {isCompact ? (
+                <button
+                  type="button"
+                  onClick={() => setCompactView("nav")}
+                  aria-label="Back to settings list"
+                  className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+              ) : null}
+              <h2 className="truncate text-base font-semibold text-foreground">
+                {activeDefinition.label}
+              </h2>
+            </div>
             {!activeDefinition.liveApply && activeDefinition.save ? (
               <button
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-primary/90"
