@@ -72,6 +72,14 @@ export function NotificationsSection({
             description: "Backup success and failure notifications",
             key: "backupReportsEnabled" as const,
           },
+          {
+            // Names only what it reports. Firewall blocks would mean reading
+            // fail2ban's log, which nothing does yet, and Homeio terminates no
+            // TLS of its own so it has no certificate to watch expire.
+            label: "Security events",
+            description: "Repeated failed sign-in attempts",
+            key: "securityEventsEnabled" as const,
+          },
         ].map(({ label, description, key }) => (
           <div key={key} className={cn(SETTINGS_PANEL_INSET, "px-4 py-1")}>
             <Toggle
@@ -82,17 +90,6 @@ export function NotificationsSection({
             />
           </div>
         ))}
-
-        <div className={cn(SETTINGS_PANEL_INSET, "px-4 py-1")}>
-          <Toggle
-            label="Security events"
-            description="Failed logins, firewall blocks, certificate expiry"
-            enabled={draft.securityEventsEnabled}
-            onToggle={() => undefined}
-            disabled
-            disabledReason="Coming soon"
-          />
-        </div>
       </div>
 
       <SectionDivider title="Thresholds" />

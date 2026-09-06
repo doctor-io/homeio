@@ -1,3 +1,11 @@
+/**
+ * Security notifications are recognised by title, because the server writes
+ * them without knowing the viewer's preferences — a failed sign-in has no
+ * session to read a setting from — and the desktop decides whether to show
+ * them. One constant, so the producer and the filter cannot drift apart.
+ */
+export const SECURITY_NOTIFICATION_TITLE = "Failed sign-in attempts";
+
 export type NotificationKind = "info" | "success" | "error";
 
 export type NotificationRecord = {

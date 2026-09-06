@@ -14,8 +14,11 @@ import {
   clearLoginFailures,
   getLoginRateLimitKey,
   isLoginRateLimited,
+  LOGIN_FAILURE_ALERT_THRESHOLD,
   recordLoginFailure,
 } from "@/lib/server/modules/auth/rate-limit";
+import { createNotification } from "@/lib/server/modules/notifications/service";
+import { SECURITY_NOTIFICATION_TITLE } from "@/lib/shared/contracts/notifications";
 
 export const runtime = "nodejs";
 
@@ -91,7 +94,20 @@ export async function POST(request: Request) {
   } catch (error) {
     const statusCode = error instanceof AuthError ? error.statusCode : 500;
     if (statusCode === 401 && rateLimitKey) {
-      recordLoginFailure(rateLimitKey);
+      const failures = recordLoginFailure(rateLimitKey);
+
+      // Once, when the lockout threshold is reached — not once per attempt.
+      // A wrong password is a typo; five in fifteen minutes is someone trying.
+      // The key is "username:ip", which is exactly what the operator needs to
+      // recognise whether it was them.
+      if (failures === LOGIN_FAILURE_ALERT_THRESHOLD) {
+        const [attemptedUsername, clientIp] = rateLimitKey.split(":");
+        void createNotification({
+          title: SECURITY_NOTIFICATION_TITLE,
+          body: `${failures} failed attempts for "${attemptedUsername}" from ${clientIp}. Sign-in is now blocked for 15 minutes.`,
+          kind: "error",
+        }).catch(() => undefined);
+      }
     }
 
     logServerAction({

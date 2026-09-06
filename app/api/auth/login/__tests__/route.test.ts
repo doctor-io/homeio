@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { POST as LoginRoutePost } from "@/app/api/auth/login/route";
+import { SECURITY_NOTIFICATION_TITLE } from "@/lib/shared/contracts/notifications";
 
 type LoadedRoute = {
   POST: typeof LoginRoutePost;
@@ -134,6 +135,41 @@ describe("POST /api/auth/login", () => {
     await expect(limited.json()).resolves.toEqual({
       error: "Too many login attempts",
     });
+  });
+
+  it("raises one security notification when the lockout threshold is reached", async () => {
+    const { POST, loginUser, AuthError } = await loadRoute();
+    const { createNotification } = await import(
+      "@/lib/server/modules/notifications/service"
+    );
+    vi.mocked(createNotification).mockClear();
+    loginUser.mockRejectedValue(new AuthError("Invalid username or password", 401));
+
+    const attempt = () =>
+      POST(
+        new Request("http://localhost/api/auth/login", {
+          method: "POST",
+          headers: { "x-real-ip": "203.0.113.9" },
+          body: JSON.stringify({ username: "admin", password: "bad-pass" }),
+        }),
+      );
+
+    // A wrong password is a typo, so the first four say nothing.
+    for (let index = 0; index < 4; index += 1) await attempt();
+    expect(createNotification).not.toHaveBeenCalled();
+
+    await attempt();
+    expect(createNotification).toHaveBeenCalledTimes(1);
+
+    const [payload] = vi.mocked(createNotification).mock.calls[0]!;
+    expect(payload.title).toBe(SECURITY_NOTIFICATION_TITLE);
+    expect(payload.kind).toBe("error");
+    expect(payload.body).toContain("admin");
+    expect(payload.body).toContain("203.0.113.9");
+
+    // Further attempts are refused outright and must not repeat the alert.
+    await attempt();
+    expect(createNotification).toHaveBeenCalledTimes(1);
   });
 
   it("does not share rate limits across client ips", async () => {

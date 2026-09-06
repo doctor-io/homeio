@@ -1,5 +1,6 @@
 "use client";
 
+import { SECURITY_NOTIFICATION_TITLE } from "@/lib/shared/contracts/notifications";
 import { useMemo } from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDesktopPreferences } from "@/hooks/useDesktopPreferences";
@@ -63,8 +64,18 @@ export function useStatusBarData() {
   });
 
   const mergedNotifications = useMemo(() => {
-    const persistentIds = new Set(persistentNotifications.map((n) => n.id));
-    const persistentMapped = persistentNotifications.map((n) => ({
+    // The server records a failed-login burst whether or not anyone is watching
+    // — it has no session to read a preference from, and an audit trail that a
+    // setting can erase is not much of one. The toggle decides whether the
+    // desktop surfaces them.
+    const visiblePersistent = notificationPreferences.securityEventsEnabled
+      ? persistentNotifications
+      : persistentNotifications.filter(
+          (n) => n.title !== SECURITY_NOTIFICATION_TITLE,
+        );
+
+    const persistentIds = new Set(visiblePersistent.map((n) => n.id));
+    const persistentMapped = visiblePersistent.map((n) => ({
       id: n.id,
       title: n.title,
       message: n.body,
@@ -73,7 +84,11 @@ export function useStatusBarData() {
     }));
     const ephemeralOnly = ephemeralNotifications.filter((n) => !persistentIds.has(n.id));
     return [...persistentMapped, ...ephemeralOnly].slice(0, 20);
-  }, [persistentNotifications, ephemeralNotifications]);
+  }, [
+    persistentNotifications,
+    ephemeralNotifications,
+    notificationPreferences.securityEventsEnabled,
+  ]);
 
   const mergedUnreadCount = persistentUnreadCount + ephemeralUnreadCount;
 

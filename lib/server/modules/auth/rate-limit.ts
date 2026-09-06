@@ -41,6 +41,12 @@ export function isLoginRateLimited(key: string, now = Date.now()) {
   return record.failures >= LOGIN_RATE_LIMIT_MAX_FAILURES;
 }
 
+/**
+ * Records a failed sign-in and returns how many have accumulated in the current
+ * window. Callers that only throttle can ignore the value; the count is what
+ * lets a security notification fire once, when the lockout threshold is
+ * reached, instead of once per attempt.
+ */
 export function recordLoginFailure(key: string, now = Date.now()) {
   const existing = loginAttempts.get(key);
   if (!existing || existing.resetAt <= now) {
@@ -48,11 +54,15 @@ export function recordLoginFailure(key: string, now = Date.now()) {
       failures: 1,
       resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS,
     });
-    return;
+    return 1;
   }
 
   existing.failures += 1;
+  return existing.failures;
 }
+
+/** The failure count at which sign-in is refused, and worth telling someone about. */
+export const LOGIN_FAILURE_ALERT_THRESHOLD = LOGIN_RATE_LIMIT_MAX_FAILURES;
 
 export function clearLoginFailures(key: string) {
   loginAttempts.delete(key);
