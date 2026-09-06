@@ -7,6 +7,8 @@ import { FileManagerDialogLayer } from "@/modules/files/components/manager/file-
 import { validateEntryName } from "@/modules/files/components/manager/file-manager-derived";
 import { GoogleDrivePanel } from "@/modules/files/components/panels/google-drive-panel";
 import { buildAssetUrl, toFilePath } from "@/modules/files/hooks/useFiles";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 import type { MouseEvent, RefObject, SetStateAction } from "react";
 import type { FileEntry } from "@/modules/files/components/file-manager-presenters";
 import type { FileInfoResponse, FileReadResponse } from "@/lib/shared/contracts/files";
@@ -199,16 +201,23 @@ export function FileManagerView({
   unzipPending,
   viewMode,
 }: FileManagerViewProps) {
+  // Narrow panels show the places list and the file list one at a time; the
+  // switch itself is CSS (see @container/files below), so there is no width to
+  // measure and no observer to mis-time. This state only remembers whether the
+  // user opened the list while it was hidden.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div
       ref={rootRef}
-      className="relative flex h-full"
+      className="@container/files relative flex h-full"
       onClick={() => {
         dispatch({ type: "HIDE_CONTEXT_MENU" });
         dispatch({ type: "HIDE_BACKGROUND_CONTEXT_MENU" });
       }}
     >
       <FileManagerSidebar
+        sidebarOpen={sidebarOpen}
         currentPath={currentPath}
         isSharedView={isSharedView}
         isTrashView={isTrashView}
@@ -218,7 +227,10 @@ export function FileManagerView({
         sidebarSections={sidebarSections}
         storageUsagePercent={storageUsagePercent}
         storageUsageText={storageUsageText}
-        onNavigateToPath={navigateToPath}
+        onNavigateToPath={(path) => {
+          navigateToPath(path);
+          setSidebarOpen(false);
+        }}
         onOpenNetworkDialog={() => dispatch({ type: "SHOW_NETWORK_DIALOG" })}
         onOpenGoogleDriveDialog={() => dispatch({ type: "SHOW_GOOGLE_DRIVE_DIALOG" })}
         onOpenUsbDialog={() => dispatch({ type: "SHOW_USB_DIALOG" })}
@@ -233,8 +245,15 @@ export function FileManagerView({
           />
         </div>
       ) : (
-      <div className={`m-2 flex min-w-0 flex-1 flex-col ${FILES_PANEL_SHELL}`}>
+      <div
+        className={cn(
+          "m-2 min-w-0 flex-1 flex-col @2xl/files:flex",
+          sidebarOpen ? "hidden" : "flex",
+          FILES_PANEL_SHELL,
+        )}
+      >
         <FileManagerToolbar
+          onOpenSidebar={() => setSidebarOpen(true)}
           canNavigateUp={currentPath.length > 0}
           currentEntriesCount={currentEntriesCount}
           currentPath={currentPath}

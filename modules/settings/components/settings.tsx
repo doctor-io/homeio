@@ -22,10 +22,7 @@ import {
 } from "@/modules/settings/components/panel/surface";
 import type { SettingsPanelProps } from "@/modules/settings/components/panel/types";
 import { useSettingsBackend } from "@/modules/settings/hooks/useSettingsBackend";
-import { useEffect, useRef, useState } from "react";
-
-/** Under this the 13rem nav leaves too little beside it to show both at once. */
-const COMPACT_PANEL_WIDTH = 576;
+import { useState } from "react";
 
 export function SettingsPanel({
   appearance,
@@ -83,37 +80,22 @@ export function SettingsPanel({
     sectionDefinitions.find((section) => section.id === activeSection) ??
     sectionDefinitions[0];
 
-  // Measured on the panel, not the viewport: this window is resizable, so it
-  // can be narrow on a wide display and a media query would miss that.
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [isCompact, setIsCompact] = useState(false);
+  // Which pane has the panel while it is too narrow for both. The switch
+  // itself is CSS (see @container/settings below), so there is no width to
+  // measure and no observer whose first reading can land before the window has
+  // been sized.
   const [compactView, setCompactView] = useState<"nav" | "section">("nav");
 
-  useEffect(() => {
-    const element = rootRef.current;
-    if (!element || typeof ResizeObserver === "undefined") return;
-
-    // Below this the 13rem nav leaves too little beside it to be worth showing
-    // both at once.
-    const measure = () => setIsCompact(element.clientWidth < COMPACT_PANEL_WIDTH);
-    measure();
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  const showNav = !isCompact || compactView === "nav";
-  const showSection = !isCompact || compactView === "section";
-
   return (
-    <div ref={rootRef} className="flex h-full">
+    <div className="@container/settings flex h-full">
       <aside
         className={cn(
           "m-2 flex-col",
           SETTINGS_PANEL_SHELL,
-          showNav ? "flex" : "hidden",
-          isCompact ? "w-full" : "w-52 shrink-0",
+          // Narrow: the list has the panel until a section is chosen.
+          compactView === "nav" ? "flex w-full" : "hidden",
+          // Wide: always a fixed column beside the section.
+          "@2xl/settings:flex @2xl/settings:w-52 @2xl/settings:shrink-0",
         )}
       >
         <div className="flex-1 overflow-y-auto px-2 py-3">
@@ -209,23 +191,22 @@ export function SettingsPanel({
 
       <main
         className={cn(
-          "flex-1 overflow-y-auto",
-          showSection ? "block" : "hidden",
+          "flex-1 overflow-y-auto @2xl/settings:block",
+          compactView === "section" ? "block" : "hidden",
         )}
       >
         <div className="max-w-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex min-w-0 items-center gap-2">
-              {isCompact ? (
-                <button
-                  type="button"
-                  onClick={() => setCompactView("nav")}
-                  aria-label="Back to settings list"
-                  className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
-                >
-                  <ChevronLeft className="size-4" />
-                </button>
-              ) : null}
+              {/* Only while the list is hidden — see @container/settings. */}
+              <button
+                type="button"
+                onClick={() => setCompactView("nav")}
+                aria-label="Back to settings list"
+                className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground @2xl/settings:hidden"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
               <h2 className="truncate text-base font-semibold text-foreground">
                 {activeDefinition.label}
               </h2>

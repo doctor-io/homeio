@@ -30,6 +30,8 @@ export type FileManagerSidebarSection = {
 export type CloudSidebarItem = FileManagerSidebarItem & { accountEmail: string };
 
 type SidebarProps = {
+  /** Whether the user opened the places list while the panel is narrow. */
+  sidebarOpen?: boolean;
   currentPath: string[];
   isSharedView: boolean;
   isTrashView: boolean;
@@ -52,6 +54,7 @@ function isPathActive(itemPath: string[], currentPath: string[]): boolean {
 }
 
 export function FileManagerSidebar({
+  sidebarOpen = false,
   currentPath,
   isSharedView,
   isTrashView,
@@ -85,7 +88,16 @@ export function FileManagerSidebar({
   }, [addMenuOpen]);
 
   return (
-    <aside className={cn("m-2 flex w-60 shrink-0 flex-col", FILES_PANEL_SHELL)}>
+    <aside
+      className={cn(
+        "m-2 flex-col",
+        // Narrow: only here when asked for, and then it takes the panel.
+        sidebarOpen ? "flex w-full" : "hidden",
+        // Wide: always a fixed column beside the files.
+        "@2xl/files:flex @2xl/files:w-60 @2xl/files:shrink-0",
+        FILES_PANEL_SHELL,
+      )}
+    >
       <div className="flex-1 overflow-y-auto px-3 py-3.5">
         {sidebarSections.map((section) => {
           const isCloud = section.title === "Cloud";

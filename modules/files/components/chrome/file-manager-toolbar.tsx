@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  PanelLeftIcon,
   Search,
   Settings2,
   Trash2,
@@ -31,6 +32,8 @@ import type { RefObject } from "react";
 type SortBy = "name" | "modified" | "size";
 
 type ToolbarProps = {
+  /** Narrow panels hide the places list, so the toolbar carries the way to it. */
+  onOpenSidebar?: () => void;
   canNavigateUp: boolean;
   currentEntriesCount: number;
   currentPath: string[];
@@ -71,6 +74,7 @@ const SORT_LABELS: Record<SortBy, string> = {
 };
 
 export function FileManagerToolbar({
+  onOpenSidebar,
   canNavigateUp,
   currentEntriesCount,
   currentPath,
@@ -102,6 +106,16 @@ export function FileManagerToolbar({
 }: ToolbarProps) {
   return (
     <div className={cn("flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-glass-border/60 px-3 py-2", FILES_PANEL_SHELL)}>
+
+      {/* Only while the places list is hidden — see @container/files. */}
+      <button
+        onClick={onOpenSidebar}
+        aria-label="Show places"
+        title="Show places"
+        className={cn(iconBtn, iconBtnIdle, "shrink-0 @2xl/files:hidden")}
+      >
+        <PanelLeftIcon className="size-3.5" />
+      </button>
 
       {/* Back / up */}
       <button
@@ -165,7 +179,7 @@ export function FileManagerToolbar({
       )}
 
       {/* Search — the scope toggle lives inside the field so it reads as one control */}
-      <div className="relative w-40 shrink-0">
+      <div className="relative w-40 min-w-0 shrink">
         {globalSearchIsFetching ? (
           <Loader2 className="absolute left-2 top-1/2 size-3 -translate-y-1/2 animate-spin text-primary" />
         ) : (
