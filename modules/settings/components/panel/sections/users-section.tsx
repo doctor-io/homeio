@@ -5,7 +5,6 @@ import { SETTINGS_PANEL_INSET } from "@/modules/settings/components/panel/surfac
 import { ApiTokensCard } from "@/modules/settings/components/panel/sections/api-tokens-card";
 import { PairPhoneCard } from "@/modules/settings/components/panel/sections/pair-phone-card";
 import { TwoFactorCard } from "@/modules/settings/components/panel/sections/two-factor-card";
-import { Plus } from "@/components/icons/platform-icons";
 import type { TwoFactorStatus } from "@/lib/shared/contracts/auth";
 import { cn } from "@/lib/utils";
 
@@ -56,23 +55,6 @@ export function UsersSection({
 
       <PairPhoneCard isDemoMode={isDemoMode} />
 
-      <SectionDivider title="Access" />
-      <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3")}>
-        <div className="min-w-0">
-          <div className="text-sm text-foreground">Add user</div>
-          <div className="mt-0.5 text-2xs text-muted-foreground/70">Multi-user support is coming soon</div>
-        </div>
-        <button
-          disabled
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Plus className="size-3" />
-          Add User
-          <span className="rounded bg-primary/20 px-1 py-px text-3xs font-semibold uppercase tracking-wide">
-            Soon
-          </span>
-        </button>
-      </div>
     </div>
   );
 }

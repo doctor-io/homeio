@@ -597,11 +597,10 @@ describe("SettingsPanel", () => {
     expect(screen.queryByText("sarah")).toBeNull();
     expect(screen.queryByText("media-user")).toBeNull();
     expect(screen.queryByText("backup-bot")).toBeNull();
-    expect(screen.getByText("Soon")).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: /Add User/i }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    // The banner above states the single-user limit; a disabled "Add User"
+    // button said it a third time as a control nobody could use.
+    expect(screen.queryByRole("button", { name: /Add User/i })).toBeNull();
+    expect(screen.queryByText("Soon")).toBeNull();
   });
 
   it("renders only real security controls and saves security settings", () => {
