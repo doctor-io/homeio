@@ -57,6 +57,7 @@ type SaveAppSettingsInput = {
   iconUrl?: string | null;
   env?: Record<string, string>;
   webUiPort?: number;
+  webUiUrl?: string | null;
   composeSource?: string;
 };
 
@@ -556,6 +557,7 @@ export function useStoreActions(): StoreActionsHandle {
       iconUrl?: string | null;
       env?: Record<string, string>;
       webUiPort?: number;
+      webUiUrl?: string | null;
       composeSource?: string;
     }) => {
       const result = await fetch(
@@ -570,6 +572,7 @@ export function useStoreActions(): StoreActionsHandle {
             iconUrl: input.iconUrl,
             env: input.env,
             webUiPort: input.webUiPort,
+            webUiUrl: input.webUiUrl,
             composeSource: input.composeSource,
           }),
         },
