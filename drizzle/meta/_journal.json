@@ -106,6 +106,13 @@
       "when": 1787300300000,
       "tag": "0015_push_ping_only",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787386700000,
+      "tag": "0016_app_web_ui_url",
+      "breakpoints": true
     }
   ]
 }

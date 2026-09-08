@@ -50,6 +50,21 @@ const STORE_SECTION_LIMIT = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Prefer the link the operator saved. The automatic one is built from the
+ * browser's own location, which is wrong behind a reverse proxy or tunnel.
+ */
+function resolveStoreDetailUrl(detail: StoreAppDetail) {
+  const customUrl = detail.installedConfig?.webUiUrl?.trim() ?? "";
+  if (customUrl.length > 0) return customUrl;
+
+  if (!detail.webUiPort) return null;
+
+  const protocol = typeof window !== "undefined" ? window.location.protocol : "http:";
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `${protocol}//${hostname}:${detail.webUiPort}`;
+}
+
 function isOperationBusy(op: AppOperationState | undefined) {
   return Boolean(op && isStoreOperationActiveStatus(op.status));
 }
@@ -677,9 +692,9 @@ function AppStoreDetailPanel({
                       <ArrowUpCircle className="size-3.5" /> Update
                     </button>
                   </UpdateInfoTooltip>
-                ) : detail.webUiPort ? (
+                ) : resolveStoreDetailUrl(detail) ? (
                   <a
-                    href={`http://${typeof window !== "undefined" ? window.location.hostname : "localhost"}:${detail.webUiPort}`}
+                    href={resolveStoreDetailUrl(detail) ?? undefined}
                     target="_blank"
                     rel="noreferrer"
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-all hover:brightness-110"

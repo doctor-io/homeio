@@ -60,6 +60,7 @@ export const appStacks = pgTable(
     composePath: text("compose_path").notNull(),
     status: text("status").notNull().default("not_installed"),
     webUiPort: integer("web_ui_port"),
+    webUiUrl: text("web_ui_url"),
     envJson: jsonb("env_json").notNull().default({}),
     displayName: text("display_name"),
     iconUrl: text("icon_url"),

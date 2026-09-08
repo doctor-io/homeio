@@ -78,6 +78,7 @@ function createInstalledStack(overrides: Partial<Awaited<ReturnType<typeof listI
     composePath: "/tmp/compose.yml",
     status: "installed" as const,
     webUiPort: 3001,
+    webUiUrl: null,
     env: {},
     displayName: null,
     iconUrl: null,

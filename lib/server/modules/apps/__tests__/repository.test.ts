@@ -77,6 +77,7 @@ describe("apps repository", () => {
         status: "unknown",
         updatedAt: "2026-02-22T12:00:00.000Z",
         webUiPort: undefined,
+        webUiUrl: null,
         activeOperation: null,
       },
       {
@@ -87,6 +88,7 @@ describe("apps repository", () => {
         status: "unknown",
         updatedAt: "2026-02-22T12:10:00.000Z",
         webUiPort: undefined,
+        webUiUrl: null,
         activeOperation: null,
       },
     ]);
