@@ -64,6 +64,13 @@
       "when": 1779192274716,
       "tag": "0009_app_web_ui_url",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779278674716,
+      "tag": "0010_cloudflare_tunnel",
+      "breakpoints": true
     }
   ]
 }

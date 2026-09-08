@@ -120,6 +120,7 @@ export type InstalledStackConfig = {
   status: InstalledStackStatus;
   webUiPort: number | null;
   webUiUrl: string | null;
+  tunnelSubdomain: string | null;
   env: Record<string, string>;
   displayName: string | null;
   iconUrl: string | null;

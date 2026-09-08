@@ -11,6 +11,11 @@ import type {
   TailscaleInstallResult,
   TailscaleStatusPublic,
 } from "@/lib/shared/contracts/tailscale";
+import type {
+  CloudflareTunnelAppExposure,
+  CloudflareTunnelConfigPublic,
+  CloudflareTunnelStatus,
+} from "@/lib/shared/contracts/cloudflare-tunnel";
 import { cn } from "@/lib/utils";
 import { Check, Eye, EyeOff, ExternalLink } from "@/components/icons/platform-icons";
 
@@ -280,6 +285,75 @@ function GoogleDriveConfig() {
   );
 }
 
+async function fetchCloudflareTunnelConfig(): Promise<CloudflareTunnelConfigPublic> {
+  const res = await fetch("/api/v1/settings/cloudflare-tunnel", { cache: "no-store" });
+  const json = (await res.json()) as { data?: CloudflareTunnelConfigPublic; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to fetch");
+  return json.data!;
+}
+
+async function saveCloudflareTunnelConfigRequest(payload: {
+  enabled: boolean;
+  domain: string;
+  token?: string;
+}): Promise<CloudflareTunnelConfigPublic> {
+  const res = await fetch("/api/v1/settings/cloudflare-tunnel", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = (await res.json()) as { data?: CloudflareTunnelConfigPublic; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to save");
+  return json.data!;
+}
+
+async function fetchTunnelStatus(): Promise<CloudflareTunnelStatus> {
+  const res = await fetch("/api/v1/system/cloudflare-tunnel", { cache: "no-store" });
+  const json = (await res.json()) as { data?: CloudflareTunnelStatus; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to fetch status");
+  return json.data!;
+}
+
+async function activateTunnel(token?: string): Promise<CloudflareTunnelStatus> {
+  const res = await fetch("/api/v1/system/cloudflare-tunnel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(token ? { token } : {}),
+  });
+  const json = (await res.json()) as { data?: CloudflareTunnelStatus; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to activate the tunnel");
+  return json.data!;
+}
+
+async function deactivateTunnel(): Promise<CloudflareTunnelStatus> {
+  const res = await fetch("/api/v1/system/cloudflare-tunnel", { method: "DELETE" });
+  const json = (await res.json()) as { data?: CloudflareTunnelStatus; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to stop the tunnel");
+  return json.data!;
+}
+
+async function fetchTunnelExposures(): Promise<CloudflareTunnelAppExposure[]> {
+  const res = await fetch("/api/v1/settings/cloudflare-tunnel/exposures", { cache: "no-store" });
+  const json = (await res.json()) as { data?: CloudflareTunnelAppExposure[]; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to fetch");
+  return json.data!;
+}
+
+async function saveTunnelExposure(payload: {
+  appId: string;
+  exposed: boolean;
+  subdomain?: string;
+}): Promise<CloudflareTunnelAppExposure> {
+  const res = await fetch("/api/v1/settings/cloudflare-tunnel/exposures", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = (await res.json()) as { data?: CloudflareTunnelAppExposure; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to save");
+  return json.data!;
+}
+
 function TailscaleConfig() {
   const queryClient = useQueryClient();
   const { data: saved, isLoading } = useQuery({
@@ -518,6 +592,325 @@ function TailscaleConfig() {
   );
 }
 
+function TunnelExposureRow({
+  exposure,
+  domain,
+  disabled,
+  onSave,
+}: {
+  exposure: CloudflareTunnelAppExposure;
+  domain: string;
+  disabled: boolean;
+  onSave: (input: { appId: string; exposed: boolean; subdomain: string }) => void;
+}) {
+  const [subdomain, setSubdomain] = useState(exposure.subdomain);
+
+  return (
+    <div className="flex items-center gap-2 border-t border-glass-border/60 px-1 py-2 first:border-t-0">
+      <input
+        type="checkbox"
+        aria-label={`Expose ${exposure.name}`}
+        checked={exposure.exposed}
+        disabled={disabled}
+        onChange={(event) =>
+          onSave({
+            appId: exposure.appId,
+            exposed: event.target.checked,
+            subdomain: subdomain.trim(),
+          })
+        }
+        className="size-3.5 shrink-0 accent-primary disabled:opacity-40"
+      />
+
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-medium text-foreground">{exposure.name}</div>
+        <div className="text-[11px] text-muted-foreground/70">
+          {exposure.port === null ? "No web UI port" : `Port ${exposure.port}`}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <input
+          aria-label={`Subdomain for ${exposure.name}`}
+          value={subdomain}
+          onChange={(event) => setSubdomain(event.target.value)}
+          onBlur={() => {
+            const next = subdomain.trim();
+            if (!exposure.exposed || next === exposure.subdomain) return;
+            onSave({ appId: exposure.appId, exposed: true, subdomain: next });
+          }}
+          className="h-7 w-28 rounded-lg border border-glass-border bg-background/55 px-2 text-right text-[11px] text-foreground disabled:opacity-40"
+        />
+        <span className="w-32 shrink-0 truncate text-[11px] text-muted-foreground/70">
+          .{domain || "your-domain.com"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CloudflareTunnelConfig() {
+  const queryClient = useQueryClient();
+  const { data: saved, isLoading } = useQuery({
+    queryKey: queryKeys.cloudflareTunnelConfig,
+    queryFn: fetchCloudflareTunnelConfig,
+  });
+
+  const enabled = Boolean(saved?.enabled);
+
+  // Only poll the connector once the operator has switched the feature on.
+  const { data: status, isLoading: isStatusLoading } = useQuery({
+    queryKey: queryKeys.cloudflareTunnelStatus,
+    queryFn: fetchTunnelStatus,
+    enabled,
+    refetchInterval: enabled ? 10_000 : false,
+  });
+
+  const isActive = Boolean(status?.running);
+
+  // The app list only makes sense once the tunnel actually carries traffic.
+  const { data: exposures } = useQuery({
+    queryKey: queryKeys.cloudflareTunnelExposures,
+    queryFn: fetchTunnelExposures,
+    enabled: enabled && isActive,
+  });
+
+  const [domain, setDomain] = useState("");
+  const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+
+  const effectiveDomain = domain.trim() || saved?.domain || "";
+
+  function invalidateConfig() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.cloudflareTunnelConfig });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.cloudflareTunnelStatus });
+  }
+
+  const configMutation = useMutation({
+    mutationFn: saveCloudflareTunnelConfigRequest,
+    onSuccess: () => {
+      invalidateConfig();
+      setToken("");
+      setSavedOk(true);
+      setTimeout(() => setSavedOk(false), 3000);
+    },
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: async () => {
+      const pending = token.trim();
+      if (pending) {
+        await saveCloudflareTunnelConfigRequest({
+          enabled: true,
+          domain: effectiveDomain,
+          token: pending,
+        });
+      }
+      return activateTunnel(pending || undefined);
+    },
+    onSuccess: () => {
+      invalidateConfig();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cloudflareTunnelExposures });
+      setToken("");
+    },
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: deactivateTunnel,
+    onSuccess: invalidateConfig,
+  });
+
+  const exposureMutation = useMutation({
+    mutationFn: saveTunnelExposure,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cloudflareTunnelExposures });
+      // The app's link changes with its exposure, so the grid has to catch up.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.installedApps });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storeCatalog });
+    },
+  });
+
+  const isBusy =
+    isLoading ||
+    configMutation.isPending ||
+    activateMutation.isPending ||
+    deactivateMutation.isPending ||
+    exposureMutation.isPending;
+
+  const hasToken = Boolean(saved?.hasToken) || token.trim().length > 0;
+  const canActivate = enabled && hasToken && effectiveDomain.length > 0;
+  const connectorLabel = !enabled
+    ? "Disabled"
+    : isStatusLoading
+      ? "Checking"
+      : isActive
+        ? "Running"
+        : status?.installed
+          ? (status.state ?? "Stopped")
+          : "Not activated";
+
+  const activationError =
+    (configMutation.error as Error | null)?.message ??
+    (activateMutation.error as Error | null)?.message ??
+    (deactivateMutation.error as Error | null)?.message ??
+    null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      {activationError && <InfoBanner text={activationError} variant="warning" />}
+      {exposureMutation.error && (
+        <InfoBanner text={(exposureMutation.error as Error).message} variant="warning" />
+      )}
+      {enabled && !isActive && status?.error && (
+        <InfoBanner text={status.error} variant="warning" />
+      )}
+      {savedOk && !activationError && (
+        <InfoBanner text="Cloudflare Tunnel updated successfully." variant="info" />
+      )}
+
+      <div className={cn(SETTINGS_PANEL_INSET, "flex flex-col gap-3 px-4 py-3")}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-foreground">Cloudflare Tunnel</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+              Publish apps on your own domain. Homeio fills in each app&apos;s link so
+              Open goes to the public address instead of this server&apos;s.
+            </div>
+          </div>
+          <label className="flex shrink-0 items-center gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              aria-label="Enable Cloudflare Tunnel"
+              checked={enabled}
+              disabled={isBusy}
+              onChange={(event) =>
+                configMutation.mutate({
+                  enabled: event.target.checked,
+                  domain: effectiveDomain,
+                })
+              }
+              className="size-3.5 accent-primary disabled:opacity-40"
+            />
+            {enabled ? "Enabled" : "Disabled"}
+          </label>
+        </div>
+
+        {enabled && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] text-muted-foreground/70" htmlFor="cf-tunnel-domain">
+                Domain
+              </label>
+              <input
+                id="cf-tunnel-domain"
+                aria-label="Tunnel domain"
+                value={domain || saved?.domain || ""}
+                onChange={(event) => setDomain(event.target.value)}
+                onBlur={() => {
+                  const next = domain.trim();
+                  if (!next || next === saved?.domain) return;
+                  configMutation.mutate({ enabled: true, domain: next });
+                }}
+                placeholder="example.com"
+                className="h-8 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] text-muted-foreground/70" htmlFor="cf-tunnel-token">
+                Connector token {saved?.hasToken ? "(stored)" : ""}
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  id="cf-tunnel-token"
+                  aria-label="Connector token"
+                  type={showToken ? "text" : "password"}
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  placeholder={saved?.hasToken ? "••••••••" : "eyJhIjoi…"}
+                  className="h-8 flex-1 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground"
+                />
+                <button
+                  type="button"
+                  aria-label={showToken ? "Hide token" : "Show token"}
+                  onClick={() => setShowToken((previous) => !previous)}
+                  className="flex size-8 items-center justify-center rounded-lg border border-glass-border bg-background/55 text-muted-foreground"
+                >
+                  {showToken ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60">
+                From Cloudflare Zero Trust · Networks · Tunnels, the value after
+                <span className="font-mono"> run --token</span>.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-glass-border/60 pt-3">
+              <div className="text-[11px] text-muted-foreground/70">
+                Connector: <span className="text-foreground">{connectorLabel}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {isActive && (
+                  <button
+                    type="button"
+                    onClick={() => deactivateMutation.mutate()}
+                    disabled={isBusy}
+                    className="text-[11px] text-status-red hover:underline disabled:opacity-50"
+                  >
+                    {deactivateMutation.isPending ? "Stopping…" : "Stop tunnel"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => activateMutation.mutate()}
+                  disabled={!canActivate || isBusy}
+                  className="flex h-7 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {activateMutation.isPending
+                    ? "Activating…"
+                    : isActive
+                      ? "Restart tunnel"
+                      : "Activate tunnel"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {enabled && isActive && (
+          <div className="flex flex-col gap-1 border-t border-glass-border/60 pt-3">
+            <div className="text-[11px] font-medium text-muted-foreground/70">
+              Apps to expose
+            </div>
+            {exposures && exposures.length > 0 ? (
+              <div className="rounded-lg border border-glass-border/60 px-2">
+                {exposures.map((exposure) => (
+                  <TunnelExposureRow
+                    key={exposure.appId}
+                    exposure={exposure}
+                    domain={effectiveDomain}
+                    disabled={isBusy}
+                    onSave={(input) => exposureMutation.mutate(input)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="px-1 py-2 text-[11px] text-muted-foreground/70">
+                No installed apps to expose yet.
+              </div>
+            )}
+            <p className="mt-1 text-[11px] text-muted-foreground/60">
+              Homeio records the mapping and updates each app&apos;s link. Creating the
+              matching public hostname routes stays in your Cloudflare dashboard.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function IntegrationsSection() {
   return (
     <div className="flex flex-col gap-1">
@@ -525,6 +918,8 @@ export function IntegrationsSection() {
       <GoogleDriveConfig />
       <SectionDivider title="Tailscale" />
       <TailscaleConfig />
+      <SectionDivider title="Cloudflare Tunnel" />
+      <CloudflareTunnelConfig />
     </div>
   );
 }
