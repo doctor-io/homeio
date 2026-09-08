@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildInstallPayloadFromClassic,
+  buildSettingsPayloadFromClassic,
   buildInitialComposeDraft,
   classicStateToCompose,
   composeToClassicState,
@@ -192,6 +193,85 @@ describe("configurator-mapper", () => {
     expect(payload.env?.TZ).toBe("UTC");
     expect(payload.env?.APP_URL).toContain("localhost:8080");
     expect(payload.env?.VOLUMES).toBeUndefined();
+  });
+
+  it("sends the link override on its own, without touching the compose", () => {
+    const initial = createDefaultClassicState({
+      title: "Reverse Proxied",
+      iconUrl: "",
+      fallbackPort: 8080,
+      fallbackHost: "homeio.example.com",
+    });
+
+    const payload = buildSettingsPayloadFromClassic({
+      appId: "reverse-proxied",
+      current: { ...initial, webUiLink: "https://myapp.example.com" },
+      initial,
+    });
+
+    expect(payload.webUiUrl).toBe("https://myapp.example.com");
+    // Nothing that lives in the compose file changed, so no redeploy.
+    expect(payload.webUiPort).toBeUndefined();
+    expect(payload.env).toBeUndefined();
+  });
+
+  it("clears the link override when the field is emptied", () => {
+    const initial = createDefaultClassicState({
+      title: "Back To Auto",
+      iconUrl: "",
+      fallbackPort: 8080,
+      fallbackHost: "homeio.example.com",
+      webUiLink: "https://myapp.example.com",
+    });
+
+    const payload = buildSettingsPayloadFromClassic({
+      appId: "back-to-auto",
+      current: { ...initial, webUiLink: "  " },
+      initial,
+    });
+
+    expect(payload.webUiUrl).toBeNull();
+  });
+
+  it("leaves the link alone when only the web ui port changes", () => {
+    const initial = createDefaultClassicState({
+      title: "Port Only",
+      iconUrl: "",
+      fallbackPort: 8080,
+      fallbackHost: "homeio.example.com",
+    });
+
+    const payload = buildSettingsPayloadFromClassic({
+      appId: "port-only",
+      current: { ...initial, webUi: { ...initial.webUi, port: "9090" } },
+      initial,
+    });
+
+    expect(payload.webUiUrl).toBeUndefined();
+    expect(payload.webUiPort).toBe(9090);
+  });
+
+  it("keeps the container APP_URL separate from the link override", () => {
+    const initial = createDefaultClassicState({
+      title: "Two Concerns",
+      iconUrl: "",
+      fallbackPort: 8080,
+      fallbackHost: "homeio.example.com",
+    });
+
+    const payload = buildSettingsPayloadFromClassic({
+      appId: "two-concerns",
+      current: {
+        ...initial,
+        webUi: { ...initial.webUi, host: "internal.example.com" },
+      },
+      initial,
+    });
+
+    // The Web UI row still composes the container's APP_URL...
+    expect(payload.env?.APP_URL).toBe("http://internal.example.com:8080");
+    // ...and no longer doubles as the rendered link.
+    expect(payload.webUiUrl).toBeUndefined();
   });
 
   it("does not rebuild compose volumes from legacy VOLUMES env metadata", () => {

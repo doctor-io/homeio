@@ -52,6 +52,7 @@ export type AppItem = {
   status: AppGridStatus;
   category: string;
   webUiPort: number | null;
+  webUiUrl: string | null;
   containerName: string | null;
   updateAvailable: boolean;
 };
@@ -165,6 +166,18 @@ export function pickVisual(appName: string, appId: string) {
 
 export function resolveAppActionTarget(app: AppItem): AppActionTarget {
   const fallbackContainerName = app.containerName?.trim() ?? "";
+  const customUrl = app.webUiUrl?.trim() ?? "";
+
+  // An operator-set link wins: the automatic one is built from the browser's
+  // own location, which is wrong behind a reverse proxy or tunnel.
+  if (customUrl.length > 0) {
+    return {
+      appId: app.id,
+      appName: app.name,
+      dashboardUrl: customUrl,
+      containerName: fallbackContainerName,
+    };
+  }
 
   if (app.webUiPort !== null) {
     const protocol =
@@ -341,6 +354,7 @@ export function buildAppItems(params: {
         status: derivedStatus,
         category: catalog?.categories[0] ?? visual.category,
         webUiPort: installed?.webUiPort ?? null,
+        webUiUrl: installed?.webUiUrl ?? null,
         containerName: installed?.containerName ?? null,
         updateAvailable: catalog?.updateAvailable ?? false,
       } satisfies AppItem;

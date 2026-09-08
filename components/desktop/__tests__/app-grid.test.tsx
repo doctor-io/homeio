@@ -125,6 +125,39 @@ describe("AppGrid context menu", () => {
     });
   });
 
+  it("opens the operator-set link instead of the browser-derived one", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    useInstalledAppsMock.mockReturnValue({
+      data: [
+        {
+          id: "plex",
+          name: "Plex",
+          status: "running",
+          webUiPort: 32400,
+          webUiUrl: "https://plex.example.com",
+          containerName: "plex",
+          updatedAt: "2026-02-24T00:00:00.000Z",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<AppGrid animationsEnabled={false} />);
+
+    openContextMenuFor("Plex");
+    fireEvent.click(screen.getByRole("button", { name: "Open Dashboard" }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://plex.example.com",
+        "_blank",
+        "noopener,noreferrer",
+      );
+    });
+  });
+
   it("routes open dashboard through callback when provided", async () => {
     const onOpenDashboard = vi.fn();
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);

@@ -57,6 +57,13 @@
       "when": 1779105874716,
       "tag": "0008_sparkling_freak",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779192274716,
+      "tag": "0009_app_web_ui_url",
+      "breakpoints": true
     }
   ]
 }

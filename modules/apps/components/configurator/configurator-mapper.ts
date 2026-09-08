@@ -38,6 +38,11 @@ export type ClassicConfigState = {
   title: string;
   iconUrl: string;
   webUi: WebUiState;
+  /**
+   * Operator-set link for the app tile. Empty means "build it automatically".
+   * Kept apart from webUi, which composes the container's APP_URL.
+   */
+  webUiLink: string;
   network: string;
   ports: PortRow[];
   volumes: VolumeRow[];
@@ -500,6 +505,7 @@ export function createDefaultClassicState(seed: {
   iconUrl: string;
   fallbackPort?: number | null;
   fallbackHost?: string;
+  webUiLink?: string | null;
 }): ClassicConfigState {
   const fallbackPort = seed.fallbackPort ? String(seed.fallbackPort) : "";
 
@@ -513,6 +519,7 @@ export function createDefaultClassicState(seed: {
       port: fallbackPort,
       path: "",
     },
+    webUiLink: seed.webUiLink?.trim() ?? "",
     network: "bridge",
     ports: fallbackPort
       ? [
@@ -618,6 +625,7 @@ export function composeToClassicState(input: {
     iconUrl: string;
     fallbackPort?: number | null;
     fallbackHost?: string;
+    webUiLink?: string | null;
   };
   appId?: string;
   primaryServiceName?: string;
@@ -648,6 +656,7 @@ export function composeToClassicState(input: {
     title: input.seed.title,
     iconUrl: input.seed.iconUrl,
     webUi,
+    webUiLink: input.seed.webUiLink?.trim() ?? "",
     network:
       typeof service.network_mode === "string" && service.network_mode.length > 0
         ? service.network_mode
@@ -677,6 +686,7 @@ export function safeComposeToClassicState(input: {
     iconUrl: string;
     fallbackPort?: number | null;
     fallbackHost?: string;
+    webUiLink?: string | null;
   };
   appId?: string;
   primaryServiceName?: string;
@@ -827,6 +837,7 @@ export function buildSettingsPayloadFromClassic(input: {
     iconUrl: string | null;
     env?: Record<string, string>;
     webUiPort?: number;
+    webUiUrl?: string | null;
     composeSource?: string;
   } = {
     appId: input.appId,
@@ -850,6 +861,14 @@ export function buildSettingsPayloadFromClassic(input: {
   const initialPort = parsePortValue(input.initial.webUi.port);
   if (currentPort !== undefined && currentPort !== initialPort) {
     payload.webUiPort = currentPort;
+  }
+
+  // The link override only changes what we render, never the compose file, so
+  // it travels on its own and does not trigger a redeploy.
+  const currentLink = input.current.webUiLink.trim();
+  if (currentLink !== input.initial.webUiLink.trim()) {
+    // Null clears the override and restores the automatic link.
+    payload.webUiUrl = currentLink.length > 0 ? currentLink : null;
   }
 
   return payload;

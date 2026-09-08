@@ -298,6 +298,7 @@ export async function saveAppSettings(input: {
   iconUrl?: string | null;
   env?: Record<string, string>;
   webUiPort?: number;
+  webUiUrl?: string | null;
   composeSource?: string;
 }): Promise<{ operationId?: string }> {
   return withServerTiming(
@@ -311,6 +312,7 @@ export async function saveAppSettings(input: {
         hasEnv: input.env !== undefined,
         envKeyCount: Object.keys(input.env ?? {}).length,
         hasPort: Boolean(input.webUiPort !== undefined),
+        hasWebUiUrl: input.webUiUrl !== undefined,
         hasComposeSource: input.composeSource !== undefined,
       },
       onSuccessMeta: (result) => ({
@@ -318,10 +320,12 @@ export async function saveAppSettings(input: {
       }),
     },
     async () => {
-      const { appId, displayName, iconUrl, env, webUiPort, composeSource } = input;
+      const { appId, displayName, iconUrl, env, webUiPort, webUiUrl, composeSource } =
+        input;
 
-      if (displayName !== undefined || iconUrl !== undefined) {
-        await patchInstalledStackMeta(appId, { displayName, iconUrl });
+      // webUiUrl only changes the link we render, so it never warrants a redeploy.
+      if (displayName !== undefined || iconUrl !== undefined || webUiUrl !== undefined) {
+        await patchInstalledStackMeta(appId, { displayName, iconUrl, webUiUrl });
       }
 
       if (env !== undefined || webUiPort !== undefined || composeSource !== undefined) {
