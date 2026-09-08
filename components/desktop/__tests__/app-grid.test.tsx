@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const useStoreActionsMock = vi.fn();
 const useInstalledAppsMock = vi.fn();
 const useStoreCatalogMock = vi.fn();
+const useUnmanagedContainersMock = vi.fn();
 
 vi.mock("@/modules/apps/hooks/useStoreActions", () => ({
   useStoreActions: (...args: unknown[]) => useStoreActionsMock(...args),
@@ -14,6 +15,9 @@ vi.mock("@/modules/apps/hooks/useInstalledApps", () => ({
 }));
 vi.mock("@/modules/apps/hooks/useStoreCatalog", () => ({
   useStoreCatalog: (...args: unknown[]) => useStoreCatalogMock(...args),
+}));
+vi.mock("@/modules/apps/hooks/useUnmanagedContainers", () => ({
+  useUnmanagedContainers: (...args: unknown[]) => useUnmanagedContainersMock(...args),
 }));
 
 import { AppGrid } from "@/modules/apps/components/app-grid";
@@ -28,6 +32,12 @@ describe("AppGrid context menu", () => {
     useStoreActionsMock.mockReset();
     useInstalledAppsMock.mockReset();
     useStoreCatalogMock.mockReset();
+    useUnmanagedContainersMock.mockReset();
+    useUnmanagedContainersMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    });
 
     useStoreActionsMock.mockReturnValue({
       operationsByApp: {},
@@ -156,6 +166,28 @@ describe("AppGrid context menu", () => {
         "noopener,noreferrer",
       );
     });
+  });
+
+  it("shows containers Homeio does not manage alongside its own apps", () => {
+    useUnmanagedContainersMock.mockReturnValue({
+      data: [
+        {
+          id: "abc123",
+          name: "uilab-casa",
+          image: "dockurr/casa:latest",
+          state: "running",
+          status: "Up 3 days",
+          composeProject: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<AppGrid animationsEnabled={false} />);
+
+    expect(screen.getByRole("button", { name: "Open Plex" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open uilab-casa" })).toBeTruthy();
   });
 
   it("routes open dashboard through callback when provided", async () => {
