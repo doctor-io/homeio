@@ -86,6 +86,7 @@ const installedConfig: InstalledStackConfig = {
   status: "installed",
   webUiPort: 32400,
   webUiUrl: null,
+  tunnelSubdomain: null,
   env: {
     TZ: "UTC",
   },
