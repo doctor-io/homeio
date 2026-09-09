@@ -1,6 +1,6 @@
 {
   "name": "homeio",
-  "version": "1.7.34",
+  "version": "1.7.35",
   "description": "Self-hosted home server dashboard — desktop-style UI for managing Docker apps, files, terminal, and system resources.",
   "author": "doctor-io",
   "license": "MIT",
