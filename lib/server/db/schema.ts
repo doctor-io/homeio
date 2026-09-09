@@ -291,6 +291,9 @@ export const settings = pgTable("settings", {
   cloudflareTunnelTokenCiphertext: text("cloudflare_tunnel_token_ciphertext"),
   cloudflareTunnelTokenIv: text("cloudflare_tunnel_token_iv"),
   cloudflareTunnelTokenTag: text("cloudflare_tunnel_token_tag"),
+  cloudflareApiTokenCiphertext: text("cloudflare_api_token_ciphertext"),
+  cloudflareApiTokenIv: text("cloudflare_api_token_iv"),
+  cloudflareApiTokenTag: text("cloudflare_api_token_tag"),
 });
 
 export const filesGoogleDriveTokens = pgTable(

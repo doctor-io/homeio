@@ -37,6 +37,7 @@ export async function PUT(request: Request) {
       enabled,
       domain,
       token: typeof body.token === "string" ? body.token : undefined,
+      apiToken: typeof body.apiToken === "string" ? body.apiToken : undefined,
     });
 
     return NextResponse.json({ data: config });

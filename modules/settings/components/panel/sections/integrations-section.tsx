@@ -296,6 +296,7 @@ async function saveCloudflareTunnelConfigRequest(payload: {
   enabled: boolean;
   domain: string;
   token?: string;
+  apiToken?: string;
 }): Promise<CloudflareTunnelConfigPublic> {
   const res = await fetch("/api/v1/settings/cloudflare-tunnel", {
     method: "PUT",
@@ -678,6 +679,8 @@ function CloudflareTunnelConfig() {
   const [domain, setDomain] = useState("");
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
+  const [apiToken, setApiToken] = useState("");
+  const [showApiToken, setShowApiToken] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
 
   const effectiveDomain = domain.trim() || saved?.domain || "";
@@ -692,6 +695,7 @@ function CloudflareTunnelConfig() {
     onSuccess: () => {
       invalidateConfig();
       setToken("");
+      setApiToken("");
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 3000);
     },
@@ -846,6 +850,49 @@ function CloudflareTunnelConfig() {
               </p>
             </div>
 
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] text-muted-foreground/70" htmlFor="cf-api-token">
+                API token {saved?.hasApiToken ? "(stored)" : "(optional)"}
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  id="cf-api-token"
+                  aria-label="Cloudflare API token"
+                  type={showApiToken ? "text" : "password"}
+                  value={apiToken}
+                  onChange={(event) => setApiToken(event.target.value)}
+                  placeholder={saved?.hasApiToken ? "••••••••" : "Zone:DNS:Edit + Account:Tunnel:Edit"}
+                  className="h-8 flex-1 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground"
+                />
+                <button
+                  type="button"
+                  aria-label={showApiToken ? "Hide API token" : "Show API token"}
+                  onClick={() => setShowApiToken((previous) => !previous)}
+                  className="flex size-8 items-center justify-center rounded-lg border border-glass-border bg-background/55 text-muted-foreground"
+                >
+                  {showApiToken ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy || apiToken.trim().length === 0}
+                  onClick={() =>
+                    configMutation.mutate({
+                      enabled,
+                      domain: effectiveDomain,
+                      apiToken: apiToken.trim(),
+                    })
+                  }
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-glass-border bg-background/55 px-3 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Save
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60">
+                With it, Homeio creates and removes each public hostname itself.
+                Without it, add the routes in your Cloudflare dashboard.
+              </p>
+            </div>
+
             <div className="flex items-center justify-between gap-3 border-t border-glass-border/60 pt-3">
               <div className="text-[11px] text-muted-foreground/70">
                 Connector: <span className="text-foreground">{connectorLabel}</span>
@@ -901,8 +948,9 @@ function CloudflareTunnelConfig() {
               </div>
             )}
             <p className="mt-1 text-[11px] text-muted-foreground/60">
-              Homeio records the mapping and updates each app&apos;s link. Creating the
-              matching public hostname routes stays in your Cloudflare dashboard.
+              {saved?.hasApiToken
+                ? "Homeio creates and removes the matching public hostname and DNS record for you."
+                : "Homeio records the mapping and updates each app's link. Add an API token above to have it create the public hostname routes too."}
             </p>
           </div>
         )}

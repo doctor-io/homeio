@@ -10,6 +10,7 @@ export type CloudflareTunnelConfig = {
   enabled: boolean;
   domain: string;
   token: string | null;
+  apiToken: string | null;
 };
 
 async function ensureSettingsRow() {
@@ -38,6 +39,9 @@ export async function getCloudflareTunnelConfig(): Promise<CloudflareTunnelConfi
       tokenCiphertext: settings.cloudflareTunnelTokenCiphertext,
       tokenIv: settings.cloudflareTunnelTokenIv,
       tokenTag: settings.cloudflareTunnelTokenTag,
+      apiCiphertext: settings.cloudflareApiTokenCiphertext,
+      apiIv: settings.cloudflareApiTokenIv,
+      apiTag: settings.cloudflareApiTokenTag,
     })
     .from(settings)
     .where(eq(settings.id, "singleton"))
@@ -45,6 +49,7 @@ export async function getCloudflareTunnelConfig(): Promise<CloudflareTunnelConfi
 
   const row = rows[0];
   const hasToken = Boolean(row?.tokenCiphertext && row.tokenIv && row.tokenTag);
+  const hasApiToken = Boolean(row?.apiCiphertext && row.apiIv && row.apiTag);
 
   return {
     enabled: Boolean(row?.enabled),
@@ -54,6 +59,13 @@ export async function getCloudflareTunnelConfig(): Promise<CloudflareTunnelConfi
           ciphertext: row!.tokenCiphertext!,
           iv: row!.tokenIv!,
           tag: row!.tokenTag!,
+        })
+      : null,
+    apiToken: hasApiToken
+      ? decryptSecret({
+          ciphertext: row!.apiCiphertext!,
+          iv: row!.apiIv!,
+          tag: row!.apiTag!,
         })
       : null,
   };
@@ -66,6 +78,7 @@ export async function getCloudflareTunnelConfigPublic(): Promise<CloudflareTunne
     enabled: config.enabled,
     domain: config.domain,
     hasToken: config.token !== null,
+    hasApiToken: config.apiToken !== null,
   };
 }
 
@@ -74,6 +87,7 @@ export async function saveCloudflareTunnelConfig(input: {
   domain: string;
   /** Undefined keeps the stored token, empty string clears it. */
   token?: string;
+  apiToken?: string;
 }): Promise<CloudflareTunnelConfigPublic> {
   await ensureSettingsRow();
 
@@ -96,6 +110,19 @@ export async function saveCloudflareTunnelConfig(input: {
     }
   }
 
+  if (input.apiToken !== undefined) {
+    if (input.apiToken.trim().length === 0) {
+      values.cloudflareApiTokenCiphertext = null;
+      values.cloudflareApiTokenIv = null;
+      values.cloudflareApiTokenTag = null;
+    } else {
+      const encrypted = encryptSecret(input.apiToken.trim());
+      values.cloudflareApiTokenCiphertext = encrypted.ciphertext;
+      values.cloudflareApiTokenIv = encrypted.iv;
+      values.cloudflareApiTokenTag = encrypted.tag;
+    }
+  }
+
   await db.update(settings).set(values).where(eq(settings.id, "singleton"));
 
   return getCloudflareTunnelConfigPublic();
@@ -112,6 +139,9 @@ export async function clearCloudflareTunnelConfig(): Promise<void> {
       cloudflareTunnelTokenCiphertext: null,
       cloudflareTunnelTokenIv: null,
       cloudflareTunnelTokenTag: null,
+      cloudflareApiTokenCiphertext: null,
+      cloudflareApiTokenIv: null,
+      cloudflareApiTokenTag: null,
       updatedAt: new Date(),
     })
     .where(eq(settings.id, "singleton"));
