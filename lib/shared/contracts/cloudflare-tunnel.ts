@@ -3,6 +3,8 @@ export type CloudflareTunnelConfigPublic = {
   enabled: boolean;
   domain: string;
   hasToken: boolean;
+  /** An API token lets Homeio create the public hostname routes itself. */
+  hasApiToken: boolean;
 };
 
 export type CloudflareTunnelConfigSaveRequest = {
@@ -10,6 +12,8 @@ export type CloudflareTunnelConfigSaveRequest = {
   domain: string;
   /** Omit to keep the stored token, empty string to clear it. */
   token?: string;
+  /** Same rules as token. Without it, routes must be created by hand. */
+  apiToken?: string;
 };
 
 /** Whether the cloudflared connector is actually up. */
