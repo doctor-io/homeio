@@ -147,19 +147,67 @@ const LABEL_FLAG: Record<DiskFilesystem, string> = {
   exfat: "-L",
 };
 
+const SYSTEM_CRITICAL_MOUNTPOINTS = new Set([
+  "/",
+  "/boot",
+  "/boot/efi",
+  "/etc",
+  "/usr",
+  "/var",
+  "/home",
+]);
+
+const VALID_DISK_RE = /^\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+|mmcblk\d+|xvd[a-z]+)$/;
+const VALID_PARTITION_RE = /^\/dev\/(?:sd[a-z]+\d+|nvme\d+n\d+p\d+|vd[a-z]+\d+|mmcblk\d+p\d+|xvd[a-z]+\d+)$/;
+const VALID_MOUNTPOINT_RE = /^\/[a-zA-Z0-9_\-\.\/]+$/;
+
+async function checkDeviceNotMounted(deviceOrDisk: string, isWholeDisk = false): Promise<void> {
+  try {
+    const mounts = await readFile("/proc/mounts", "utf8");
+    const name = deviceOrDisk.replace("/dev/", "");
+    for (const line of mounts.split("\n")) {
+      const [mountDevice, mountPoint] = line.trim().split(/\s+/);
+      if (!mountDevice || !mountPoint) continue;
+
+      const matches = isWholeDisk
+        ? mountDevice.startsWith(`/dev/${name}`)
+        : mountDevice === deviceOrDisk;
+
+      if (matches) {
+        if (SYSTEM_CRITICAL_MOUNTPOINTS.has(mountPoint)) {
+          throw new Error(`Cannot modify system device containing critical mountpoint (${mountPoint})`);
+        }
+        throw new Error(
+          `Cannot modify active mounted device (${mountDevice} mounted on ${mountPoint}). Unmount it first.`,
+        );
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Cannot modify")) throw err;
+    // /proc/mounts might not exist on macOS in local dev
+  }
+}
+
 export async function formatPartition(
   device: string,
   filesystem: DiskFilesystem,
   label?: string,
 ): Promise<void> {
-  if (!device.startsWith("/dev/")) throw new Error("Invalid device path");
+  if (!VALID_PARTITION_RE.test(device)) {
+    throw new Error("Invalid partition device path");
+  }
+
+  await checkDeviceNotMounted(device, false);
 
   const cmd = MKFS_COMMAND[filesystem];
   const flag = LABEL_FLAG[filesystem];
   const args: string[] = [];
 
   if (filesystem === "ntfs") args.push("--fast");
-  if (label) args.push(flag, label);
+  if (label) {
+    if (/[\r\n\0]/.test(label)) throw new Error("Invalid characters in partition label");
+    args.push(flag, label);
+  }
 
   args.push(device);
 
@@ -173,8 +221,18 @@ export async function mountPartition(
   mountPoint: string,
   addToFstab = false,
 ): Promise<void> {
-  if (!device.startsWith("/dev/")) throw new Error("Invalid device path");
-  if (!mountPoint.startsWith("/")) throw new Error("Mount point must be an absolute path");
+  if (!VALID_PARTITION_RE.test(device)) {
+    throw new Error("Invalid partition device path");
+  }
+  if (SYSTEM_CRITICAL_MOUNTPOINTS.has(mountPoint)) {
+    throw new Error(`Cannot mount partition over critical system directory: ${mountPoint}`);
+  }
+  if (!VALID_MOUNTPOINT_RE.test(mountPoint) || mountPoint.includes("..")) {
+    throw new Error("Mount point must be a safe, absolute path without control characters");
+  }
+  if (/[\r\n\t\s]/.test(device) || /[\r\n\t\s]/.test(mountPoint)) {
+    throw new Error("Device and mount point cannot contain whitespace or newline characters");
+  }
 
   await mkdir(mountPoint, { recursive: true });
   await execFileAsync("mount", [device, mountPoint]);
@@ -185,6 +243,10 @@ export async function mountPartition(
 }
 
 async function appendFstabEntry(device: string, mountPoint: string): Promise<void> {
+  if (/[\r\n\t\s]/.test(device) || /[\r\n\t\s]/.test(mountPoint)) {
+    throw new Error("Invalid characters in fstab entry");
+  }
+
   let existing = "";
   try {
     existing = await readFile("/etc/fstab", "utf8");
@@ -192,17 +254,34 @@ async function appendFstabEntry(device: string, mountPoint: string): Promise<voi
     // /etc/fstab might not exist on some systems — create it
   }
 
-  // Don't add a duplicate entry
-  if (existing.includes(device) || existing.includes(mountPoint)) return;
+  // Check line-by-line for existing entry to avoid accidental substring matches
+  const lines = existing.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const [entryDev, entryPoint] = trimmed.split(/\s+/);
+    if (entryDev === device || entryPoint === mountPoint) {
+      return; // Already present
+    }
+  }
 
-  const entry = `\n${device}\t${mountPoint}\tauto\tdefaults\t0\t2\n`;
-  await writeFile("/etc/fstab", existing + entry, "utf8");
+  const entry = `${device}\t${mountPoint}\tauto\tdefaults\t0\t2\n`;
+  const contentToSave = existing.length > 0 && !existing.endsWith("\n")
+    ? `${existing}\n${entry}`
+    : `${existing}${entry}`;
+
+  await writeFile("/etc/fstab", contentToSave, "utf8");
 }
 
 // ─── unmount ──────────────────────────────────────────────────────────────────
 
 export async function unmountPartition(device: string): Promise<void> {
-  if (!device.startsWith("/dev/")) throw new Error("Invalid device path");
+  if (SYSTEM_CRITICAL_MOUNTPOINTS.has(device)) {
+    throw new Error(`Cannot unmount critical system directory: ${device}`);
+  }
+  if (!VALID_PARTITION_RE.test(device) && !VALID_MOUNTPOINT_RE.test(device)) {
+    throw new Error("Invalid device or mount path");
+  }
   await execFileAsync("umount", [device]);
 }
 
@@ -213,7 +292,11 @@ export async function createPartition(
   start: string,
   end: string,
 ): Promise<void> {
-  if (!disk.startsWith("/dev/")) throw new Error("Invalid device path");
+  if (!VALID_DISK_RE.test(disk)) throw new Error("Invalid disk device path");
+  if (!/^[0-9]+(?:\.[0-9]+)?(?:[kKMGTPE]?i?B|%)?$/.test(start.trim()) ||
+      !/^[0-9]+(?:\.[0-9]+)?(?:[kKMGTPE]?i?B|%)?$/.test(end.trim())) {
+    throw new Error("Invalid partition boundaries");
+  }
 
   // Ensure GPT table exists (safe — no-op if already present)
   try {
@@ -229,15 +312,17 @@ export async function createPartition(
     disk,
     "mkpart",
     "primary",
-    start,
-    end,
+    start.trim(),
+    end.trim(),
   ]);
 }
 
 // ─── delete partition ─────────────────────────────────────────────────────────
 
 export async function deletePartition(device: string): Promise<void> {
-  if (!device.startsWith("/dev/")) throw new Error("Invalid device path");
+  if (!VALID_PARTITION_RE.test(device)) throw new Error("Invalid partition device path");
+
+  await checkDeviceNotMounted(device, false);
 
   const name = device.replace("/dev/", "");
   const info = parsePartitionInfo(name);
@@ -250,7 +335,32 @@ export async function deletePartition(device: string): Promise<void> {
 // ─── wipe disk ────────────────────────────────────────────────────────────────
 
 export async function wipeDisk(disk: string): Promise<void> {
-  if (!disk.startsWith("/dev/")) throw new Error("Invalid device path");
+  if (!VALID_DISK_RE.test(disk)) {
+    throw new Error("Invalid disk device path");
+  }
+
+  // 1. Guard against mounted partitions in /proc/mounts
+  await checkDeviceNotMounted(disk, true);
+
+  // 2. Guard against system partitions / active mountpoints using listDisks()
+  const disks = await listDisks();
+  const diskName = disk.replace("/dev/", "");
+  const matched = disks.find((d) => d.device === disk || d.name === diskName);
+
+  if (matched) {
+    for (const part of matched.partitions) {
+      if (part.mountpoint) {
+        if (SYSTEM_CRITICAL_MOUNTPOINTS.has(part.mountpoint)) {
+          throw new Error(
+            `Cannot wipe system disk containing the operating system (${part.mountpoint})`,
+          );
+        }
+        throw new Error(
+          `Cannot wipe disk with active mounted partition (${part.device} on ${part.mountpoint}). Unmount all partitions first.`,
+        );
+      }
+    }
+  }
 
   // wipefs removes all filesystem and partition table signatures
   await execFileAsync("wipefs", ["--all", "--force", disk]);

@@ -132,4 +132,15 @@ describe("update-service", () => {
     );
     expect(execFileMock).not.toHaveBeenCalled();
   });
+
+    it("rejects scheduling when running inside a container runtime", async () => {
+    process.env.HOMEIO_CONTAINER = "true";
+    try {
+      await expect(scheduleSystemUpdate()).rejects.toThrow(
+        "Homeio is running in a Docker container",
+      );
+    } finally {
+      delete process.env.HOMEIO_CONTAINER;
+    }
+  });
 });

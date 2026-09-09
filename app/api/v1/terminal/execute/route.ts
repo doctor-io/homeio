@@ -50,8 +50,8 @@ export async function POST(request: Request) {
   if (apiSession.response) return apiSession.response;
   const requestId = createRequestId();
 
-  const ip = getClientIp(request);
-  if (isRateLimited(ip)) {
+  const rateLimitKey = `${apiSession.session.userId}:${getClientIp(request)}`;
+  if (isRateLimited(rateLimitKey)) {
     return NextResponse.json(
       { error: "Too many requests. Please wait before sending more commands.", code: "rate_limited" },
       { status: 429 },
