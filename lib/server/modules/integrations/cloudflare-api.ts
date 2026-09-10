@@ -34,6 +34,26 @@ export function decodeConnectorToken(token: string) {
   }
 }
 
+/**
+ * Cloudflare hands out the whole install command, not the bare token:
+ *
+ *   sudo cloudflared service install eyJhIjoi...
+ *   docker run cloudflare/cloudflared:latest tunnel run --token eyJhIjoi...
+ *
+ * Pull the token out of whatever was pasted, so copying the command as shown
+ * works. Anything with no usable token is returned untouched for validation
+ * to reject with a message.
+ */
+export function normalizeConnectorToken(input: string) {
+  const trimmed = input.trim();
+
+  for (const candidate of trimmed.match(/eyJ[A-Za-z0-9+/=_-]+/g) ?? []) {
+    if (decodeConnectorToken(candidate)) return candidate;
+  }
+
+  return trimmed;
+}
+
 async function cloudflareRequest<T>(input: {
   apiToken: string;
   path: string;

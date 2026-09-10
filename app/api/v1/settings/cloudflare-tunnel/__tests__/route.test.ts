@@ -15,6 +15,7 @@ vi.mock("@/lib/server/modules/integrations/cloudflare-api", async () => {
   >("@/lib/server/modules/integrations/cloudflare-api");
   return {
     decodeConnectorToken: actual.decodeConnectorToken,
+    normalizeConnectorToken: actual.normalizeConnectorToken,
     verifyApiToken: (...args: unknown[]) => verifyApiToken(...args),
   };
 });

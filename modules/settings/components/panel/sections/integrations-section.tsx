@@ -832,7 +832,7 @@ function CloudflareTunnelConfig() {
                   type={showToken ? "text" : "password"}
                   value={token}
                   onChange={(event) => setToken(event.target.value)}
-                  placeholder={saved?.hasToken ? "••••••••" : "eyJhIjoi…"}
+                  placeholder={saved?.hasToken ? "••••••••" : "Paste the whole install command, or just the token"}
                   className="h-8 flex-1 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground"
                 />
                 <button
@@ -845,8 +845,8 @@ function CloudflareTunnelConfig() {
                 </button>
               </div>
               <p className="text-[11px] text-muted-foreground/60">
-                From Cloudflare Zero Trust · Networks · Tunnels, the value after
-                <span className="font-mono"> run --token</span>.
+                From Cloudflare Zero Trust · Networks · Tunnels · Add a replica.
+                Paste the command it shows — Homeio takes the token out of it.
               </p>
             </div>
 
