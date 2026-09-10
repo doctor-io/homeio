@@ -65,6 +65,22 @@ async function cloudflareRequest<T>(input: {
   return payload.result as T;
 }
 
+/**
+ * Ask Cloudflare whether the API token is real and active. Pasting the wrong
+ * secret into the wrong field is easy, and the failure is otherwise silent:
+ * everything saves, and nothing happens until someone reads a log.
+ */
+export async function verifyApiToken(apiToken: string) {
+  const result = await cloudflareRequest<{ status?: string }>({
+    apiToken,
+    path: "/user/tokens/verify",
+  });
+
+  if (result?.status && result.status !== "active") {
+    throw new Error(`Cloudflare API token is ${result.status}`);
+  }
+}
+
 async function resolveZoneId(apiToken: string, domain: string) {
   const zones = await cloudflareRequest<{ id: string; name: string }[]>({
     apiToken,
