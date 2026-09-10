@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-const SEEN_KEY = "homeio.desktop-tour.seen";
-
 /**
  * Stops point at the interface itself rather than a mock of it. A simulated
  * tour is a second copy of every screen to keep in step with the real one, and
@@ -48,38 +46,40 @@ type Placement = { top: number; left: number } | null;
 
 const EDGE_MARGIN = 16;
 
-function readSeen() {
+/** Against the account, not the browser: a second device is the same person. */
+async function recordSeen() {
   try {
-    return window.localStorage.getItem(SEEN_KEY) === "1";
+    await fetch("/api/v1/system/tour", { method: "POST" });
   } catch {
-    // A browser refusing storage should not mean the tour runs on every load.
-    return true;
+    // Worst case it is offered again on the next load.
   }
 }
 
-function markSeen() {
-  try {
-    window.localStorage.setItem(SEEN_KEY, "1");
-  } catch {
-    // Nothing to do — worst case it is offered again.
-  }
-}
-
-export function useDesktopTour() {
+export function useDesktopTour({
+  hasSeenTour,
+  isReady,
+}: {
+  hasSeenTour: boolean;
+  isReady: boolean;
+}) {
   const [isOpen, setIsOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (readSeen()) return;
+    if (!isReady || hasSeenTour || dismissed) return;
     // Let the desktop land first. Arriving on top of it turns the tour into
     // something to dismiss rather than read.
     const timer = window.setTimeout(() => setIsOpen(true), 1800);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [dismissed, hasSeenTour, isReady]);
 
   return {
     isOpen,
     start: useCallback(() => setIsOpen(true), []),
-    close: useCallback(() => setIsOpen(false), []),
+    close: useCallback(() => {
+      setDismissed(true);
+      setIsOpen(false);
+    }, []),
   };
 }
 
@@ -97,7 +97,7 @@ export function DesktopTour({ open, onClose }: { open: boolean; onClose: () => v
   const stop = visibleStops[index];
 
   const finish = useCallback(() => {
-    markSeen();
+    void recordSeen();
     setIndex(0);
     onClose();
   }, [onClose]);

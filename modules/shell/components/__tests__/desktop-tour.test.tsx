@@ -17,8 +17,8 @@ function anchors(labels: string[]) {
 
 describe("DesktopTour", () => {
   beforeEach(() => {
-    localStorage.clear();
     document.body.innerHTML = "";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
   });
 
   it("walks the interface itself, one anchor at a time", () => {
@@ -41,7 +41,9 @@ describe("DesktopTour", () => {
     expect(screen.getByText("The rest lives in Settings")).toBeTruthy();
   });
 
-  it("remembers it was seen, so it does not greet the same person twice", () => {
+  it("records it against the account, not the browser", () => {
+    // Stored per user so a phone or a second laptop does not replay an
+    // introduction someone already sat through.
     anchors(["apps"]);
     const onClose = vi.fn();
     render(<DesktopTour open onClose={onClose} />);
@@ -50,7 +52,9 @@ describe("DesktopTour", () => {
     fireEvent.click(screen.getByText("Done"));
 
     expect(onClose).toHaveBeenCalled();
-    expect(localStorage.getItem("homeio.desktop-tour.seen")).toBe("1");
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/system/tour", {
+      method: "POST",
+    });
   });
 
   it("lets someone leave without finishing", () => {
@@ -63,7 +67,9 @@ describe("DesktopTour", () => {
     expect(onClose).toHaveBeenCalled();
     // Skipping counts as seen: offering it again on every load is the thing
     // that makes tours annoying.
-    expect(localStorage.getItem("homeio.desktop-tour.seen")).toBe("1");
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/system/tour", {
+      method: "POST",
+    });
   });
 
   it("renders nothing when no anchor exists at all", () => {

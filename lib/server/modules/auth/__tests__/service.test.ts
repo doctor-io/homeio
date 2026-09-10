@@ -94,6 +94,7 @@ describe("auth service", () => {
       totpEnabled: false,
       totpBackupCodes: null,
       totpEnrolledAt: null,
+      tourSeenAt: null,
     });
     vi.mocked(verifyPassword).mockResolvedValueOnce(true);
     vi.mocked(createSessionToken).mockReturnValueOnce("token-123");
@@ -119,6 +120,7 @@ describe("auth service", () => {
       totpEnabled: true,
       totpBackupCodes: "enc:codes",
       totpEnrolledAt: new Date("2026-05-20T00:00:00.000Z"),
+      tourSeenAt: null,
     });
     vi.mocked(verifyPassword).mockResolvedValueOnce(true);
     vi.mocked(createPartialAuthToken).mockReturnValueOnce({
@@ -176,6 +178,7 @@ describe("auth service", () => {
       totpEnabled: false,
       totpBackupCodes: null,
       totpEnrolledAt: null,
+      tourSeenAt: null,
     });
     vi.mocked(verifyPassword).mockResolvedValueOnce(false);
 
@@ -194,6 +197,7 @@ describe("auth service", () => {
       totpEnabled: true,
       totpBackupCodes: "enc:codes",
       totpEnrolledAt: new Date(),
+      tourSeenAt: null,
     });
     vi.mocked(verifyPassword).mockResolvedValueOnce(false);
 

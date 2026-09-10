@@ -15,6 +15,7 @@ export type AuthUserWithTotp = AuthUser & {
   totpEnabled: boolean;
   totpBackupCodes: string | null;
   totpEnrolledAt: Date | null;
+  tourSeenAt: Date | null;
 };
 
 export type AuthSessionWithUser = {
@@ -59,6 +60,7 @@ export async function findUserWithTotpByUsername(
       totpEnabled: users.totpEnabled,
       totpBackupCodes: users.totpBackupCodes,
       totpEnrolledAt: users.totpEnrolledAt,
+      tourSeenAt: users.tourSeenAt,
     })
     .from(users)
     .where(eq(users.username, username))
@@ -78,6 +80,10 @@ export async function findUserWithTotpByUsername(
       row.totpEnrolledAt instanceof Date || row.totpEnrolledAt === null
         ? row.totpEnrolledAt
         : new Date(row.totpEnrolledAt),
+    tourSeenAt:
+      row.tourSeenAt instanceof Date || row.tourSeenAt === null
+        ? row.tourSeenAt
+        : new Date(row.tourSeenAt),
   } satisfies AuthUserWithTotp;
 }
 
@@ -110,6 +116,7 @@ export async function findUserWithTotpById(
       totpEnabled: users.totpEnabled,
       totpBackupCodes: users.totpBackupCodes,
       totpEnrolledAt: users.totpEnrolledAt,
+      tourSeenAt: users.tourSeenAt,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -129,6 +136,10 @@ export async function findUserWithTotpById(
       row.totpEnrolledAt instanceof Date || row.totpEnrolledAt === null
         ? row.totpEnrolledAt
         : new Date(row.totpEnrolledAt),
+    tourSeenAt:
+      row.tourSeenAt instanceof Date || row.tourSeenAt === null
+        ? row.tourSeenAt
+        : new Date(row.tourSeenAt),
   } satisfies AuthUserWithTotp;
 }
 
@@ -268,4 +279,9 @@ export async function findSessionWithUser(sessionId: string) {
     passwordHash: row.passwordHash,
     expiresAt: row.expiresAt instanceof Date ? row.expiresAt : new Date(row.expiresAt),
   } satisfies AuthSessionWithUser;
+}
+
+/** Record that this account has been shown the desktop tour. */
+export async function markTourSeen(userId: string) {
+  await db.update(users).set({ tourSeenAt: new Date() }).where(eq(users.id, userId));
 }

@@ -84,4 +84,6 @@ export type CurrentUserData = {
   username: string;
   isDemoMode?: boolean;
   twoFactor: TwoFactorStatus;
+  /** False until this account has been shown the desktop tour. */
+  hasSeenTour: boolean;
 };

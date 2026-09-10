@@ -77,14 +77,18 @@ export function DesktopShell() {
 
 function DesktopShellInner() {
   const router = useRouter();
-  const tour = useDesktopTour();
-
   const {
     data: currentUser,
     error: currentUserError,
     isLoading: isLoadingUser,
     isError: isCurrentUserError,
   } = useCurrentUser();
+
+  const tour = useDesktopTour({
+    hasSeenTour: currentUser?.hasSeenTour ?? true,
+    isReady: Boolean(currentUser),
+  });
+
   const [openWindows, setOpenWindows] = useState<string[]>([]);
   const [closingWindows, setClosingWindows] = useState<string[]>([]);
   const [minimizedWindows, setMinimizedWindows] = useState<string[]>([]);

@@ -31,6 +31,8 @@ export const users = pgTable(
     totpEnabled: boolean("totp_enabled").notNull().default(false),
     totpBackupCodes: text("totp_backup_codes"),
     totpEnrolledAt: timestamp("totp_enrolled_at", { withTimezone: true }),
+    /** Per user, not per browser: the tour should greet someone once. */
+    tourSeenAt: timestamp("tour_seen_at", { withTimezone: true }),
   },
   (table) => [index("users_username_idx").on(table.username)],
 );

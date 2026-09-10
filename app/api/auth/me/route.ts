@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
         enabled: userRow?.totpEnabled ?? false,
         enrolledAt: userRow?.totpEnrolledAt?.toISOString() ?? null,
       },
+      hasSeenTour: userRow?.tourSeenAt != null,
     },
   });
 }
