@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/modules/integrations/cloudflare-tunnel-config";
 import {
   decodeConnectorToken,
+  normalizeConnectorToken,
   verifyApiToken,
 } from "@/lib/server/modules/integrations/cloudflare-api";
 import type { CloudflareTunnelConfigSaveRequest } from "@/lib/shared/contracts/cloudflare-tunnel";
@@ -37,7 +38,8 @@ export async function PUT(request: Request) {
     const enabled = Boolean(body.enabled);
     const domain = typeof body.domain === "string" ? body.domain.trim() : "";
 
-    const token = typeof body.token === "string" ? body.token.trim() : undefined;
+    const token =
+      typeof body.token === "string" ? normalizeConnectorToken(body.token) : undefined;
     const apiToken = typeof body.apiToken === "string" ? body.apiToken.trim() : undefined;
 
     // A connector token that does not decode leaves cloudflared crash-looping
