@@ -117,6 +117,24 @@ export type LoginResult =
       user: { id: string; username: string };
     };
 
+/**
+ * Issue a session for a user who has already been authenticated. Registration
+ * uses it too: making someone sign in again immediately after choosing their
+ * password asks for the same secret twice before they have seen anything.
+ */
+export async function startSession(user: { id: string; username: string }) {
+  const expiresAt = getSessionExpiryDate();
+  const sessionId = randomUUID();
+
+  await createSession({ id: sessionId, userId: user.id, expiresAt });
+
+  return {
+    token: createSessionToken(sessionId, Math.floor(expiresAt.getTime() / 1000)),
+    expiresAt,
+    user: { id: user.id, username: user.username },
+  };
+}
+
 export async function loginUser(params: {
   username: string;
   password: string;
@@ -156,28 +174,13 @@ export async function loginUser(params: {
     };
   }
 
-  const expiresAt = getSessionExpiryDate();
-  const sessionId = randomUUID();
-
-  await createSession({
-    id: sessionId,
-    userId: user.id,
-    expiresAt,
-  });
-
-  const token = createSessionToken(
-    sessionId,
-    Math.floor(expiresAt.getTime() / 1000),
-  );
+  const session = await startSession(user);
 
   return {
     kind: "session",
-    token,
-    expiresAt,
-    user: {
-      id: user.id,
-      username: user.username,
-    },
+    token: session.token,
+    expiresAt: session.expiresAt,
+    user: session.user,
   };
 }
 

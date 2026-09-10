@@ -7,7 +7,11 @@ import {
   withServerTiming,
 } from "@/lib/server/logging/logger";
 import { hasAnyUsers } from "@/lib/server/modules/auth/repository";
-import { AuthError, registerUser } from "@/lib/server/modules/auth/service";
+import { AuthError, registerUser, startSession } from "@/lib/server/modules/auth/service";
+import {
+  getAuthCookieName,
+  getSessionCookieOptions,
+} from "@/lib/server/modules/auth/cookies";
 import { startOnboarding } from "@/lib/server/modules/onboarding/service";
 import { bootstrapDefaultCasaosCatalog } from "@/lib/server/modules/store/catalog";
 import {
@@ -115,7 +119,12 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(
+    // Sign them in here rather than sending them to the login screen: setup
+    // follows registration, and asking for the password again in between puts
+    // a gate in front of the first thing they came to do.
+    const session = await startSession({ id: user.id, username: user.username });
+
+    const response = NextResponse.json(
       {
         data: {
           id: user.id,
@@ -124,6 +133,14 @@ export async function POST(request: Request) {
       },
       { status: 201 },
     );
+
+    response.cookies.set(
+      getAuthCookieName(),
+      session.token,
+      getSessionCookieOptions(session.expiresAt, request),
+    );
+
+    return response;
   } catch (error) {
     const statusCode = error instanceof AuthError ? error.statusCode : 500;
 
