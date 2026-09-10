@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { FirstAppStep } from "@/modules/onboarding/components/steps/first-app-step";
-import { RemoteAccessStep } from "@/modules/onboarding/components/steps/remote-access-step";
+import { BackupsStep } from "@/modules/onboarding/components/steps/backups-step";
+import { ServicesStep } from "@/modules/onboarding/components/steps/services-step";
 import { StorageStep } from "@/modules/onboarding/components/steps/storage-step";
 import { TwoFactorStep } from "@/modules/onboarding/components/steps/two-factor-step";
 import { TimezoneStep } from "@/modules/onboarding/components/steps/timezone-step";
@@ -42,18 +43,24 @@ const STEPS: StepDefinition[] = [
   },
   {
     step: 3,
-    title: "Reach it from anywhere",
-    blurb:
-      "Tailscale gives your server a private address on every device you own — no port forwarding, no firewall rules.",
-  },
-  {
-    step: 4,
     title: "Add a second factor",
     blurb:
       "Two-factor authentication means a stolen password is not enough on its own.",
   },
   {
+    step: 4,
+    title: "Connect your services",
+    blurb:
+      "Reach this server from anywhere, and publish apps on your own domain. Pick what you need — each one is optional and can wait.",
+  },
+  {
     step: 5,
+    title: "Keep a copy of everything",
+    blurb:
+      "A scheduled backup runs in the background, so a bad update or a lost disk is an inconvenience rather than a loss.",
+  },
+  {
+    step: 6,
     title: "Install your first app",
     blurb:
       "Pick something to start with — it installs in the background while you finish here.",
@@ -84,7 +91,9 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
     timezone: initialState.timezone,
     defaultStorageRoot: initialState.defaultStorageRoot,
   });
-  const [isRemotelyReachable, setIsRemotelyReachable] = useState(false);
+  const [connectedServices, setConnectedServices] = useState<string[]>([]);
+  const isRemotelyReachable = connectedServices.length > 0;
+  const [isBackupScheduled, setIsBackupScheduled] = useState(false);
   const [isTwoFactorOn, setIsTwoFactorOn] = useState(false);
   const [firstApp, setFirstApp] = useState<{ id: string; name: string } | null>(null);
   const [isDone, setIsDone] = useState(false);
@@ -210,13 +219,17 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
     const summary = [
       { label: "Time zone", value: saved.timezone },
       { label: "Storage", value: saved.defaultStorageRoot },
-      { label: "Remote access", value: isRemotelyReachable ? "Connected" : null },
       { label: "Two-factor", value: isTwoFactorOn ? "On" : null },
+      {
+        label: "Services",
+        value: connectedServices.length > 0 ? connectedServices.join(", ") : null,
+      },
+      { label: "Backup", value: isBackupScheduled ? "Scheduled" : null },
       { label: "First app", value: firstApp ? `${firstApp.name} · installing` : null },
     ];
 
     return (
-      <div className="w-full text-center" data-testid="setup-summary">
+      <div className="setup-step-enter w-full text-center" data-testid="setup-summary">
         <p className="text-2xl font-medium tracking-[-0.03em] text-foreground">
           Your server is ready
         </p>
@@ -279,27 +292,34 @@ export function SetupWizard({ initialState, onFinished }: SetupWizardProps) {
         ))}
       </div>
 
-      <p className="text-2xl font-medium tracking-[-0.03em] text-foreground">
+      <p
+        key={`title-${step}`}
+        className="setup-step-enter text-2xl font-medium tracking-[-0.03em] text-foreground"
+      >
         {current.title}
       </p>
       <p className="mb-5 mt-1 text-2xs tracking-[0.18em] text-muted-foreground/78 uppercase">
         Step {step} of {ONBOARDING_LAST_STEP}
       </p>
-      <p className="mx-auto mb-5 max-w-[22rem] text-xs leading-relaxed text-muted-foreground/72">
+      <p
+        key={`blurb-${step}`}
+        className="setup-step-enter mx-auto mb-5 max-w-[22rem] text-xs leading-relaxed text-muted-foreground/72"
+      >
         {current.blurb}
       </p>
 
-      <div className="mb-6">
+      <div className="mb-6 setup-step-enter" key={step}>
         {step === 1 && <TimezoneStep value={timezone} onChange={setTimezone} />}
         {step === 2 && <StorageStep value={storageRoot} onChange={setStorageRoot} />}
-        {step === 3 && <RemoteAccessStep onConnectedChange={setIsRemotelyReachable} />}
-        {step === 4 && (
+        {step === 3 && (
           <TwoFactorStep
             isRemotelyReachable={isRemotelyReachable}
             onEnabled={() => setIsTwoFactorOn(true)}
           />
         )}
-        {step === 5 && (
+        {step === 4 && <ServicesStep onConnectedChange={setConnectedServices} />}
+        {step === 5 && <BackupsStep onScheduledChange={setIsBackupScheduled} />}
+        {step === 6 && (
           <FirstAppStep selectedAppId={firstApp?.id ?? null} onChange={setFirstApp} />
         )}
       </div>

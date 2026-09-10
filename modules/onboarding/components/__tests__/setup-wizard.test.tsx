@@ -53,8 +53,8 @@ describe("SetupWizard", () => {
     mockFetch();
     renderWizard(<SetupWizard initialState={state(3)} onFinished={vi.fn()} />);
 
-    expect(screen.getByText("Step 3 of 5")).toBeTruthy();
-    expect(screen.getByText("Reach it from anywhere")).toBeTruthy();
+    expect(screen.getByText("Step 3 of 6")).toBeTruthy();
+    expect(screen.getByText("Add a second factor")).toBeTruthy();
   });
 
   it("marks the rail as done, current, and upcoming around the active step", () => {
@@ -72,7 +72,7 @@ describe("SetupWizard", () => {
 
     fireEvent.click(screen.getByText("Continue"));
 
-    await waitFor(() => expect(screen.getByText("Step 2 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 2 of 6")).toBeTruthy());
     expect(savedSteps(fetchMock)).toEqual([2]);
   });
 
@@ -82,7 +82,7 @@ describe("SetupWizard", () => {
 
     fireEvent.click(screen.getByText("Skip this step"));
 
-    await waitFor(() => expect(screen.getByText("Step 2 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 2 of 6")).toBeTruthy());
     expect(savedSteps(fetchMock)).toEqual([2]);
   });
 
@@ -92,7 +92,7 @@ describe("SetupWizard", () => {
 
     fireEvent.click(screen.getByText("Back"));
 
-    await waitFor(() => expect(screen.getByText("Step 2 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 2 of 6")).toBeTruthy());
     expect(savedSteps(fetchMock)).toEqual([2]);
   });
 
@@ -106,7 +106,7 @@ describe("SetupWizard", () => {
   it("finishes from the last step instead of walking past it", async () => {
     const fetchMock = mockFetch();
     const onFinished = vi.fn();
-    renderWizard(<SetupWizard initialState={state(5)} onFinished={onFinished} />);
+    renderWizard(<SetupWizard initialState={state(6)} onFinished={onFinished} />);
 
     fireEvent.click(screen.getByText("Finish setup"));
 
@@ -128,9 +128,9 @@ describe("SetupWizard", () => {
     const fetchMock = mockFetch();
     renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
-    for (const step of [2, 3, 4, 5]) {
+    for (const step of [2, 3, 4, 5, 6]) {
       fireEvent.click(screen.getByText("Skip this step"));
-      await waitFor(() => expect(screen.getByText(`Step ${step} of 5`)).toBeTruthy());
+      await waitFor(() => expect(screen.getByText(`Step ${step} of 6`)).toBeTruthy());
     }
 
     fireEvent.click(screen.getByText("Skip and finish"));
@@ -142,16 +142,17 @@ describe("SetupWizard", () => {
       { step: 3 },
       { step: 4 },
       { step: 5 },
+      { step: 6 },
     ]);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/install"))).toBe(
       false,
     );
-    expect(screen.getAllByText("Skipped")).toHaveLength(5);
+    expect(screen.getAllByText("Skipped")).toHaveLength(6);
   });
 
   it("kicks off the chosen app install without waiting for the pull", async () => {
     const fetchMock = mockFetch();
-    renderWizard(<SetupWizard initialState={state(5)} onFinished={vi.fn()} />);
+    renderWizard(<SetupWizard initialState={state(6)} onFinished={vi.fn()} />);
 
     // The catalog mock returns no apps, so drive the choice through the step's
     // own callback the way the tile click does.
@@ -172,13 +173,13 @@ describe("SetupWizard", () => {
     fireEvent.click(screen.getByText("Continue"));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByText("Step 2 of 5")).toBeTruthy();
+    expect(screen.getByText("Step 2 of 6")).toBeTruthy();
   });
 
   it("does not hand the user off when completion fails", async () => {
     mockFetch(false);
     const onFinished = vi.fn();
-    renderWizard(<SetupWizard initialState={state(5)} onFinished={onFinished} />);
+    renderWizard(<SetupWizard initialState={state(6)} onFinished={onFinished} />);
 
     fireEvent.click(screen.getByText("Finish setup"));
 
@@ -192,10 +193,10 @@ describe("SetupWizard", () => {
     renderWizard(<SetupWizard initialState={state(1)} onFinished={vi.fn()} />);
 
     fireEvent.keyDown(window, { key: "Enter" });
-    await waitFor(() => expect(screen.getByText("Step 2 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 2 of 6")).toBeTruthy());
 
     fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(screen.getByText("Step 3 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 3 of 6")).toBeTruthy());
 
     expect(savedSteps(fetchMock)).toEqual([2, 3]);
   });
@@ -206,7 +207,7 @@ describe("SetupWizard", () => {
 
     fireEvent.keyDown(window, { key: "ArrowLeft" });
 
-    await waitFor(() => expect(screen.getByText("Step 1 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 1 of 6")).toBeTruthy());
   });
 
   it("carries the detected time zone when step 1 is confirmed", async () => {
@@ -269,7 +270,7 @@ describe("SetupWizard", () => {
 
     fireEvent.keyDown(screen.getByTestId("field"), { key: "Enter" });
 
-    await waitFor(() => expect(screen.getByText("Step 1 of 5")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Step 1 of 6")).toBeTruthy());
     expect(savedSteps(fetchMock)).toEqual([]);
   });
 });
