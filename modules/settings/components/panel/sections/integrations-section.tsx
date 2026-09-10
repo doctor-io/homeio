@@ -472,7 +472,9 @@ function TailscaleConfig() {
             <div className="min-w-0">
               <div className="text-sm font-medium text-foreground">Tailscale</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground/70">
-                Install the official Linux client and register this server with an auth key.
+                {status?.connected
+                  ? `Connected${status.hostname ? ` as ${status.hostname}` : ""}. The fields below are only needed to install or re-register.`
+                  : "Install the official Linux client and register this server with an auth key."}
               </div>
             </div>
           </div>
@@ -508,7 +510,9 @@ function TailscaleConfig() {
 
       <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between px-4 py-2.5")}>
         <div className="text-[11px] text-muted-foreground/70">
-          Activate uses the official Linux install script, then runs tailscale up with your auth key.
+          {status?.connected
+            ? "Already registered — Tailscale keeps its own state on this machine, so nothing here has to be filled in again."
+            : "Activate uses the official Linux install script, then runs tailscale up with your auth key."}
         </div>
         <a
           href="https://login.tailscale.com/admin/settings/keys"
@@ -524,7 +528,11 @@ function TailscaleConfig() {
       <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
         <InputRow
           label="Tailnet"
-          description="Use the tailnet name from the Tailscale admin console"
+          description={
+            status?.connected
+              ? "Only used for admin API calls; not needed to stay connected"
+              : "Use the tailnet name from the Tailscale admin console"
+          }
         >
           <input
             value={tailnet}
@@ -535,7 +543,14 @@ function TailscaleConfig() {
           />
         </InputRow>
 
-        <InputRow label="Auth key" description="Generate an auth key in Tailscale Keys; kept encrypted until activation">
+        <InputRow
+          label="Auth key"
+          description={
+            status?.connected
+              ? "Only needed to install or re-register; auth keys are single use"
+              : "Generate an auth key in Tailscale Keys; kept encrypted until activation"
+          }
+        >
           <div className="relative">
             <input
               value={apiKey}
