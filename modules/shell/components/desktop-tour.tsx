@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const SEEN_KEY = "homeio.desktop-tour.seen";
 
@@ -44,7 +44,9 @@ const STOPS: Stop[] = [
   },
 ];
 
-type Placement = { top: number; left: number; arrowTop: boolean } | null;
+type Placement = { top: number; left: number } | null;
+
+const EDGE_MARGIN = 16;
 
 function readSeen() {
   try {
@@ -84,6 +86,8 @@ export function useDesktopTour() {
 export function DesktopTour({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
+  const [bubbleHeight, setBubbleHeight] = useState(0);
 
   const visibleStops = useMemo(() => {
     if (!open || typeof document === "undefined") return STOPS;
@@ -111,6 +115,11 @@ export function DesktopTour({ open, onClose }: { open: boolean; onClose: () => v
     return () => window.removeEventListener("resize", measure);
   }, [open, stop]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    setBubbleHeight(bubbleRef.current?.offsetHeight ?? 0);
+  }, [open, index, rect]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -135,13 +144,32 @@ export function DesktopTour({ open, onClose }: { open: boolean; onClose: () => v
 
   if (!open || !stop || visibleStops.length === 0) return null;
 
+  // A large anchor — the app grid fills the screen — has both edges close to
+  // the viewport's, so "above or below it" is not enough: the bubble has to be
+  // clamped into view or it renders half off-screen.
   const placement: Placement = rect
-    ? {
-        // Above the anchor when there is room, below when there is not.
-        top: rect.top > 220 ? rect.top - 16 : rect.bottom + 16,
-        left: Math.min(Math.max(rect.left + rect.width / 2, 180), window.innerWidth - 180),
-        arrowTop: rect.top <= 220,
-      }
+    ? (() => {
+        const height = bubbleHeight || 160;
+        const viewport = window.innerHeight;
+
+        const above = rect.top - EDGE_MARGIN - height;
+        const below = rect.bottom + EDGE_MARGIN;
+
+        const top =
+          above >= EDGE_MARGIN
+            ? above
+            : below + height <= viewport - EDGE_MARGIN
+              ? below
+              : Math.max(EDGE_MARGIN, viewport - height - EDGE_MARGIN);
+
+        return {
+          top,
+          left: Math.min(
+            Math.max(rect.left + rect.width / 2, 180),
+            window.innerWidth - 180,
+          ),
+        };
+      })()
     : null;
 
   const isLast = index === visibleStops.length - 1;
@@ -172,17 +200,12 @@ export function DesktopTour({ open, onClose }: { open: boolean; onClose: () => v
       )}
 
       <div
+        ref={bubbleRef}
         data-testid="tour-bubble"
         className="desktop-tour-bubble absolute w-[320px] -translate-x-1/2 rounded-2xl border border-glass-border bg-background/95 p-4 text-left shadow-2xl backdrop-blur"
         style={
           placement
-            ? {
-                top: placement.top,
-                left: placement.left,
-                transform: placement.arrowTop
-                  ? "translate(-50%, 0)"
-                  : "translate(-50%, -100%)",
-              }
+            ? { top: placement.top, left: placement.left, transform: "translateX(-50%)" }
             : { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }
         }
       >
