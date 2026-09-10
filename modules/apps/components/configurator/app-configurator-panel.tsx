@@ -160,6 +160,7 @@ export function AppConfiguratorPanel({
     "";
   const seedPort = effectiveTemplate?.webUiPort ?? dashboard.port;
   const seedHost = dashboard.host;
+  const seedWebUiLink = effectiveTemplate?.installedConfig?.webUiUrl ?? "";
 
   const fallbackAppId = toAppId(seedTitle || "custom-app") || "custom-app";
   const appId = queryAppId ?? fallbackAppId;
@@ -185,6 +186,7 @@ export function AppConfiguratorPanel({
           iconUrl: seedIconUrl,
           fallbackPort: seedPort,
           fallbackHost: seedHost,
+          webUiLink: seedWebUiLink,
         },
         appId,
         primaryServiceName,
@@ -197,6 +199,7 @@ export function AppConfiguratorPanel({
       seedIconUrl,
       seedPort,
       seedTitle,
+      seedWebUiLink,
     ],
   );
 
@@ -207,6 +210,7 @@ export function AppConfiguratorPanel({
       iconUrl: seedIconUrl,
       fallbackPort: seedPort,
       fallbackHost: seedHost,
+      webUiLink: seedWebUiLink,
     });
 
   const initialDockerRunState = useMemo(

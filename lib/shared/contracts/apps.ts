@@ -34,6 +34,8 @@ export type InstalledApp = {
   stackName: string;
   composePath: string;
   webUiPort?: number | null;
+  /** Operator-set link for this app. Null means "build the default from the browser location". */
+  webUiUrl?: string | null;
   containerName?: string | null;
   logoUrl?: string | null;
   status: "running" | "partial" | "paused" | "stopped" | "unknown";
@@ -124,6 +126,8 @@ export type InstalledStackConfig = {
   composePath: string;
   status: InstalledStackStatus;
   webUiPort: number | null;
+  webUiUrl: string | null;
+  tunnelSubdomain: string | null;
   env: Record<string, string>;
   displayName: string | null;
   iconUrl: string | null;

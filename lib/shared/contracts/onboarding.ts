@@ -1,7 +1,7 @@
 export const ONBOARDING_FIRST_STEP = 1;
-export const ONBOARDING_LAST_STEP = 5;
+export const ONBOARDING_LAST_STEP = 6;
 
-export type OnboardingStepNumber = 1 | 2 | 3 | 4 | 5;
+export type OnboardingStepNumber = 1 | 2 | 3 | 4 | 5 | 6;
 
 /**
  * `not_applicable` covers every install created before the first-run wizard

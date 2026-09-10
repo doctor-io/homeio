@@ -85,6 +85,8 @@ function mapStackRow(row: {
   composePath: string;
   status: string;
   webUiPort: number | null;
+  webUiUrl: string | null;
+  tunnelSubdomain: string | null;
   envJson: unknown;
   displayName: string | null;
   iconUrl: string | null;
@@ -100,6 +102,8 @@ function mapStackRow(row: {
     composePath: row.composePath,
     status: toInstalledStackStatus(row.status),
     webUiPort: row.webUiPort,
+    webUiUrl: row.webUiUrl ?? null,
+    tunnelSubdomain: row.tunnelSubdomain ?? null,
     env: parseEnvJson(row.envJson),
     displayName: row.displayName ?? null,
     iconUrl: row.iconUrl ?? null,
@@ -313,16 +317,29 @@ export async function patchInstalledStackMeta(
   input: {
     displayName?: string;
     iconUrl?: string | null;
+    webUiUrl?: string | null;
+    tunnelSubdomain?: string | null;
   },
 ) {
   if (!(await hasTable("app_stacks"))) return;
-  if (input.displayName === undefined && input.iconUrl === undefined) return;
+  if (
+    input.displayName === undefined &&
+    input.iconUrl === undefined &&
+    input.webUiUrl === undefined &&
+    input.tunnelSubdomain === undefined
+  ) {
+    return;
+  }
 
   type SetValues = Record<string, unknown>;
   const set: SetValues = { updatedAt: sql`NOW()` };
 
   if (input.displayName !== undefined) set.displayName = input.displayName;
   if (input.iconUrl !== undefined) set.iconUrl = input.iconUrl ?? null;
+  if (input.webUiUrl !== undefined) set.webUiUrl = input.webUiUrl ?? null;
+  if (input.tunnelSubdomain !== undefined) {
+    set.tunnelSubdomain = input.tunnelSubdomain ?? null;
+  }
 
   await db.update(appStacks).set(set).where(eq(appStacks.appId, appId));
 }

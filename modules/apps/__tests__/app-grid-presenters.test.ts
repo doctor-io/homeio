@@ -15,6 +15,7 @@ function appWith(status: AppItem["status"]): AppItem {
     status,
     category: "Other",
     webUiPort: null,
+    webUiUrl: null,
     containerName: null,
     updateAvailable: false,
   };

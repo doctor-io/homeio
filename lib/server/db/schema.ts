@@ -31,6 +31,8 @@ export const users = pgTable(
     totpEnabled: boolean("totp_enabled").notNull().default(false),
     totpBackupCodes: text("totp_backup_codes"),
     totpEnrolledAt: timestamp("totp_enrolled_at", { withTimezone: true }),
+    /** Per user, not per browser: the tour should greet someone once. */
+    tourSeenAt: timestamp("tour_seen_at", { withTimezone: true }),
   },
   (table) => [index("users_username_idx").on(table.username)],
 );
@@ -60,6 +62,9 @@ export const appStacks = pgTable(
     composePath: text("compose_path").notNull(),
     status: text("status").notNull().default("not_installed"),
     webUiPort: integer("web_ui_port"),
+    webUiUrl: text("web_ui_url"),
+    /** Subdomain this app is published under when the tunnel is enabled. */
+    tunnelSubdomain: text("tunnel_subdomain"),
     envJson: jsonb("env_json").notNull().default({}),
     displayName: text("display_name"),
     iconUrl: text("icon_url"),
@@ -283,6 +288,14 @@ export const settings = pgTable("settings", {
   pushNtfyTokenTag: text("push_ntfy_token_tag"),
   /** False — the default — sends a signal with no alert text in it. */
   pushIncludeContent: boolean("push_include_content").notNull().default(false),
+  cloudflareTunnelEnabled: boolean("cloudflare_tunnel_enabled").notNull().default(false),
+  cloudflareTunnelDomain: text("cloudflare_tunnel_domain"),
+  cloudflareTunnelTokenCiphertext: text("cloudflare_tunnel_token_ciphertext"),
+  cloudflareTunnelTokenIv: text("cloudflare_tunnel_token_iv"),
+  cloudflareTunnelTokenTag: text("cloudflare_tunnel_token_tag"),
+  cloudflareApiTokenCiphertext: text("cloudflare_api_token_ciphertext"),
+  cloudflareApiTokenIv: text("cloudflare_api_token_iv"),
+  cloudflareApiTokenTag: text("cloudflare_api_token_tag"),
 });
 
 export const filesGoogleDriveTokens = pgTable(

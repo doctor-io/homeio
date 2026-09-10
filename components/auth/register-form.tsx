@@ -362,18 +362,18 @@ export function RegisterForm() {
             You&apos;re all set
           </p>
           <p className="mx-auto mb-7 mt-2.5 max-w-[22rem] text-xs leading-relaxed text-muted-foreground/72">
-            Your home server is ready. Sign in to access your dashboard.
+            Your home server is ready. A few questions and it is yours.
           </p>
 
           <button
             type="button"
             onClick={() => {
-              router.replace(`/login?registered=1&username=${encodeURIComponent(username)}`);
+              router.replace("/");
               router.refresh();
             }}
             className="system-primary-action inline-flex cursor-pointer items-center gap-2 rounded-full px-8 py-2.5 text-sm font-medium transition-all hover:brightness-110"
           >
-            Open Dashboard
+            Continue setup
             <ArrowRight className="size-4" />
           </button>
         </div>

@@ -98,6 +98,7 @@ const PENDING_USER = {
   totpEnabled: false,
   totpBackupCodes: null,
   totpEnrolledAt: null,
+  tourSeenAt: null,
 };
 
 const FRESH_USER = {
@@ -110,6 +111,7 @@ const ENROLLED_USER = {
   totpEnabled: true,
   totpBackupCodes: "enc:" + JSON.stringify(["salt-a:hash-a", "salt-b:hash-b"]),
   totpEnrolledAt: new Date("2026-05-20T00:00:00.000Z"),
+  tourSeenAt: null,
 };
 
 beforeEach(() => {
@@ -162,6 +164,7 @@ describe("beginTotpEnrollment", () => {
       ...FRESH_USER,
       totpEnabled: true,
       totpEnrolledAt: new Date(),
+      tourSeenAt: null,
     });
 
     await expect(beginTotpEnrollment("user-1")).rejects.toMatchObject({
@@ -281,6 +284,7 @@ describe("completeTotpEnrollment", () => {
       ...PENDING_USER,
       totpEnabled: true,
       totpEnrolledAt: new Date(),
+      tourSeenAt: null,
     });
 
     await expect(

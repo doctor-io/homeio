@@ -207,6 +207,37 @@ describe("useStoreActions", () => {
     });
   });
 
+  it("sends the link override to the settings endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ saved: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    fetchStoreOperationSnapshotMock.mockResolvedValue(null);
+    subscribeToStoreOperationEventsMock.mockReturnValue(() => undefined);
+
+    const client = createTestQueryClient();
+    const { result } = renderHook(() => useStoreActions(), {
+      wrapper: createWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.saveAppSettings({
+        appId: "jellyfin",
+        displayName: "Jellyfin",
+        webUiUrl: "https://jellyfin.example.com",
+      });
+    });
+
+    // The body is assembled field by field, so a new setting has to be added
+    // here too or it is dropped silently between the form and the API.
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      webUiUrl: "https://jellyfin.example.com",
+    });
+  });
+
   it("calls custom install endpoint and tracks operation by returned app id", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
