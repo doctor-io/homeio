@@ -1,5 +1,7 @@
 import "server-only";
 
+import { networkInterfaces } from "node:os";
+
 import {
   listInstalledStacksFromDb,
   patchInstalledStackMeta,
@@ -12,6 +14,28 @@ import {
 } from "@/lib/server/modules/integrations/cloudflare-api";
 import type { CloudflareTunnelAppExposure } from "@/lib/shared/contracts/cloudflare-tunnel";
 import type { InstalledStackConfig } from "@/lib/shared/contracts/apps";
+
+/**
+ * Where the tunnel should send traffic for an app.
+ *
+ * Not localhost: a tunnel can have connectors on several machines, and
+ * Cloudflare spreads requests across them. A connector elsewhere resolves
+ * localhost to itself and answers 502. The LAN address works from any of them.
+ * HOMEIO_TUNNEL_ORIGIN_HOST overrides it where that guess cannot be right.
+ */
+export function resolveOriginHost() {
+  const override = process.env.HOMEIO_TUNNEL_ORIGIN_HOST?.trim();
+  if (override) return override;
+
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family !== "IPv4" || address.internal) continue;
+      return address.address;
+    }
+  }
+
+  return "localhost";
+}
 
 /** Subdomains are a DNS label: lowercase alphanumerics and dashes. */
 export function toSubdomain(value: string) {
@@ -112,9 +136,10 @@ export async function saveCloudflareTunnelExposure(input: {
     };
 
     if (input.exposed && stack.webUiPort) {
-      // The connector runs in host network mode on this machine, so the app's
-      // published port is reachable on localhost.
-      await createTunnelRoute({ ...route, service: `http://localhost:${stack.webUiPort}` });
+      await createTunnelRoute({
+        ...route,
+        service: `http://${resolveOriginHost()}:${stack.webUiPort}`,
+      });
     } else if (!input.exposed && stack.tunnelSubdomain) {
       await deleteTunnelRoute(route);
     }
