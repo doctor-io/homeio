@@ -593,6 +593,112 @@ function TailscaleConfig() {
   );
 }
 
+/**
+ * A secret that is already stored should not look like an empty box waiting for
+ * input: it reads as unsaved and invites re-typing something that is already
+ * right. Locked once saved, with Edit to deliberately replace it.
+ */
+function SecretField({
+  id,
+  label,
+  hint,
+  placeholder,
+  stored,
+  busy,
+  onSave,
+}: {
+  id: string;
+  label: string;
+  hint: React.ReactNode;
+  placeholder: string;
+  stored: boolean;
+  busy: boolean;
+  onSave: (value: string) => Promise<unknown>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [reveal, setReveal] = useState(false);
+
+  const locked = stored && !editing;
+
+  async function submit() {
+    const next = value.trim();
+    if (!next) return;
+    await onSave(next);
+    // Only lock once it actually saved; a rejected token stays editable.
+    setValue("");
+    setReveal(false);
+    setEditing(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[11px] text-muted-foreground/70" htmlFor={id}>
+        {label} {stored ? "(stored)" : ""}
+      </label>
+      <div className="flex items-center gap-1.5">
+        <input
+          id={id}
+          aria-label={label}
+          type={reveal ? "text" : "password"}
+          value={locked ? "" : value}
+          disabled={locked}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder={locked ? "••••••••" : placeholder}
+          className="h-8 flex-1 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        {!locked && (
+          <button
+            type="button"
+            aria-label={reveal ? `Hide ${label}` : `Show ${label}`}
+            onClick={() => setReveal((previous) => !previous)}
+            className="flex size-8 items-center justify-center rounded-lg border border-glass-border bg-background/55 text-muted-foreground"
+          >
+            {reveal ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          </button>
+        )}
+        {locked ? (
+          <button
+            type="button"
+            aria-label={`Edit ${label}`}
+            disabled={busy}
+            onClick={() => setEditing(true)}
+            className="flex h-8 items-center rounded-lg border border-glass-border bg-background/55 px-3 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Edit
+          </button>
+        ) : (
+          <>
+            {stored && (
+              <button
+                type="button"
+                onClick={() => {
+                  setValue("");
+                  setReveal(false);
+                  setEditing(false);
+                }}
+                className="flex h-8 items-center rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={`Save ${label}`}
+              disabled={busy || value.trim().length === 0}
+              onClick={() => void submit()}
+              className="flex h-8 items-center rounded-lg border border-glass-border bg-background/55 px-3 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Save
+            </button>
+          </>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground/60">{hint}</p>
+    </div>
+  );
+}
+
 function TunnelExposureRow({
   exposure,
   domain,
@@ -677,10 +783,6 @@ function CloudflareTunnelConfig() {
   });
 
   const [domain, setDomain] = useState("");
-  const [token, setToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
-  const [apiToken, setApiToken] = useState("");
-  const [showApiToken, setShowApiToken] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
 
   const effectiveDomain = domain.trim() || saved?.domain || "";
@@ -694,29 +796,16 @@ function CloudflareTunnelConfig() {
     mutationFn: saveCloudflareTunnelConfigRequest,
     onSuccess: () => {
       invalidateConfig();
-      setToken("");
-      setApiToken("");
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 3000);
     },
   });
 
   const activateMutation = useMutation({
-    mutationFn: async () => {
-      const pending = token.trim();
-      if (pending) {
-        await saveCloudflareTunnelConfigRequest({
-          enabled: true,
-          domain: effectiveDomain,
-          token: pending,
-        });
-      }
-      return activateTunnel(pending || undefined);
-    },
+    mutationFn: () => activateTunnel(),
     onSuccess: () => {
       invalidateConfig();
       void queryClient.invalidateQueries({ queryKey: queryKeys.cloudflareTunnelExposures });
-      setToken("");
     },
   });
 
@@ -742,7 +831,7 @@ function CloudflareTunnelConfig() {
     deactivateMutation.isPending ||
     exposureMutation.isPending;
 
-  const hasToken = Boolean(saved?.hasToken) || token.trim().length > 0;
+  const hasToken = Boolean(saved?.hasToken);
   const canActivate = enabled && hasToken && effectiveDomain.length > 0;
   const connectorLabel = !enabled
     ? "Disabled"
@@ -821,77 +910,47 @@ function CloudflareTunnelConfig() {
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] text-muted-foreground/70" htmlFor="cf-tunnel-token">
-                Connector token {saved?.hasToken ? "(stored)" : ""}
-              </label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  id="cf-tunnel-token"
-                  aria-label="Connector token"
-                  type={showToken ? "text" : "password"}
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                  placeholder={saved?.hasToken ? "••••••••" : "Paste the whole install command, or just the token"}
-                  className="h-8 flex-1 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground"
-                />
-                <button
-                  type="button"
-                  aria-label={showToken ? "Hide token" : "Show token"}
-                  onClick={() => setShowToken((previous) => !previous)}
-                  className="flex size-8 items-center justify-center rounded-lg border border-glass-border bg-background/55 text-muted-foreground"
-                >
-                  {showToken ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
-              </div>
-              <p className="text-[11px] text-muted-foreground/60">
-                From Cloudflare Zero Trust · Networks · Tunnels · Add a replica.
-                Paste the command it shows — Homeio takes the token out of it.
-              </p>
-            </div>
+            <SecretField
+              id="cf-tunnel-token"
+              label="Connector token"
+              stored={Boolean(saved?.hasToken)}
+              busy={isBusy}
+              placeholder="Paste the whole install command, or just the token"
+              hint={
+                <>
+                  From Cloudflare Zero Trust · Networks · Tunnels · Add a replica.
+                  Paste the command it shows — Homeio takes the token out of it.
+                </>
+              }
+              onSave={(value) =>
+                configMutation.mutateAsync({
+                  enabled: true,
+                  domain: effectiveDomain,
+                  token: value,
+                })
+              }
+            />
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] text-muted-foreground/70" htmlFor="cf-api-token">
-                API token {saved?.hasApiToken ? "(stored)" : "(optional)"}
-              </label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  id="cf-api-token"
-                  aria-label="Cloudflare API token"
-                  type={showApiToken ? "text" : "password"}
-                  value={apiToken}
-                  onChange={(event) => setApiToken(event.target.value)}
-                  placeholder={saved?.hasApiToken ? "••••••••" : "Zone:DNS:Edit + Account:Tunnel:Edit"}
-                  className="h-8 flex-1 rounded-lg border border-glass-border bg-background/55 px-2.5 text-xs text-foreground"
-                />
-                <button
-                  type="button"
-                  aria-label={showApiToken ? "Hide API token" : "Show API token"}
-                  onClick={() => setShowApiToken((previous) => !previous)}
-                  className="flex size-8 items-center justify-center rounded-lg border border-glass-border bg-background/55 text-muted-foreground"
-                >
-                  {showApiToken ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
-                <button
-                  type="button"
-                  disabled={isBusy || apiToken.trim().length === 0}
-                  onClick={() =>
-                    configMutation.mutate({
-                      enabled,
-                      domain: effectiveDomain,
-                      apiToken: apiToken.trim(),
-                    })
-                  }
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-glass-border bg-background/55 px-3 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Save
-                </button>
-              </div>
-              <p className="text-[11px] text-muted-foreground/60">
-                With it, Homeio creates and removes each public hostname itself.
-                Without it, add the routes in your Cloudflare dashboard.
-              </p>
-            </div>
+            <SecretField
+              id="cf-api-token"
+              label="API token"
+              stored={Boolean(saved?.hasApiToken)}
+              busy={isBusy}
+              placeholder="Zone:DNS:Edit + Account:Tunnel:Edit"
+              hint={
+                <>
+                  With it, Homeio creates and removes each public hostname itself.
+                  Without it, add the routes in your Cloudflare dashboard.
+                </>
+              }
+              onSave={(value) =>
+                configMutation.mutateAsync({
+                  enabled,
+                  domain: effectiveDomain,
+                  apiToken: value,
+                })
+              }
+            />
 
             <div className="flex items-center justify-between gap-3 border-t border-glass-border/60 pt-3">
               <div className="text-[11px] text-muted-foreground/70">
