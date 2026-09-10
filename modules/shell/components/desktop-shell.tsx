@@ -38,6 +38,10 @@ import { Monitor } from "@/modules/system/components/monitor";
 import { DiskManager } from "@/modules/system/components/disk-manager";
 import { NotificationsPanel } from "@/modules/system/components/notifications-panel";
 import { StatusBar } from "@/modules/system/components/status-bar";
+import {
+  DesktopTour,
+  useDesktopTour,
+} from "@/modules/shell/components/desktop-tour";
 import { SystemWidgets } from "@/modules/system/components/system-widgets";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -73,6 +77,8 @@ export function DesktopShell() {
 
 function DesktopShellInner() {
   const router = useRouter();
+  const tour = useDesktopTour();
+
   const {
     data: currentUser,
     error: currentUserError,
@@ -807,7 +813,7 @@ function DesktopShellInner() {
         />
 
         {/* Main Desktop Area */}
-        <div className="m-12 flex min-h-0 flex-1 overflow-hidden">
+        <div className="m-12 flex min-h-0 flex-1 overflow-hidden" data-tour="apps">
           {/* App Grid (scrollable center) */}
           <AppGrid
             iconSize={appIconSize}
@@ -889,6 +895,8 @@ function DesktopShellInner() {
       </div>
 
       <AppLogsDialog target={logsTarget} onClose={() => setLogsTarget(null)} />
+
+      <DesktopTour open={tour.isOpen} onClose={tour.close} />
     </div>
   );
 }
