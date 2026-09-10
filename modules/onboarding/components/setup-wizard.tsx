@@ -51,7 +51,7 @@ const STEPS: StepDefinition[] = [
     step: 4,
     title: "Connect your services",
     blurb:
-      "Reach this server from anywhere, and publish apps on your own domain. Pick what you need — each one is optional and can wait.",
+      "Reach this server from anywhere, and publish apps on your own domain. Both are optional, and both can wait.",
   },
   {
     step: 5,

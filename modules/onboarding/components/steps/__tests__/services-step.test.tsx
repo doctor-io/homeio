@@ -7,12 +7,9 @@ import { ServicesStep } from "@/modules/onboarding/components/steps/services-ste
 
 function statusFetch(overrides: Record<string, unknown> = {}) {
   return vi.fn().mockImplementation((url: string) => {
-    const data =
-      url.includes("tailscale")
-        ? { connected: false, ...(overrides.tailscale as object) }
-        : url.includes("cloudflare-tunnel")
-          ? { running: false, ...(overrides.cloudflare as object) }
-          : { hasSecret: false, ...(overrides.drive as object) };
+    const data = url.includes("tailscale")
+      ? { connected: false, ...(overrides.tailscale as object) }
+      : { running: false, ...(overrides.cloudflare as object) };
 
     return Promise.resolve({ ok: true, json: async () => ({ data }) });
   });
@@ -23,12 +20,14 @@ describe("ServicesStep", () => {
     vi.stubGlobal("fetch", statusFetch());
   });
 
-  it("shows each service and what it is for", async () => {
+  it("offers only the services that can be finished here", async () => {
+    // Google Drive needs a Google Cloud project, so a card telling the operator
+    // to go elsewhere is noise on a screen meant for what they can do now.
     render(<ServicesStep onConnectedChange={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByTestId("service-tailscale")).toBeTruthy());
     expect(screen.getByTestId("service-cloudflare")).toBeTruthy();
-    expect(screen.getByTestId("service-drive")).toBeTruthy();
+    expect(screen.queryByTestId("service-drive")).toBeNull();
   });
 
   it("reports what is already connected so setup does not ask twice", async () => {
@@ -47,6 +46,6 @@ describe("ServicesStep", () => {
     render(<ServicesStep onConnectedChange={vi.fn()} />);
 
     // Every card still renders, all marked as not set up.
-    await waitFor(() => expect(screen.getAllByText("Not set up")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByText("Not set up")).toHaveLength(2));
   });
 });

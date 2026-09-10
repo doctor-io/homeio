@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { TailscaleStatusPublic } from "@/lib/shared/contracts/tailscale";
 import type { CloudflareTunnelStatus } from "@/lib/shared/contracts/cloudflare-tunnel";
 
-type ServiceKey = "tailscale" | "cloudflare" | "drive";
+type ServiceKey = "tailscale" | "cloudflare";
 
 type ServicesStepProps = {
   /** Lifted so the summary can say what ended up connected. */
@@ -16,8 +16,6 @@ type CardState = {
   name: string;
   blurb: string;
   connected: boolean;
-  /** Set when the service cannot be finished here, with the reason. */
-  deferred?: string;
 };
 
 async function readJson<T>(url: string): Promise<T | null> {
@@ -39,21 +37,18 @@ export function ServicesStep({ onConnectedChange }: ServicesStepProps) {
 
   const [tailscale, setTailscale] = useState<TailscaleStatusPublic | null>(null);
   const [tunnel, setTunnel] = useState<CloudflareTunnelStatus | null>(null);
-  const [driveConfigured, setDriveConfigured] = useState(false);
 
   const [authKey, setAuthKey] = useState("");
   const [connectorToken, setConnectorToken] = useState("");
   const [domain, setDomain] = useState("");
 
   const refresh = useCallback(async () => {
-    const [ts, cf, drive] = await Promise.all([
+    const [ts, cf] = await Promise.all([
       readJson<TailscaleStatusPublic>("/api/v1/system/tailscale/status"),
       readJson<CloudflareTunnelStatus>("/api/v1/system/cloudflare-tunnel"),
-      readJson<{ hasSecret: boolean }>("/api/v1/settings/google-oauth"),
     ]);
     setTailscale(ts);
     setTunnel(cf);
-    setDriveConfigured(Boolean(drive?.hasSecret));
   }, []);
 
   useEffect(() => {
@@ -73,21 +68,13 @@ export function ServicesStep({ onConnectedChange }: ServicesStepProps) {
       blurb: "Publish apps on your own domain, without opening a port.",
       connected: Boolean(tunnel?.running),
     },
-    {
-      key: "drive",
-      name: "Google Drive",
-      blurb: "Back up and browse files from Drive inside the file manager.",
-      connected: driveConfigured,
-      deferred:
-        "Needs a Google Cloud project and an OAuth client, so it is quicker from Settings later.",
-    },
   ];
 
   useEffect(() => {
     onConnectedChange(cards.filter((card) => card.connected).map((card) => card.key));
     // Only the connection flags matter here, not the card copy.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tailscale?.connected, tunnel?.running, driveConfigured]);
+  }, [tailscale?.connected, tunnel?.running]);
 
   async function connectTailscale() {
     setBusy(true);
@@ -181,11 +168,7 @@ export function ServicesStep({ onConnectedChange }: ServicesStepProps) {
             >
               <div className="overflow-hidden">
                 <div className="pt-2">
-                  {card.deferred ? (
-                    <p className="text-2xs leading-relaxed text-muted-foreground/70">
-                      {card.deferred}
-                    </p>
-                  ) : card.connected ? (
+                  {card.connected ? (
                     <p className="text-2xs text-muted-foreground/70">
                       Already connected. You can change this later in Settings.
                     </p>
