@@ -22,7 +22,7 @@ type StoreCatalogRegistry = {
   sources: StoreCatalogSource[];
 };
 
-function resolveStoreConfigDirectory() {
+export function resolveStoreConfigDirectory() {
   return path.join(resolveDataRootDirectory(), STORE_CONFIG_DIRNAME);
 }
 

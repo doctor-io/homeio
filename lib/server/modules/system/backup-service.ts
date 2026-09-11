@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
+import { resolveStoreConfigDirectory } from "@/lib/server/modules/store/catalog-config";
 import { resolveDataRootDirectory, resolveStoreStacksRoot } from "@/lib/server/storage/data-root";
 import type {
   SystemBackupDayOfWeek,
@@ -66,6 +67,33 @@ function escapeTarTransformPattern(value: string) {
 
 function normalizeTarPath(value: string) {
   return value.split(path.sep).join("/");
+}
+
+/**
+ * Directories under the data root ride along in its tar member; only the ones
+ * outside it need to be archived separately.
+ */
+function isOutsideDataRoot(candidate: string, dataRoot: string) {
+  const normalizedCandidate = normalizeTarPath(candidate);
+  const normalizedDataRoot = normalizeTarPath(dataRoot);
+
+  return (
+    normalizedCandidate !== normalizedDataRoot &&
+    !normalizedCandidate.startsWith(`${normalizedDataRoot}/`)
+  );
+}
+
+async function directoryExists(target: string) {
+  return stat(target)
+    .then(() => true)
+    .catch((error) => {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === "ENOENT") {
+        return false;
+      }
+
+      throw error;
+    });
 }
 
 function validateBackupSettings(input: SystemBackupSettings) {
@@ -312,6 +340,9 @@ async function parseBackupManifest(manifestPath: string): Promise<SystemBackupSu
       dbDumpIncluded: parsed.dbDumpIncluded !== false,
       dataRootIncluded: parsed.dataRootIncluded !== false,
       stacksRootIncluded: parsed.stacksRootIncluded !== false,
+      // Backups taken before the store registry was archived genuinely lack
+      // it, so absence means false here rather than the usual "assume true".
+      storeConfigIncluded: parsed.storeConfigIncluded === true,
       status: parsed.status === "failed" ? "failed" : "completed",
     };
   } catch {
@@ -402,21 +433,16 @@ export async function runSystemBackupNow(): Promise<SystemBackupSummary> {
     `s,^${escapeTarTransformPattern(dataRootBase)},data-root,`,
     dataRootBase,
   ];
-  const normalizedDataRoot = normalizeTarPath(dataRoot);
-  const normalizedStacksRoot = normalizeTarPath(stacksRoot);
-  const stacksRootOutsideDataRoot =
-    normalizedStacksRoot !== normalizedDataRoot &&
-    !normalizedStacksRoot.startsWith(`${normalizedDataRoot}/`);
-  const stacksRootExists = await stat(stacksRoot)
-    .then(() => true)
-    .catch((error) => {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code === "ENOENT") {
-        return false;
-      }
-
-      throw error;
-    });
+  const stacksRootOutsideDataRoot = isOutsideDataRoot(stacksRoot, dataRoot);
+  const stacksRootExists = await directoryExists(stacksRoot);
+  // The store registry (added catalog sources and their checkouts) lives
+  // beside the stacks, not under the data root, so a restore used to bring
+  // the files and the database back while silently dropping every app store
+  // the user had added.
+  const storeConfigRoot = resolveStoreConfigDirectory();
+  const storeConfigOutsideDataRoot = isOutsideDataRoot(storeConfigRoot, dataRoot);
+  const storeConfigExists = await directoryExists(storeConfigRoot);
+  const storeConfigArchived = storeConfigOutsideDataRoot && storeConfigExists;
 
   try {
     await execFileAsync("pg_dump", ["--file", dumpPath, serverEnv.DATABASE_URL], {
@@ -426,6 +452,11 @@ export async function runSystemBackupNow(): Promise<SystemBackupSummary> {
     if (stacksRootOutsideDataRoot && stacksRootExists) {
       await cp(stacksRoot, path.join(workRoot, "stacks-root"), { recursive: true });
       tarArgs.push("-C", workRoot, "stacks-root");
+    }
+
+    if (storeConfigArchived) {
+      await cp(storeConfigRoot, path.join(workRoot, "store-config"), { recursive: true });
+      tarArgs.push("-C", workRoot, "store-config");
     }
 
     await execFileAsync("tar", tarArgs, {
@@ -443,6 +474,7 @@ export async function runSystemBackupNow(): Promise<SystemBackupSummary> {
       dbDumpIncluded: true,
       dataRootIncluded: true,
       stacksRootIncluded: stacksRootOutsideDataRoot && stacksRootExists,
+      storeConfigIncluded: storeConfigArchived,
       status: "completed",
     };
 
@@ -461,6 +493,8 @@ export function buildRestoreShellCommand(backup: SystemBackupSummary) {
   const restoreRoot = path.join("/var/tmp", `homeio-restore-${backup.id}`);
   const restoredDataRootContents = `${path.join(restoreRoot, "data-root")}/.`;
   const restoredExternalStacksRoot = path.join(restoreRoot, "stacks-root");
+  const storeConfigRoot = resolveStoreConfigDirectory();
+  const restoredStoreConfigRoot = path.join(restoreRoot, "store-config");
   const dumpFile = path.join(restoreRoot, "db", "database.sql");
   const combinedSqlFile = path.join(restoreRoot, "db", "restore.sql");
   // Kill all existing DB connections before dropping the schema.
@@ -521,6 +555,9 @@ export function buildRestoreShellCommand(backup: SystemBackupSummary) {
     `mkdir -p ${shellEscape(dataRoot)}`,
     `cp -a ${shellEscape(restoredDataRootContents)} ${shellEscape(`${dataRoot}/`)}`,
     `if [ -d ${shellEscape(restoredExternalStacksRoot)} ]; then rm -rf ${shellEscape(stacksRoot)}; mkdir -p ${shellEscape(path.dirname(stacksRoot))}; cp -a ${shellEscape(restoredExternalStacksRoot)} ${shellEscape(stacksRoot)}; fi`,
+    // Archives predating the store registry carry no store-config member; the
+    // guard leaves whatever is on disk alone rather than wiping the sources.
+    `if [ -d ${shellEscape(restoredStoreConfigRoot)} ]; then rm -rf ${shellEscape(storeConfigRoot)}; mkdir -p ${shellEscape(path.dirname(storeConfigRoot))}; cp -a ${shellEscape(restoredStoreConfigRoot)} ${shellEscape(storeConfigRoot)}; fi`,
     // Terminate any stale DB connections (e.g. from an auto-restarted server)
     // before wiping the schema to avoid "other sessions using the schema" errors.
     `psql ${shellEscape(serverEnv.DATABASE_URL)} -v ON_ERROR_STOP=1 -c ${shellEscape(terminateConnectionsSql)} || true`,
@@ -530,6 +567,11 @@ export function buildRestoreShellCommand(backup: SystemBackupSummary) {
     `{ printf '%s\n' ${shellEscape(resetSchemasSql)}; cat ${shellEscape(dumpFile)}; } > ${shellEscape(combinedSqlFile)}`,
     `psql ${shellEscape(serverEnv.DATABASE_URL)} -v ON_ERROR_STOP=1 --single-transaction -f ${shellEscape(combinedSqlFile)}`,
     `rm -rf ${shellEscape(restoreRoot)}`,
+    // `docker compose down` above removed the containers, so nothing is left
+    // for a restart policy to bring back at boot: without this the restore
+    // succeeds and every app is gone. Recreating them before the reboot both
+    // restores them now and re-arms their restart policies for the reboot.
+    `restart_existing_stacks`,
     `echo \"[$(date -Is)] Restore complete; rebooting\"`,
     `trap - ERR`,
     `systemctl reboot`,
