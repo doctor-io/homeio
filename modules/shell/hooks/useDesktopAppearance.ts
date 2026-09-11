@@ -133,6 +133,8 @@ export function useDesktopAppearance() {
 
   return {
     appearance,
+    /** False until the saved appearance has replaced the defaults. */
+    isAppearanceLoaded: loaded,
     updateAppearance,
     wallpapers: WALLPAPER_OPTIONS,
     accentColors: ACCENT_COLORS,
