@@ -1,10 +1,21 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const useStoreActionsMock = vi.fn();
-const useInstalledAppsMock = vi.fn();
-const useStoreCatalogMock = vi.fn();
+import { createTestQueryClient } from "@/test/query-client-wrapper";
+
+const {
+  useStoreActionsMock,
+  useInstalledAppsMock,
+  useStoreCatalogMock,
+  useUnmanagedContainersMock,
+} = vi.hoisted(() => ({
+  useStoreActionsMock: vi.fn(),
+  useInstalledAppsMock: vi.fn(),
+  useStoreCatalogMock: vi.fn(),
+  useUnmanagedContainersMock: vi.fn(),
+}));
 
 vi.mock("@/modules/apps/hooks/useStoreActions", () => ({
   useStoreActions: (...args: unknown[]) => useStoreActionsMock(...args),
@@ -15,8 +26,20 @@ vi.mock("@/modules/apps/hooks/useInstalledApps", () => ({
 vi.mock("@/modules/apps/hooks/useStoreCatalog", () => ({
   useStoreCatalog: (...args: unknown[]) => useStoreCatalogMock(...args),
 }));
+vi.mock("@/modules/apps/hooks/useUnmanagedContainers", () => ({
+  useUnmanagedContainers: (...args: unknown[]) => useUnmanagedContainersMock(...args),
+}));
 
 import { AppGrid } from "@/modules/apps/components/app-grid";
+
+function render(ui: React.ReactElement) {
+  const queryClient = createTestQueryClient();
+  return rtlRender(
+    <QueryClientProvider client={queryClient}>
+      {ui}
+    </QueryClientProvider>,
+  );
+}
 
 function openContextMenuFor(appName: string) {
   const iconButton = screen.getByRole("button", { name: `Open ${appName}` });
@@ -28,6 +51,12 @@ describe("AppGrid context menu", () => {
     useStoreActionsMock.mockReset();
     useInstalledAppsMock.mockReset();
     useStoreCatalogMock.mockReset();
+    useUnmanagedContainersMock.mockReset();
+    useUnmanagedContainersMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    });
 
     useStoreActionsMock.mockReturnValue({
       operationsByApp: {},
@@ -156,6 +185,28 @@ describe("AppGrid context menu", () => {
         "noopener,noreferrer",
       );
     });
+  });
+
+  it("shows containers Homeio does not manage alongside its own apps", () => {
+    useUnmanagedContainersMock.mockReturnValue({
+      data: [
+        {
+          id: "abc123",
+          name: "uilab-casa",
+          image: "dockurr/casa:latest",
+          state: "running",
+          status: "Up 3 days",
+          composeProject: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<AppGrid animationsEnabled={false} />);
+
+    expect(screen.getByRole("button", { name: "Open Plex" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open uilab-casa" })).toBeTruthy();
   });
 
   it("routes open dashboard through callback when provided", async () => {

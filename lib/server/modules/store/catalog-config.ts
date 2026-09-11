@@ -1,6 +1,7 @@
 import "server-only";
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { StoreCatalogSource } from "@/lib/shared/contracts/apps";
 import { resolveDataRootDirectory } from "@/lib/server/storage/data-root";
@@ -21,12 +22,29 @@ type StoreCatalogRegistry = {
   sources: StoreCatalogSource[];
 };
 
-function resolveStoreConfigDirectory() {
+export function resolveStoreConfigDirectory() {
   return path.join(resolveDataRootDirectory(), STORE_CONFIG_DIRNAME);
 }
 
 export function resolveStoreCatalogConfigPath() {
   return path.join(resolveStoreConfigDirectory(), STORE_CONFIG_FILENAME);
+}
+
+/**
+ * Every mutation of the registry is a read-modify-write, and the callers that
+ * trigger them (catalog snapshot loads, app installs, store search) run
+ * concurrently. Without this queue a slow reader writes back the list it read
+ * seconds earlier and silently drops sources added in the meantime.
+ */
+let registryQueue: Promise<unknown> = Promise.resolve();
+
+function runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+  const result = registryQueue.then(operation, operation);
+  registryQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }
 
 function isStoreCatalogSource(input: unknown): input is StoreCatalogSource {
@@ -105,7 +123,12 @@ function parseLegacyConfig(raw: string): StoreCatalogConfig | null {
   }
 }
 
-function parseRegistry(raw: string): StoreCatalogRegistry | null {
+type ParsedRegistry = StoreCatalogRegistry & {
+  /** Entries that did not match the expected shape and were not kept. */
+  dropped: number;
+};
+
+function parseRegistry(raw: string): ParsedRegistry | null {
   try {
     const parsed = JSON.parse(raw) as Partial<StoreCatalogRegistry>;
     if (parsed.version !== 2 || !Array.isArray(parsed.sources)) {
@@ -116,6 +139,7 @@ function parseRegistry(raw: string): StoreCatalogRegistry | null {
     return {
       version: 2,
       sources,
+      dropped: parsed.sources.length - sources.length,
     };
   } catch {
     return null;
@@ -139,31 +163,108 @@ function ensureOfficialSource(sources: StoreCatalogSource[]) {
   ];
 }
 
-export async function readStoreCatalogSources(): Promise<StoreCatalogSource[]> {
+/**
+ * Keep a copy of a registry we could not parse. The original stays in place on
+ * purpose: reads keep failing until someone looks at it, which is the point.
+ * Recovering by returning the official source alone would let the next write
+ * persist that truncated list and destroy the user's sources for good.
+ */
+async function quarantineRegistry() {
+  const configPath = resolveStoreCatalogConfigPath();
   try {
-    const raw = await readFile(resolveStoreCatalogConfigPath(), "utf8");
-    const registry = parseRegistry(raw);
-    if (registry) {
-      return ensureOfficialSource(registry.sources);
-    }
-
-    const legacy = parseLegacyConfig(raw);
-    return ensureOfficialSource([toOfficialConfigSource(legacy)]);
+    await copyFile(configPath, `${configPath}.corrupt`);
   } catch {
-    return ensureOfficialSource([]);
+    // Best effort -- the throw below is what matters.
   }
 }
 
-export async function writeStoreCatalogSources(sources: StoreCatalogSource[]) {
+async function loadRegistry(): Promise<StoreCatalogSource[]> {
+  const configPath = resolveStoreCatalogConfigPath();
+  let raw: string;
+
+  try {
+    raw = await readFile(configPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      // No registry yet: a fresh install legitimately has only the official source.
+      return ensureOfficialSource([]);
+    }
+    throw error;
+  }
+
+  const registry = parseRegistry(raw);
+  if (registry) {
+    if (registry.dropped > 0) {
+      // Silently keeping the survivors would let the next write delete the rest.
+      await quarantineRegistry();
+      throw new Error(
+        `Store source registry at ${configPath} has ${registry.dropped} entr` +
+          `${registry.dropped === 1 ? "y" : "ies"} in an unexpected shape. A copy was kept at ` +
+          `${configPath}.corrupt. Refusing to continue so they are not lost.`,
+      );
+    }
+
+    return ensureOfficialSource(registry.sources);
+  }
+
+  const legacy = parseLegacyConfig(raw);
+  if (legacy) {
+    return ensureOfficialSource([toOfficialConfigSource(legacy)]);
+  }
+
+  await quarantineRegistry();
+  throw new Error(
+    `Unreadable store source registry at ${configPath}. A copy was kept at ` +
+      `${configPath}.corrupt. Refusing to continue so the configured sources are not lost.`,
+  );
+}
+
+async function persistRegistry(sources: StoreCatalogSource[]) {
   const registry: StoreCatalogRegistry = {
     version: 2,
     sources: ensureOfficialSource(sources),
   };
 
+  const configPath = resolveStoreCatalogConfigPath();
+  const tempPath = `${configPath}.${randomUUID()}.tmp`;
+
   await mkdir(resolveStoreConfigDirectory(), { recursive: true });
-  await writeFile(resolveStoreCatalogConfigPath(), JSON.stringify(registry, null, 2), "utf8");
+
+  // Write then rename: a reader sees either the old registry or the new one,
+  // never a half-written file.
+  try {
+    await writeFile(tempPath, JSON.stringify(registry, null, 2), "utf8");
+    await rename(tempPath, configPath);
+  } catch (error) {
+    await rm(tempPath, { force: true });
+    throw error;
+  }
 
   return registry.sources;
+}
+
+export async function readStoreCatalogSources(): Promise<StoreCatalogSource[]> {
+  return loadRegistry();
+}
+
+export async function writeStoreCatalogSources(sources: StoreCatalogSource[]) {
+  return runExclusive(() => persistRegistry(sources));
+}
+
+/**
+ * Read-modify-write the registry under the lock. Callers that need to change a
+ * single source must use this rather than read + write separately, so their
+ * update cannot clobber a concurrent one.
+ */
+export async function mutateStoreCatalogSources<T>(
+  mutator: (sources: StoreCatalogSource[]) => { sources: StoreCatalogSource[]; result: T },
+): Promise<T> {
+  return runExclusive(async () => {
+    const current = await loadRegistry();
+    const { sources, result } = mutator(current);
+    await persistRegistry(sources);
+    return result;
+  });
 }
 
 export async function readStoreCatalogConfig(): Promise<StoreCatalogConfig | null> {
@@ -182,24 +283,20 @@ export async function writeStoreCatalogConfig(input: {
   defaultCatalogPath: string;
   repoUrl: string;
 }) {
-  const sources = await readStoreCatalogSources();
   const official = toOfficialConfigSource({
     defaultCatalogPath: path.resolve(input.defaultCatalogPath),
     repoUrl: input.repoUrl,
     updatedAt: new Date().toISOString(),
   });
 
-  const nextSources = [
-    official,
-    ...sources.filter((source) => source.id !== OFFICIAL_STORE_SOURCE_ID),
-  ];
-  await writeStoreCatalogSources(nextSources);
-
-  return {
-    defaultCatalogPath: official.sourcePath,
-    repoUrl: official.url,
-    updatedAt: official.updatedAt,
-  };
+  return mutateStoreCatalogSources((sources) => ({
+    sources: [official, ...sources.filter((source) => source.id !== OFFICIAL_STORE_SOURCE_ID)],
+    result: {
+      defaultCatalogPath: official.sourcePath,
+      repoUrl: official.url,
+      updatedAt: official.updatedAt,
+    },
+  }));
 }
 
 export function resolveStoreCatalogsRoot() {

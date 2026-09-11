@@ -6,6 +6,7 @@ import type {
   StoreOperationAction,
   StoreOperationStatus,
 } from "@/lib/shared/contracts/apps";
+import type { UnmanagedContainer } from "@/lib/shared/contracts/docker";
 import {
   BarChart3,
   BookOpen,
@@ -37,7 +38,9 @@ export type AppGridStatus =
   | "paused"
   | "stopped"
   | "unknown"
-  | "updating";
+  | "updating"
+  /** Running on this host, but not deployed by Homeio. */
+  | "unmanaged";
 
 export type AppItem = {
   id: string;
@@ -266,6 +269,20 @@ export function getAppVisualState(app: AppItem) {
     };
   }
 
+  if (app.status === "unmanaged") {
+    return {
+      containerClass: "",
+      imageClass: "opacity-70 grayscale",
+      dotClass: "bg-muted-foreground/50",
+      dotInnerClass: "",
+      ringClass: "border-muted-foreground/25",
+      badgeIcon: null,
+      badgeClass: "",
+      badgeIconClass: "",
+      title: "Not managed by Homeio",
+    };
+  }
+
   // A stopped app is not a failure — usually someone stopped it on purpose —
   // so it gets no alarm colour, no pulsing frame and no blinking dot. Dimming
   // and desaturating says "off" the way every dock and launcher already does,
@@ -305,6 +322,29 @@ export function getAppVisualState(app: AppItem) {
     ringClass: "border-transparent",
     title: "Running",
   };
+}
+
+export function buildUnmanagedAppItems(
+  containers: UnmanagedContainer[],
+): AppItem[] {
+  return containers.map((container) => {
+    const visual = pickVisual(container.name, container.id);
+
+    return {
+      id: `container:${container.id}`,
+      name: container.name,
+      icon: visual.icon,
+      logoUrl: null,
+      color: visual.color,
+      bgColor: visual.bgColor,
+      status: "unmanaged" as const,
+      category: "Containers",
+      webUiPort: null,
+      webUiUrl: null,
+      containerName: container.name,
+      updateAvailable: false,
+    } satisfies AppItem;
+  });
 }
 
 export function buildAppItems(params: {

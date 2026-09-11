@@ -5,7 +5,7 @@ services:
     container_name: homeio
     restart: unless-stopped
     ports:
-      - "12026:12026"
+      - "12026:3000"
     environment:
       DATABASE_URL: postgresql://homeio:homeio@db:5432/homeio
       # IMPORTANT: change this to a random string before exposing outside your LAN

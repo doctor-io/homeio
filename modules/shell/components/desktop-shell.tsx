@@ -65,7 +65,22 @@ type DesktopWindowBody = {
 };
 
 const WINDOW_CLOSE_ANIMATION_MS = 180;
-const WALLPAPER_FADE_MS = 420;
+// Long enough to read as a change rather than a flicker; the image is already
+// cached and preloaded by the time this runs, so the wait is the animation.
+const WALLPAPER_FADE_MS = 900;
+const SETTINGS_SEARCH_SECTIONS = [
+  { id: "general", label: "General" },
+  { id: "network", label: "Network" },
+  { id: "storage", label: "Storage" },
+  { id: "docker", label: "Docker" },
+  { id: "users", label: "Users & Access" },
+  { id: "security", label: "Security" },
+  { id: "notifications", label: "Notifications" },
+  { id: "backup", label: "Backup & Restore" },
+  { id: "updates", label: "Updates" },
+  { id: "appearance", label: "Appearance" },
+  { id: "power", label: "Power" },
+] as const;
 
 export function DesktopShell() {
   return (
@@ -119,7 +134,7 @@ function DesktopShellInner() {
   const [logsTarget, setLogsTarget] = useState<AppActionTarget | null>(null);
   const shellStoreActions = useSharedStoreActions();
   const terminalCommandIdRef = useRef(0);
-  const [displayWallpaper, setDisplayWallpaper] = useState("/images/1.jpg");
+  const [displayWallpaper, setDisplayWallpaper] = useState<string | null>(null);
   const [nextWallpaper, setNextWallpaper] = useState<string | null>(null);
   const [isWallpaperFading, setIsWallpaperFading] = useState(false);
   const closeTimersRef = useRef<Record<string, number>>({});
@@ -129,6 +144,7 @@ function DesktopShellInner() {
   const appStoreLaunchNonceRef = useRef(0);
   const {
     appearance,
+    isAppearanceLoaded,
     updateAppearance,
     wallpapers,
     accentColors,
@@ -278,12 +294,15 @@ function DesktopShellInner() {
     [appearance.animationsEnabled, finalizeCloseWindow],
   );
 
+  // The first real wallpaper is assigned outright. Cross-fading into it would
+  // animate a change the operator never made — and did, on every reload.
   useEffect(() => {
+    if (!isAppearanceLoaded || displayWallpaper !== null) return;
     setDisplayWallpaper(appearance.wallpaper);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [appearance.wallpaper, displayWallpaper, isAppearanceLoaded]);
 
   useEffect(() => {
+    if (displayWallpaper === null) return;
     if (appearance.wallpaper === displayWallpaper) return;
 
     wallpaperTransitionIdRef.current += 1;
@@ -738,26 +757,26 @@ function DesktopShellInner() {
       <div className="absolute inset-0">
         <div
           className={`absolute inset-0 bg-cover bg-center bg-no-repeat ${
-            appearance.animationsEnabled
-              ? "transition-opacity duration-500 ease-out"
-              : ""
+            appearance.animationsEnabled ? "transition-opacity ease-out" : ""
           } ${
             nextWallpaper && isWallpaperFading ? "opacity-0" : "opacity-100"
           }`}
           style={{
             willChange: "opacity",
-            backgroundImage: `url('${displayWallpaper}')`,
+            // Driven by the constant the finalize timer uses, so the two cannot
+            // drift apart the way 500ms of CSS and a 420ms timer had.
+            transitionDuration: `${WALLPAPER_FADE_MS}ms`,
+            backgroundImage: displayWallpaper ? `url('${displayWallpaper}')` : undefined,
           }}
         />
         {nextWallpaper && (
           <div
             className={`absolute inset-0 bg-cover bg-center bg-no-repeat ${
-              appearance.animationsEnabled
-                ? "transition-opacity duration-500 ease-out"
-                : ""
+              appearance.animationsEnabled ? "transition-opacity ease-out" : ""
             } ${isWallpaperFading ? "opacity-100" : "opacity-0"}`}
             style={{
               willChange: "opacity",
+              transitionDuration: `${WALLPAPER_FADE_MS}ms`,
               backgroundImage: `url('${nextWallpaper}')`,
             }}
             onTransitionEnd={finalizeWallpaperFade}

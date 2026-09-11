@@ -57,17 +57,19 @@ confirm() {
 		return 0
 	fi
 
-	# Check if we have a terminal to read from
-	if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
-		# stdin is not a terminal (e.g., piped script), use /dev/tty
-		read -r -p "${message} [y/N]: " reply </dev/tty
-	elif [[ ! -t 0 ]]; then
-		# No terminal available and script is piped - require --yes flag
-		print_error "Script is running non-interactively. Use --yes flag to proceed without confirmation."
-		exit 1
-	else
+	local reply=""
+
+	if [[ -t 0 ]]; then
 		# Normal interactive mode
 		read -r -p "${message} [y/N]: " reply
+	elif read -r -p "${message} [y/N]: " reply 2>/dev/null </dev/tty; then
+		# stdin is a pipe (curl ... | bash) but a terminal is still attached
+		:
+	else
+		# Piped with no usable terminal: /dev/tty can exist yet not be openable,
+		# as over a non-interactive ssh, so this is decided by trying it.
+		print_error "Script is running non-interactively. Use --yes flag to proceed without confirmation."
+		exit 1
 	fi
 
 	[[ "${reply}" == "y" || "${reply}" == "Y" ]]

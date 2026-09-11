@@ -8,7 +8,9 @@ export type Notification = {
   id: string;
   title: string;
   message: string;
+  /** Preformatted for display; createdAt is what ordering uses. */
   time: string;
+  createdAt: string;
   read: boolean;
 };
 

@@ -260,6 +260,7 @@ export function useStatusNotifications({
         message: item.message,
         read: item.read,
         time: formatRelativeTime(item.createdAt),
+        createdAt: item.createdAt,
       })),
     [storedNotifications],
   );

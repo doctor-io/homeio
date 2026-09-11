@@ -151,10 +151,24 @@ configure_hostname() {
 	fi
 }
 
+# Install postgresql-common on its own, before the postgresql metapackage.
+# apt preconfigures every package in a batch before unpacking any of them, and
+# the postgresql metapackage's debconf script calls pg_lsclusters — which ships
+# in postgresql-common. In a single batch it isn't unpacked yet, so the install
+# prints "pg_lsclusters: not found". Harmless, but it reads like a failure.
+install_postgresql_common() {
+	if [[ "${HOMEIO_VERBOSE}" == "true" ]]; then
+		apt-get install -y postgresql-common
+	else
+		apt-get install -y -qq postgresql-common >/dev/null
+	fi
+}
+
 install_packages() {
 	print_status "Installing system dependencies..."
 	if [[ "${HOMEIO_VERBOSE}" == "true" ]]; then
 		apt-get update -y
+		install_postgresql_common
 		apt-get install -y \
 			ca-certificates \
 			curl \
@@ -174,6 +188,7 @@ install_packages() {
 			openssl
 	else
 		apt-get update -qq >/dev/null
+		install_postgresql_common
 		apt-get install -y -qq \
 			ca-certificates \
 			curl \

@@ -38,7 +38,11 @@ type DockerContainer = {
   Names: string[];
   State: string;
   Status: string;
+  Image?: string;
+  Labels?: Record<string, string>;
 };
+
+export type { DockerContainer };
 
 type DockerStatsResponse = {
   cpu_stats: {

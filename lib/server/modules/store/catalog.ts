@@ -17,11 +17,11 @@ import {
 } from "@/lib/server/modules/store/casaos-compose-mapper";
 import {
   OFFICIAL_STORE_SOURCE_ID,
+  mutateStoreCatalogSources,
   readStoreCatalogConfig,
   readStoreCatalogSources,
   resolveStoreCatalogsRoot,
   writeStoreCatalogConfig,
-  writeStoreCatalogSources,
 } from "@/lib/server/modules/store/catalog-config";
 import type {
   StoreCatalogSource,
@@ -78,9 +78,20 @@ type SourceSnapshot = {
 type CacheEntry = {
   signature: string;
   snapshot: SourceSnapshot;
+  /** Serve the cached snapshot without touching disk until this timestamp. */
+  revalidateAfter: number;
 };
 
 const catalogCache = new LruCache<CacheEntry>(16, serverEnv.STORE_CATALOG_TTL_MS);
+
+/**
+ * How long a cached snapshot is trusted before we re-stat the catalog to check
+ * for on-disk changes. Building the signature costs one stat per app (the CasaOS
+ * store ships ~1000), so doing it per request pegged the CPU and starved the
+ * libuv fs pool — every App Store search keystroke walked the whole catalog.
+ * Explicit syncs (refreshStoreCatalogSource) bypass this entirely.
+ */
+const CATALOG_REVALIDATE_INTERVAL_MS = 30_000;
 
 function normalizeCategoryId(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
@@ -323,11 +334,20 @@ async function buildSourceSnapshot(
   source: StoreCatalogSource,
   options?: { bypassCache?: boolean },
 ): Promise<SourceSnapshot> {
+  const cached = options?.bypassCache ? null : catalogCache.get(source.id);
+  if (cached && Date.now() < cached.revalidateAfter) {
+    return cached.snapshot;
+  }
+
   const appsDirectory = await resolveAppsDirectory(repoPath);
   const composePaths = await collectComposePaths(appsDirectory);
   const signature = await buildSignature(repoPath, composePaths);
-  const cached = options?.bypassCache ? null : catalogCache.get(source.id);
   if (cached && cached.signature === signature) {
+    catalogCache.set(
+      source.id,
+      { ...cached, revalidateAfter: Date.now() + CATALOG_REVALIDATE_INTERVAL_MS },
+      serverEnv.STORE_CATALOG_TTL_MS,
+    );
     return cached.snapshot;
   }
 
@@ -369,7 +389,15 @@ async function buildSourceSnapshot(
     sourcePath: repoPath,
   };
 
-  catalogCache.set(source.id, { signature, snapshot }, serverEnv.STORE_CATALOG_TTL_MS);
+  catalogCache.set(
+    source.id,
+    {
+      signature,
+      snapshot,
+      revalidateAfter: Date.now() + CATALOG_REVALIDATE_INTERVAL_MS,
+    },
+    serverEnv.STORE_CATALOG_TTL_MS,
+  );
   return snapshot;
 }
 
@@ -435,15 +463,18 @@ async function updateStoredSource(
   sourceId: string,
   updater: (source: StoreCatalogSource) => StoreCatalogSource,
 ) {
-  const sources = await readStoreCatalogSources();
-  const source = sources.find((entry) => entry.id === sourceId);
-  if (!source) {
-    throw new Error("Store source not found");
-  }
+  return mutateStoreCatalogSources((sources) => {
+    const source = sources.find((entry) => entry.id === sourceId);
+    if (!source) {
+      throw new Error("Store source not found");
+    }
 
-  const nextSources = sources.map((entry) => (entry.id === sourceId ? updater(entry) : entry));
-  await writeStoreCatalogSources(nextSources);
-  return nextSources.find((entry) => entry.id === sourceId)!;
+    const updated = updater(source);
+    return {
+      sources: sources.map((entry) => (entry.id === sourceId ? updated : entry)),
+      result: updated,
+    };
+  });
 }
 
 async function loadEnabledSourceSnapshots(options?: { bypassCache?: boolean }) {
@@ -636,11 +667,6 @@ export async function addStoreCatalogSource(input: { url: string; name?: string 
         throw new Error("Store source must use https");
       }
 
-      const sources = await readStoreCatalogSources();
-      if (sources.some((source) => source.url === input.url)) {
-        throw new Error("Store source already exists");
-      }
-
       const sourceId = randomUUID();
       const now = new Date().toISOString();
       const source: StoreCatalogSource = {
@@ -658,7 +684,14 @@ export async function addStoreCatalogSource(input: { url: string; name?: string 
         lastError: null,
       };
 
-      await writeStoreCatalogSources([...sources, source]);
+      await mutateStoreCatalogSources((sources) => {
+        if (sources.some((entry) => entry.url === input.url)) {
+          throw new Error("Store source already exists");
+        }
+
+        return { sources: [...sources, source], result: undefined };
+      });
+
       return refreshStoreCatalogSource(sourceId);
     },
   );
@@ -754,14 +787,18 @@ export async function removeStoreCatalogSource(sourceId: string) {
       meta: { sourceId },
     },
     async () => {
-      const sources = await readStoreCatalogSources();
-      const source = sources.find((entry) => entry.id === sourceId);
-      if (!source) {
-        throw new Error("Store source not found");
-      }
+      const source = await mutateStoreCatalogSources((sources) => {
+        const existing = sources.find((entry) => entry.id === sourceId);
+        if (!existing) {
+          throw new Error("Store source not found");
+        }
 
-      const nextSources = sources.filter((entry) => entry.id !== sourceId);
-      await writeStoreCatalogSources(nextSources);
+        return {
+          sources: sources.filter((entry) => entry.id !== sourceId),
+          result: existing,
+        };
+      });
+
       catalogCache.delete(sourceId);
       await rm(resolveRemoteSourceDirectory(sourceId), { recursive: true, force: true });
 

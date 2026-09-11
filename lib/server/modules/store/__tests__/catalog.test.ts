@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import type * as FsPromises from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +16,11 @@ vi.mock("@/lib/server/modules/store/catalog-config", () => ({
 vi.mock("@/lib/server/storage/data-root", () => ({
   ensureDataRootDirectories: vi.fn(),
 }));
+
+vi.mock("node:fs/promises", async () => {
+  const actual = await vi.importActual<typeof FsPromises>("node:fs/promises");
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 import {
   readStoreCatalogConfig,
@@ -130,5 +136,61 @@ x-casaos:
       sourceKind: "official",
       sourceName: "Official CasaOS",
     });
+  });
+
+  it("does not re-stat the catalog on every request", async () => {
+    // buildSignature stats one file per app. Doing that per request pegged the
+    // CPU on real catalogs (~1000 apps) — every App Store search keystroke
+    // walked the whole store before the cache was even consulted.
+    const { getStoreCatalogSnapshot } = await import("@/lib/server/modules/store/catalog");
+    const { stat } = await import("node:fs/promises");
+
+    await getStoreCatalogSnapshot();
+    const statCallsAfterFirst = vi.mocked(stat).mock.calls.length;
+    expect(statCallsAfterFirst).toBeGreaterThan(0);
+
+    await getStoreCatalogSnapshot();
+    expect(vi.mocked(stat).mock.calls.length).toBe(statCallsAfterFirst);
+  });
+
+  it("still picks up on-disk changes once the revalidation window elapses", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const { getStoreCatalogSnapshot } = await import("@/lib/server/modules/store/catalog");
+
+      const first = await getStoreCatalogSnapshot();
+      expect(first.apps).toHaveLength(1);
+
+      await mkdir(path.join(repoRoot, "Apps", "Jellyfin"), { recursive: true });
+      await writeFile(
+        path.join(repoRoot, "Apps", "Jellyfin", "docker-compose.yml"),
+        `name: jellyfin
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:v1
+x-casaos:
+  main: jellyfin
+  category: Media
+  title:
+    en_us: Jellyfin
+  description:
+    en_us: Media server
+  icon: https://example.com/jellyfin.png
+  scheme: http
+  index: /
+  port_map: "8096"
+`,
+        "utf8",
+      );
+
+      // Still cached — the new app must not appear yet.
+      expect((await getStoreCatalogSnapshot()).apps).toHaveLength(1);
+
+      vi.advanceTimersByTime(31_000);
+      expect((await getStoreCatalogSnapshot()).apps).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

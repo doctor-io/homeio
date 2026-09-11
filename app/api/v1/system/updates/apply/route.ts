@@ -5,31 +5,10 @@ import {
   logServerAction,
   withServerTiming,
 } from "@/lib/server/logging/logger";
-import { getAuthCookieName } from "@/lib/server/modules/auth/cookies";
-import { authenticateSession } from "@/lib/server/modules/auth/service";
 import { scheduleSystemUpdate } from "@/lib/server/modules/system/update-service";
 import { requireApiSession } from "@/lib/server/modules/auth/api";
 
 export const runtime = "nodejs";
-
-async function authenticateRequest(request: NextRequest, requestId: string) {
-  const sessionToken = request.cookies.get(getAuthCookieName())?.value;
-  const session = await authenticateSession(sessionToken);
-
-  if (!session) {
-    logServerAction({
-      level: "warn",
-      layer: "api",
-      action: "system.updates.apply.response",
-      status: "error",
-      requestId,
-      message: "Unauthorized Homeio update apply request",
-    });
-    return null;
-  }
-
-  return session;
-}
 
 export async function POST(request: NextRequest) {
   const apiSession = await requireApiSession(request);
@@ -44,11 +23,6 @@ export async function POST(request: NextRequest) {
         requestId,
       },
       async () => {
-        const session = await authenticateRequest(request, requestId);
-        if (!session) {
-          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
         const accepted = await scheduleSystemUpdate();
 
         logServerAction({
@@ -58,8 +32,8 @@ export async function POST(request: NextRequest) {
           requestId,
           message: "Scheduled Homeio update",
           meta: {
-            userId: session.userId,
-            username: session.username,
+            userId: apiSession.session.userId,
+            username: apiSession.session.username,
           },
         });
 
@@ -77,6 +51,15 @@ export async function POST(request: NextRequest) {
       error,
     });
 
-    return NextResponse.json({ error: "Failed to schedule Homeio update" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to schedule Homeio update";
+    const statusCode =
+      error instanceof Error &&
+      (error.message.includes("Docker") ||
+        error.message.includes("systemd-run") ||
+        error.message.includes("already in progress"))
+        ? 400
+        : 500;
+
+    return NextResponse.json({ error: message }, { status: statusCode });
   }
 }

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX_FAILURES = 5;
+const USER_RATE_LIMIT_MAX_FAILURES = 10;
 
 type LoginAttemptRecord = {
   failures: number;
@@ -11,18 +12,32 @@ type LoginAttemptRecord = {
 };
 
 const loginAttempts = new Map<string, LoginAttemptRecord>();
+const userAttempts = new Map<string, LoginAttemptRecord>();
 
 function normalizeUsername(username: string) {
   return username.trim().toLowerCase();
 }
 
+const IPV4_RE = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+const IPV6_RE = /^[0-9a-fA-F:]+$/;
+
+function sanitizeIp(raw: string | undefined | null): string {
+  if (!raw) return "unknown";
+  const trimmed = raw.trim();
+  if (IPV4_RE.test(trimmed) || IPV6_RE.test(trimmed)) {
+    return trimmed;
+  }
+  return "unknown";
+}
+
 function getClientIp(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
+    const candidate = forwardedFor.split(",")[0]?.trim();
+    return sanitizeIp(candidate);
   }
 
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
+  return sanitizeIp(request.headers.get("x-real-ip"));
 }
 
 export function getLoginRateLimitKey(request: Request, username: string) {
@@ -31,14 +46,28 @@ export function getLoginRateLimitKey(request: Request, username: string) {
 
 export function isLoginRateLimited(key: string, now = Date.now()) {
   const record = loginAttempts.get(key);
-  if (!record) return false;
-
-  if (record.resetAt <= now) {
-    loginAttempts.delete(key);
-    return false;
+  if (record) {
+    if (record.resetAt <= now) {
+      loginAttempts.delete(key);
+    } else if (record.failures >= LOGIN_RATE_LIMIT_MAX_FAILURES) {
+      return true;
+    }
   }
 
-  return record.failures >= LOGIN_RATE_LIMIT_MAX_FAILURES;
+  // Account-level lockout: guard against distributed/spoofed attacks on a single user
+  const username = key.split(":")[0];
+  if (username) {
+    const userRecord = userAttempts.get(username);
+    if (userRecord) {
+      if (userRecord.resetAt <= now) {
+        userAttempts.delete(username);
+      } else if (userRecord.failures >= USER_RATE_LIMIT_MAX_FAILURES) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -54,11 +83,25 @@ export function recordLoginFailure(key: string, now = Date.now()) {
       failures: 1,
       resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS,
     });
-    return 1;
+  } else {
+    existing.failures += 1;
   }
 
-  existing.failures += 1;
-  return existing.failures;
+  // Account-level counter, so a spread of source addresses still trips a lockout.
+  const username = key.split(":")[0];
+  if (username) {
+    const existingUser = userAttempts.get(username);
+    if (!existingUser || existingUser.resetAt <= now) {
+      userAttempts.set(username, {
+        failures: 1,
+        resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS,
+      });
+    } else {
+      existingUser.failures += 1;
+    }
+  }
+
+  return loginAttempts.get(key)?.failures ?? 1;
 }
 
 /** The failure count at which sign-in is refused, and worth telling someone about. */
@@ -66,10 +109,15 @@ export const LOGIN_FAILURE_ALERT_THRESHOLD = LOGIN_RATE_LIMIT_MAX_FAILURES;
 
 export function clearLoginFailures(key: string) {
   loginAttempts.delete(key);
+  const username = key.split(":")[0];
+  if (username) {
+    userAttempts.delete(username);
+  }
 }
 
 export function _resetLoginRateLimitForTesting() {
   loginAttempts.clear();
+  userAttempts.clear();
 }
 
 // --- TOTP single-use guard ---------------------------------------------------

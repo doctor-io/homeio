@@ -78,6 +78,13 @@ let storageDetailsLastKnown: CachedStorageDetails | null = null;
 let storageDetailsRefreshing = false;
 let helperStatusUnavailableUntil = 0;
 let lastHelperStatusErrorLogAt = 0;
+/**
+ * In-flight snapshot collection, shared by all concurrent callers.
+ * collectSnapshot shells out to `sensors`, `nmcli` and `ip`; on a slow box it can
+ * outlast METRICS_PUBLISH_INTERVAL_MS, and without this guard every SSE tick
+ * started another one on top of the last until the subprocesses ate the CPU.
+ */
+let snapshotInFlight: Promise<SystemMetricsSnapshot> | null = null;
 
 function clampPercent(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -813,7 +820,19 @@ export async function getSystemMetricsSnapshot(options?: {
     }
   }
 
-  const snapshot = await collectSnapshot();
+  const joinedInFlight = !options?.bypassCache && snapshotInFlight !== null;
+  let pending = snapshotInFlight;
+  if (!joinedInFlight || pending === null) {
+    const collection: Promise<SystemMetricsSnapshot> = collectSnapshot().finally(() => {
+      if (snapshotInFlight === collection) {
+        snapshotInFlight = null;
+      }
+    });
+    snapshotInFlight = collection;
+    pending = collection;
+  }
+
+  const snapshot = await pending;
   metricsCache.set("latest", snapshot);
 
   logServerAction({
@@ -823,7 +842,7 @@ export async function getSystemMetricsSnapshot(options?: {
     status: "success",
     durationMs: Number((performance.now() - startedAt).toFixed(2)),
     meta: {
-      cache: "miss",
+      cache: joinedInFlight ? "in-flight" : "miss",
     },
   });
 

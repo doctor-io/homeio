@@ -7,6 +7,7 @@ import yaml from "js-yaml";
 import { db } from "@/lib/server/db/drizzle";
 import { customStoreApps } from "@/lib/server/db/schema";
 import { withServerTiming } from "@/lib/server/logging/logger";
+import { findInstalledStackByAppId } from "@/lib/server/modules/apps/stacks-repository";
 import {
   parseComposeContentToApp,
   type AppDefinition,
@@ -623,6 +624,44 @@ export async function upsertCustomStoreTemplate(input: UpsertCustomStoreTemplate
           },
         })
         .returning();
+
+      return mapRow(rows[0]);
+    },
+  );
+}
+
+/**
+ * Forget a custom app definition. Trial-and-error compose pastes pile up in the
+ * Custom tab with no way out (#35).
+ *
+ * The stack has to be uninstalled first: the definition is what redeploys and
+ * updates read from, so dropping it under a running app would strand it.
+ */
+export async function deleteCustomStoreTemplate(appId: string) {
+  return withServerTiming(
+    {
+      layer: "service",
+      action: "store.customApps.delete",
+      meta: { appId },
+    },
+    async () => {
+      if (!(await hasCustomStoreAppsTable())) {
+        throw new Error("Custom app not found");
+      }
+
+      const installed = await findInstalledStackByAppId(appId);
+      if (installed && installed.status !== "not_installed") {
+        throw new Error("Uninstall this app before removing its custom definition");
+      }
+
+      const rows = await db
+        .delete(customStoreApps)
+        .where(eq(customStoreApps.appId, appId))
+        .returning();
+
+      if (rows.length === 0) {
+        throw new Error("Custom app not found");
+      }
 
       return mapRow(rows[0]);
     },
