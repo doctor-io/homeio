@@ -461,6 +461,8 @@ export function buildRestoreShellCommand(backup: SystemBackupSummary) {
   const restoreRoot = path.join("/var/tmp", `homeio-restore-${backup.id}`);
   const restoredDataRootContents = `${path.join(restoreRoot, "data-root")}/.`;
   const restoredExternalStacksRoot = path.join(restoreRoot, "stacks-root");
+  const dumpFile = path.join(restoreRoot, "db", "database.sql");
+  const combinedSqlFile = path.join(restoreRoot, "db", "restore.sql");
   // Kill all existing DB connections before dropping the schema.
   // Needed because Restart=always may have restarted home-server while the
   // restore is still in progress, leaving live pg connections that would
@@ -468,12 +470,30 @@ export function buildRestoreShellCommand(backup: SystemBackupSummary) {
   const terminateConnectionsSql =
     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()";
 
-  const resetPublicSchemaSql = [
-    "DROP SCHEMA IF EXISTS public CASCADE",
-    "CREATE SCHEMA public",
-    "GRANT ALL ON SCHEMA public TO CURRENT_USER",
-    "GRANT ALL ON SCHEMA public TO public",
-  ].join("; ");
+  // `drizzle` holds the migration journal and lives outside `public`, so
+  // resetting only `public` left it standing — and the dump's own
+  // `CREATE SCHEMA drizzle` then failed, aborting the restore 25 lines in with
+  // the database already wiped.
+  const resetSchemasSql = [
+    "DROP SCHEMA IF EXISTS public CASCADE;",
+    "DROP SCHEMA IF EXISTS drizzle CASCADE;",
+    "CREATE SCHEMA public;",
+    "GRANT ALL ON SCHEMA public TO CURRENT_USER;",
+    "GRANT ALL ON SCHEMA public TO public;",
+  ].join("\n");
+
+  // Stored backups live under the data root but are deliberately excluded from
+  // the archive, so wiping the data root wholesale destroyed every backup —
+  // including the one being restored, leaving nothing to retry with.
+  const backupRootRelativeToData = path.relative(dataRoot, resolveManagedBackupRoot());
+  const backupDirName =
+    backupRootRelativeToData &&
+    !backupRootRelativeToData.startsWith("..") &&
+    !path.isAbsolute(backupRootRelativeToData)
+      ? backupRootRelativeToData.split(path.sep)[0]
+      : null;
+  // Nothing to spare when the backups live outside the data root.
+  const keepBackups = backupDirName ? `! -name ${shellEscape(backupDirName)} ` : "";
 
   return [
     `set -Eeuo pipefail`,
@@ -493,15 +513,22 @@ export function buildRestoreShellCommand(backup: SystemBackupSummary) {
     `systemctl mask --runtime home-server.service || true`,
     `if [ -d ${shellEscape(stacksRoot)} ]; then find ${shellEscape(stacksRoot)} -name docker-compose.yml -print0 | while IFS= read -r -d '' compose; do docker compose -f \"$compose\" down || true; done; fi`,
     `tar -xzf ${shellEscape(backup.backupPath)} -C ${shellEscape(restoreRoot)}`,
-    `if [ -d ${shellEscape(dataRoot)} ]; then find ${shellEscape(dataRoot)} -mindepth 1 -maxdepth 1 -exec rm -rf {} +; else mkdir -p ${shellEscape(dataRoot)}; fi`,
+    // Refuse to touch anything until the archive has proven it carries a
+    // database dump. `set -e` sends a failure here to the recovery trap with
+    // the server still intact.
+    `test -s ${shellEscape(dumpFile)}`,
+    `if [ -d ${shellEscape(dataRoot)} ]; then find ${shellEscape(dataRoot)} -mindepth 1 -maxdepth 1 ${keepBackups}-exec rm -rf {} +; else mkdir -p ${shellEscape(dataRoot)}; fi`,
     `mkdir -p ${shellEscape(dataRoot)}`,
     `cp -a ${shellEscape(restoredDataRootContents)} ${shellEscape(`${dataRoot}/`)}`,
     `if [ -d ${shellEscape(restoredExternalStacksRoot)} ]; then rm -rf ${shellEscape(stacksRoot)}; mkdir -p ${shellEscape(path.dirname(stacksRoot))}; cp -a ${shellEscape(restoredExternalStacksRoot)} ${shellEscape(stacksRoot)}; fi`,
     // Terminate any stale DB connections (e.g. from an auto-restarted server)
     // before wiping the schema to avoid "other sessions using the schema" errors.
     `psql ${shellEscape(serverEnv.DATABASE_URL)} -v ON_ERROR_STOP=1 -c ${shellEscape(terminateConnectionsSql)} || true`,
-    `psql ${shellEscape(serverEnv.DATABASE_URL)} -v ON_ERROR_STOP=1 -c ${shellEscape(resetPublicSchemaSql)}`,
-    `psql ${shellEscape(serverEnv.DATABASE_URL)} -v ON_ERROR_STOP=1 -f ${shellEscape(path.join(restoreRoot, "db", "database.sql"))}`,
+    // One transaction: if any statement fails the whole thing rolls back and
+    // the existing database survives. Previously the wipe was committed before
+    // the dump ran, so a failure left nothing behind.
+    `{ printf '%s\n' ${shellEscape(resetSchemasSql)}; cat ${shellEscape(dumpFile)}; } > ${shellEscape(combinedSqlFile)}`,
+    `psql ${shellEscape(serverEnv.DATABASE_URL)} -v ON_ERROR_STOP=1 --single-transaction -f ${shellEscape(combinedSqlFile)}`,
     `rm -rf ${shellEscape(restoreRoot)}`,
     `echo \"[$(date -Is)] Restore complete; rebooting\"`,
     `trap - ERR`,
