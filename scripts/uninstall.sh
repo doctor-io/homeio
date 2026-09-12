@@ -11,14 +11,29 @@ APP_NAME="home-server"
 APP_USER="${HOMEIO_USER:-homeio}"
 APP_GROUP="${HOMEIO_GROUP:-${APP_USER}}"
 INSTALL_DIR="${HOMEIO_INSTALL_DIR:-/opt/home-server}"
-DATA_DIR="${HOMEIO_DATA_DIR:-/var/lib/home-server}"
+# Homeio's own state: the app store registry and the compose stacks. This is
+# NOT /DATA — the user's files, media and backups live there and are never
+# touched by an uninstall. HOMEIO_DATA_DIR is kept as the override name for
+# compatibility with existing scripts.
+STATE_DIR="${HOMEIO_DATA_DIR:-/var/lib/home-server}"
 ENV_DIR="${HOMEIO_ENV_DIR:-/etc/home-server}"
 ENV_FILE="${HOMEIO_ENV_FILE:-${ENV_DIR}/home-server.env}"
 SERVICE_NAME="${HOMEIO_SERVICE_NAME:-home-server}"
 DBUS_SERVICE_NAME="${HOMEIO_DBUS_SERVICE_NAME:-home-server-dbus}"
 NGINX_SITE_NAME="${HOMEIO_NGINX_SITE_NAME:-home-server}"
 
-PURGE="false"
+# Where the user's own files live. Read it back from the install's env rather
+# than assuming /DATA, so the summary names the directory this machine actually
+# uses before the env file is deleted.
+DATA_ROOT_LABEL="/DATA"
+if [[ -r "${ENV_FILE}" ]]; then
+	_app_data_root="$(sed -n 's/^STORE_APP_DATA_ROOT=//p' "${ENV_FILE}" | tail -n 1)"
+	if [[ -n "${_app_data_root}" ]]; then
+		DATA_ROOT_LABEL="$(dirname "${_app_data_root}")"
+	fi
+	unset _app_data_root
+fi
+
 ASSUME_YES="false"
 REMOVE_SYSTEM_USER="false"
 
@@ -79,9 +94,14 @@ usage() {
 	cat <<EOF
 Usage: sudo bash uninstall.sh [options]
 
+Removes Homeio: its services, its files, its PostgreSQL database and role.
+
+Your content is NOT touched. ${DATA_ROOT_LABEL} (AppData, Documents, Media,
+Download, Backups) and every Docker container, image and volume survive.
+To erase those too, use a factory reset from Settings -> Power.
+
 Options:
-  --purge         Remove data, env, and PostgreSQL database/role.
-  --remove-user   Remove system user/group (only with --purge).
+  --remove-user   Also remove the ${APP_USER} system user and group.
   -y, --yes       Do not ask for confirmation.
   -h, --help      Show this help.
 EOF
@@ -90,10 +110,6 @@ EOF
 parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case "${1}" in
-			--purge)
-				PURGE="true"
-				shift
-				;;
 			--remove-user)
 				REMOVE_SYSTEM_USER="true"
 				shift
@@ -112,11 +128,6 @@ parse_args() {
 				;;
 		esac
 	done
-
-	if [[ "${REMOVE_SYSTEM_USER}" == "true" && "${PURGE}" != "true" ]]; then
-		print_error "--remove-user requires --purge."
-		exit 1
-	fi
 }
 
 stop_and_remove_service() {
@@ -182,7 +193,7 @@ remove_app_files() {
 	fi
 }
 
-purge_database() {
+remove_database() {
 	local db_name
 	local db_user
 	db_name="$(get_env_value HOMEIO_DB_NAME "${ENV_FILE}" || true)"
@@ -192,7 +203,7 @@ purge_database() {
 	[[ -n "${db_user}" ]] || db_user="home_server"
 
 	if ! id -u postgres >/dev/null 2>&1; then
-		print_warn "PostgreSQL OS user not found; skipping DB purge."
+		print_warn "PostgreSQL OS user not found; skipping database removal."
 		return
 	fi
 
@@ -207,10 +218,10 @@ WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_user')
 SQL
 }
 
-purge_data_and_env() {
-	if [[ -d "${DATA_DIR}" ]]; then
-		print_status "Removing data directory ${DATA_DIR}..."
-		rm -rf "${DATA_DIR}"
+remove_state_and_env() {
+	if [[ -d "${STATE_DIR}" ]]; then
+		print_status "Removing Homeio state ${STATE_DIR}..."
+		rm -rf "${STATE_DIR}"
 	fi
 
 	if [[ -f "${ENV_FILE}" ]]; then
@@ -241,23 +252,32 @@ remove_system_user_group() {
 
 print_summary() {
 	echo ""
-	if [[ "${PURGE}" == "true" ]]; then
-		echo -e "${GREEN}╭────────────────────────────────────────────────────╮${NC}"
-		echo -e "${GREEN}│         Uninstall Complete (Purge)                │${NC}"
-		echo -e "${GREEN}├────────────────────────────────────────────────────┤${NC}"
-		echo -e "${GREEN}│${NC}  ${APP_NAME} has been completely removed.          ${GREEN}│${NC}"
-		echo -e "${GREEN}│${NC}  All data, database, and configuration deleted.${GREEN}│${NC}"
-		echo -e "${GREEN}╰────────────────────────────────────────────────────╯${NC}"
-	else
-		echo -e "${GREEN}╭────────────────────────────────────────────────────╮${NC}"
-		echo -e "${GREEN}│         Uninstall Complete                        │${NC}"
-		echo -e "${GREEN}├────────────────────────────────────────────────────┤${NC}"
-		echo -e "${GREEN}│${NC}  ${APP_NAME} has been removed.                     ${GREEN}│${NC}"
-		echo -e "${GREEN}│${NC}                                                  ${GREEN}│${NC}"
-		echo -e "${YELLOW}│${NC}  ${YELLOW}Note:${NC} Database and data were preserved.        ${GREEN}│${NC}"
-		echo -e "${GREEN}│${NC}  Run with ${BLUE}--purge${NC} to remove everything.        ${GREEN}│${NC}"
-		echo -e "${GREEN}╰────────────────────────────────────────────────────╯${NC}"
+	echo -e "${GREEN}╭────────────────────────────────────────────────────╮${NC}"
+	echo -e "${GREEN}│         Uninstall Complete                         │${NC}"
+	echo -e "${GREEN}╰────────────────────────────────────────────────────╯${NC}"
+	echo ""
+	echo -e "${BLUE}Removed:${NC}"
+	echo "  * Services: ${SERVICE_UNIT}, ${DBUS_SERVICE_UNIT}"
+	echo "  * Application: ${INSTALL_DIR}"
+	echo "  * Homeio state: ${STATE_DIR}"
+	echo "  * Configuration: ${ENV_FILE}"
+	echo "  * PostgreSQL database and role"
+	if [[ "${REMOVE_SYSTEM_USER}" == "true" ]]; then
+		echo "  * System user and group: ${APP_USER}"
 	fi
+	echo ""
+	# Saying this out loud matters: the old summary claimed everything was gone
+	# while the bulk of what people call their data was still on disk, so a
+	# reinstall kept finding old files and nobody knew why.
+	echo -e "${YELLOW}Kept:${NC}"
+	echo "  * ${DATA_ROOT_LABEL} — AppData, Documents, Media, Download, Backups"
+	echo "  * Docker containers, images and volumes"
+	if [[ "${REMOVE_SYSTEM_USER}" != "true" ]]; then
+		echo "  * System user ${APP_USER} (remove it with --remove-user)"
+	fi
+	echo ""
+	echo -e "  To erase those as well, run a factory reset from Settings -> Power"
+	echo -e "  before uninstalling, or delete ${DATA_ROOT_LABEL} by hand."
 	echo ""
 }
 
@@ -265,12 +285,7 @@ main() {
 	parse_args "$@"
 	require_root
 
-	local mode="without purge"
-	if [[ "${PURGE}" == "true" ]]; then
-		mode="with purge"
-	fi
-
-	if ! confirm "Uninstall ${APP_NAME} (${mode})?"; then
+	if ! confirm "Uninstall ${APP_NAME} and drop its database? (${DATA_ROOT_LABEL} is kept)"; then
 		print_warn "Cancelled."
 		exit 0
 	fi
@@ -278,12 +293,9 @@ main() {
 	stop_and_remove_service
 	remove_reverse_proxy
 	remove_app_files
-
-	if [[ "${PURGE}" == "true" ]]; then
-		purge_database
-		purge_data_and_env
-		remove_system_user_group
-	fi
+	remove_database
+	remove_state_and_env
+	remove_system_user_group
 
 	print_summary
 }

@@ -142,17 +142,17 @@ The app listens on `127.0.0.1:12026` and is exposed on `:80` via Nginx.
 curl -fsSL https://raw.githubusercontent.com/doctor-io/homeio/main/scripts/update.sh | sudo bash
 ```
 
-**Uninstall** (keeps data):
+**Uninstall** — removes the services, the application, its database and its
+configuration. Your files under `/DATA` (AppData, Documents, Media, Download,
+Backups) and your Docker containers, images and volumes are kept:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/doctor-io/homeio/main/scripts/uninstall.sh | sudo bash
 ```
 
-**Full purge** (removes everything):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/doctor-io/homeio/main/scripts/uninstall.sh | sudo bash -s -- --purge --yes
-```
+To erase your content as well, run a factory reset from **Settings → Power**
+before uninstalling: it wipes `/DATA`, the Docker state and the tailnet
+registration, then reboots into a clean install.
 
 ---
 

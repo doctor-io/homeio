@@ -137,6 +137,9 @@ describe("power-service", () => {
     expect(envMap.DATABASE_URL).toBe(serverEnvMock.DATABASE_URL);
     expect(envMap.HOMEIO_RESET_DATA_ROOT).toBe("/DATA");
     expect(envMap.HOMEIO_RESET_STACKS_ROOT).toBe("/DATA/Apps");
+    // The store registry sits outside the data root on a real install, so a
+    // reset that only wiped /DATA left every catalog the user had added.
+    expect(envMap.HOMEIO_RESET_STORE_CONFIG_ROOT).toBe("/DATA/AppStore");
     expect(envMap.HOMEIO_RESET_WORKDIR).toBeTruthy();
     expect(envMap.HOMEIO_RESET_NPM_BIN).toBeTruthy();
 

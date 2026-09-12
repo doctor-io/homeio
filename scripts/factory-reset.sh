@@ -9,6 +9,7 @@
 #   DATABASE_URL                PostgreSQL connection string
 #   HOMEIO_RESET_DATA_ROOT      Path to the data root directory  (e.g. /DATA)
 #   HOMEIO_RESET_STACKS_ROOT    Path to the Docker Compose stacks root
+#   HOMEIO_RESET_STORE_CONFIG_ROOT  Path to the app store registry directory
 #   HOMEIO_RESET_WORKDIR        Working directory of the Homeio application
 #   HOMEIO_RESET_NPM_BIN        Absolute path to the npm binary
 #
@@ -33,6 +34,7 @@ echo "[$(date -Is)] Starting Homeio factory reset"
 : "${DATABASE_URL:?DATABASE_URL is required}"
 : "${HOMEIO_RESET_DATA_ROOT:?HOMEIO_RESET_DATA_ROOT is required}"
 : "${HOMEIO_RESET_STACKS_ROOT:?HOMEIO_RESET_STACKS_ROOT is required}"
+: "${HOMEIO_RESET_STORE_CONFIG_ROOT:?HOMEIO_RESET_STORE_CONFIG_ROOT is required}"
 : "${HOMEIO_RESET_WORKDIR:?HOMEIO_RESET_WORKDIR is required}"
 : "${HOMEIO_RESET_NPM_BIN:?HOMEIO_RESET_NPM_BIN is required}"
 
@@ -55,6 +57,13 @@ echo "[$(date -Is)] Resetting database"
 # Removing it explicitly ensures no orphaned compose files survive the wipe.
 rm -rf "${HOMEIO_RESET_STACKS_ROOT}" || true
 
+# ── Step 3b: Remove the app store registry ────────────────────────────────────
+# The registry (added catalog sources and their checkouts) lives beside the
+# stacks rather than under the data root, so wiping the data root left every
+# store the user had added standing — a "factory" install that still knew about
+# third-party catalogs.
+rm -rf "${HOMEIO_RESET_STORE_CONFIG_ROOT}" || true
+
 # ── Step 4: Docker cleanup ────────────────────────────────────────────────────
 if command -v docker >/dev/null 2>&1; then
   docker ps -aq | xargs -r docker rm -f                                    || true
@@ -65,6 +74,17 @@ if command -v docker >/dev/null 2>&1; then
   docker images -aq | sort -u | xargs -r docker rmi -f                     || true
   docker builder prune -af                                                  || true
   docker system prune -af --volumes                                         || true
+fi
+
+# ── Step 4b: Leave the tailnet ────────────────────────────────────────────────
+# Tailscale is a host package, so no amount of Docker or data-root cleanup
+# touches it: without this the reset machine comes back up still registered on
+# the owner's tailnet, holding the node key it had before. The package itself is
+# left installed — removing it is distro-specific and reinstalling is one click.
+if command -v tailscale >/dev/null 2>&1; then
+  tailscale logout                                                          || true
+  systemctl disable --now tailscaled                                        || true
+  rm -rf /var/lib/tailscale                                                 || true
 fi
 
 # ── Step 5: Wipe data root ────────────────────────────────────────────────────

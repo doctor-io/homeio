@@ -5,6 +5,7 @@ import { rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
+import { resolveStoreConfigDirectory } from "@/lib/server/modules/store/catalog-config";
 import {
   resolveDataRootDirectory,
   resolveStoreStacksRoot,
@@ -96,6 +97,7 @@ export async function scheduleFactoryReset() {
 
   const dataRoot = resolveDataRootDirectory();
   const stacksRoot = resolveStoreStacksRoot();
+  const storeConfigRoot = resolveStoreConfigDirectory();
   const workdir = process.cwd();
 
   // Resolve the npm binary at schedule time so the script never relies on PATH
@@ -111,6 +113,7 @@ export async function scheduleFactoryReset() {
       DATABASE_URL: serverEnv.DATABASE_URL,
       HOMEIO_RESET_DATA_ROOT: dataRoot,
       HOMEIO_RESET_STACKS_ROOT: stacksRoot,
+      HOMEIO_RESET_STORE_CONFIG_ROOT: storeConfigRoot,
       HOMEIO_RESET_WORKDIR: workdir,
       HOMEIO_RESET_NPM_BIN: npmBin,
     },
