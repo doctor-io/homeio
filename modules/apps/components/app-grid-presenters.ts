@@ -6,6 +6,7 @@ import type {
   StoreOperationAction,
   StoreOperationStatus,
 } from "@/lib/shared/contracts/apps";
+import type { UnmanagedContainer } from "@/lib/shared/contracts/docker";
 import {
   AlertTriangle,
   BarChart3,
@@ -40,7 +41,9 @@ export type AppGridStatus =
   | "paused"
   | "stopped"
   | "unknown"
-  | "updating";
+  | "updating"
+  /** Running on this host, but not deployed by Homeio. */
+  | "unmanaged";
 
 export type AppItem = {
   id: string;
@@ -52,6 +55,7 @@ export type AppItem = {
   status: AppGridStatus;
   category: string;
   webUiPort: number | null;
+  webUiUrl: string | null;
   containerName: string | null;
   updateAvailable: boolean;
 };
@@ -165,6 +169,18 @@ export function pickVisual(appName: string, appId: string) {
 
 export function resolveAppActionTarget(app: AppItem): AppActionTarget {
   const fallbackContainerName = app.containerName?.trim() ?? "";
+  const customUrl = app.webUiUrl?.trim() ?? "";
+
+  // An operator-set link wins: the automatic one is built from the browser's
+  // own location, which is wrong behind a reverse proxy or tunnel.
+  if (customUrl.length > 0) {
+    return {
+      appId: app.id,
+      appName: app.name,
+      dashboardUrl: customUrl,
+      containerName: fallbackContainerName,
+    };
+  }
 
   if (app.webUiPort !== null) {
     const protocol =
@@ -253,6 +269,20 @@ export function getAppVisualState(app: AppItem) {
     };
   }
 
+  if (app.status === "unmanaged") {
+    return {
+      containerClass: "",
+      imageClass: "opacity-70 grayscale",
+      dotClass: "bg-muted-foreground/50",
+      dotInnerClass: "",
+      ringClass: "border-muted-foreground/25",
+      badgeIcon: null,
+      badgeClass: "",
+      badgeIconClass: "",
+      title: "Not managed by Homeio",
+    };
+  }
+
   if (app.status === "stopped" || app.status === "unknown") {
     return {
       containerClass: "animate-pulse shadow-status-red/10",
@@ -278,6 +308,29 @@ export function getAppVisualState(app: AppItem) {
     badgeIconClass: "",
     title: "Running",
   };
+}
+
+export function buildUnmanagedAppItems(
+  containers: UnmanagedContainer[],
+): AppItem[] {
+  return containers.map((container) => {
+    const visual = pickVisual(container.name, container.id);
+
+    return {
+      id: `container:${container.id}`,
+      name: container.name,
+      icon: visual.icon,
+      logoUrl: null,
+      color: visual.color,
+      bgColor: visual.bgColor,
+      status: "unmanaged" as const,
+      category: "Containers",
+      webUiPort: null,
+      webUiUrl: null,
+      containerName: container.name,
+      updateAvailable: false,
+    } satisfies AppItem;
+  });
 }
 
 export function buildAppItems(params: {
@@ -341,6 +394,7 @@ export function buildAppItems(params: {
         status: derivedStatus,
         category: catalog?.categories[0] ?? visual.category,
         webUiPort: installed?.webUiPort ?? null,
+        webUiUrl: installed?.webUiUrl ?? null,
         containerName: installed?.containerName ?? null,
         updateAvailable: catalog?.updateAvailable ?? false,
       } satisfies AppItem;

@@ -22,6 +22,13 @@ const settingsSchema = z.object({
     .optional(),
   env: z.record(z.string(), z.string()).optional(),
   webUiPort: z.number().int().min(1024).max(65535).optional(),
+  webUiUrl: z
+    .string()
+    .trim()
+    .url("webUiUrl must be a valid URL")
+    .max(500)
+    .nullable()
+    .optional(),
   composeSource: z.string().trim().min(1).max(500_000).optional(),
 });
 
@@ -52,6 +59,7 @@ export async function PATCH(request: Request, context: Context) {
           hasEnv: parsed.success ? parsed.data.env !== undefined : false,
           envKeyCount: parsed.success ? Object.keys(parsed.data.env ?? {}).length : 0,
           hasWebUiPort: parsed.success ? parsed.data.webUiPort !== undefined : false,
+          hasWebUiUrl: parsed.success ? parsed.data.webUiUrl !== undefined : false,
           hasComposeSource: parsed.success ? parsed.data.composeSource !== undefined : false,
           invalidPayload: !parsed.success,
         },

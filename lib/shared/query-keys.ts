@@ -38,6 +38,9 @@ export const queryKeys = {
   googleOAuthConfig: ["google-oauth", "config"] as const,
   tailscaleConfig: ["tailscale", "config"] as const,
   tailscaleStatus: ["tailscale", "status"] as const,
+  cloudflareTunnelConfig: ["cloudflare-tunnel", "config"] as const,
+  cloudflareTunnelExposures: ["cloudflare-tunnel", "exposures"] as const,
+  cloudflareTunnelStatus: ["cloudflare-tunnel", "status"] as const,
   googleDriveConnections: ["google-drive", "connections"] as const,
   googleDriveBrowse: (connectionId: string, folderId: string) =>
     ["google-drive", "browse", connectionId, folderId] as const,

@@ -57,17 +57,19 @@ confirm() {
 		return 0
 	fi
 
-	# Check if we have a terminal to read from
-	if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
-		# stdin is not a terminal (e.g., piped script), use /dev/tty
-		read -r -p "${message} [y/N]: " reply </dev/tty
-	elif [[ ! -t 0 ]]; then
-		# No terminal available and script is piped - require --yes flag
-		print_error "Script is running non-interactively. Use --yes flag to proceed without confirmation."
-		exit 1
-	else
+	local reply=""
+
+	if [[ -t 0 ]]; then
 		# Normal interactive mode
 		read -r -p "${message} [y/N]: " reply
+	elif read -r -p "${message} [y/N]: " reply 2>/dev/null </dev/tty; then
+		# stdin is a pipe (curl ... | bash) but a terminal is still attached
+		:
+	else
+		# Piped with no usable terminal: /dev/tty can exist yet not be openable,
+		# as over a non-interactive ssh, so this is decided by trying it.
+		print_error "Script is running non-interactively. Use --yes flag to proceed without confirmation."
+		exit 1
 	fi
 
 	[[ "${reply}" == "y" || "${reply}" == "Y" ]]
@@ -157,18 +159,30 @@ remove_reverse_proxy() {
 	local default_available="/etc/nginx/sites-available/default"
 	local default_enabled="/etc/nginx/sites-enabled/default"
 
+	local removed_site="false"
+
 	if [[ -f "${nginx_conf}" || -L "${nginx_enabled}" ]]; then
 		print_status "Removing nginx site ${NGINX_SITE_NAME}..."
 		rm -f "${nginx_enabled}" >/dev/null 2>&1 || true
 		rm -f "${nginx_conf}" >/dev/null 2>&1 || true
+		removed_site="true"
 	fi
 
-	if [[ -f "${default_available}" && ! -e "${default_enabled}" ]]; then
+	# Only hand port 80 back to the default site if this run actually took it
+	# away. The restore used to be unconditional, so running the script against
+	# a site name that was not installed still enabled Debian's default vhost —
+	# and since that vhost listens with `default_server` while Homeio's listens
+	# on a plain `listen 80`, nginx started answering every request by IP with
+	# the "Welcome to nginx!" page and logged Homeio's block as a conflicting
+	# server name it was ignoring.
+	if [[ "${removed_site}" == "true" && -f "${default_available}" && ! -e "${default_enabled}" ]]; then
 		print_status "Restoring nginx default site..."
 		ln -sf "${default_available}" "${default_enabled}"
 	fi
 
-	nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+	if [[ "${removed_site}" == "true" ]]; then
+		nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+	fi
 }
 
 remove_app_files() {

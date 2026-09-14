@@ -3,6 +3,7 @@
 import {
   buildActiveAppOperations,
   buildAppItems,
+  buildUnmanagedAppItems,
   requireAppActionTarget,
   resolveAppActionTarget,
   type AppActionTarget,
@@ -12,6 +13,7 @@ import {
 import { useInstalledApps } from "@/modules/apps/hooks/useInstalledApps";
 import { useSharedStoreActions } from "@/modules/apps/hooks/StoreActionsContext";
 import { useStoreCatalog } from "@/modules/apps/hooks/useStoreCatalog";
+import { useUnmanagedContainers } from "@/modules/apps/hooks/useUnmanagedContainers";
 import { useEffect, useMemo, useState } from "react";
 import { isStoreOperationActiveStatus } from "@/lib/shared/store-operations";
 import { toast } from "sonner";
@@ -44,6 +46,7 @@ export function useAppGridController({
   onViewLogs,
 }: UseAppGridControllerOptions) {
   const installedAppsQuery = useInstalledApps();
+  const unmanagedContainersQuery = useUnmanagedContainers();
   const installedCatalogQuery = useStoreCatalog({
     installedOnly: true,
   });
@@ -78,15 +81,29 @@ export function useAppGridController({
     [installedAppsQuery.data],
   );
 
+  const unmanagedContainers = useMemo(
+    () => unmanagedContainersQuery.data ?? [],
+    [unmanagedContainersQuery.data],
+  );
+
   const apps = useMemo(
-    () =>
-      buildAppItems({
+    () => [
+      ...buildAppItems({
         installedApps,
         installedCatalogApps,
         operationsByApp,
         statusByAppId,
       }),
-    [installedApps, installedCatalogApps, operationsByApp, statusByAppId],
+      // Appended, so Homeio's own apps keep the front of the grid.
+      ...buildUnmanagedAppItems(unmanagedContainers),
+    ],
+    [
+      installedApps,
+      installedCatalogApps,
+      operationsByApp,
+      statusByAppId,
+      unmanagedContainers,
+    ],
   );
 
   const activeOperations = useMemo(

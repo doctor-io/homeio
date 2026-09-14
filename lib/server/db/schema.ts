@@ -60,6 +60,9 @@ export const appStacks = pgTable(
     composePath: text("compose_path").notNull(),
     status: text("status").notNull().default("not_installed"),
     webUiPort: integer("web_ui_port"),
+    webUiUrl: text("web_ui_url"),
+    /** Subdomain this app is published under when the tunnel is enabled. */
+    tunnelSubdomain: text("tunnel_subdomain"),
     envJson: jsonb("env_json").notNull().default({}),
     displayName: text("display_name"),
     iconUrl: text("icon_url"),
@@ -213,6 +216,14 @@ export const settings = pgTable("settings", {
   tailscaleApiKeyCiphertext: text("tailscale_api_key_ciphertext"),
   tailscaleApiKeyIv: text("tailscale_api_key_iv"),
   tailscaleApiKeyTag: text("tailscale_api_key_tag"),
+  cloudflareTunnelEnabled: boolean("cloudflare_tunnel_enabled").notNull().default(false),
+  cloudflareTunnelDomain: text("cloudflare_tunnel_domain"),
+  cloudflareTunnelTokenCiphertext: text("cloudflare_tunnel_token_ciphertext"),
+  cloudflareTunnelTokenIv: text("cloudflare_tunnel_token_iv"),
+  cloudflareTunnelTokenTag: text("cloudflare_tunnel_token_tag"),
+  cloudflareApiTokenCiphertext: text("cloudflare_api_token_ciphertext"),
+  cloudflareApiTokenIv: text("cloudflare_api_token_iv"),
+  cloudflareApiTokenTag: text("cloudflare_api_token_tag"),
 });
 
 export const filesGoogleDriveTokens = pgTable(

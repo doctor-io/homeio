@@ -189,6 +189,7 @@ export type SystemBackupSummary = {
   dbDumpIncluded: boolean;
   dataRootIncluded: boolean;
   stacksRootIncluded: boolean;
+  storeConfigIncluded: boolean;
   status: "completed" | "failed";
 };
 

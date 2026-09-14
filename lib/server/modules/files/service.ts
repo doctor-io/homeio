@@ -13,7 +13,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -1503,6 +1504,64 @@ export async function unzipEntry(params: UnzipEntryParams): Promise<FileUnzipRes
       const parentAbsolutePath = path.dirname(resolved.absolutePath);
       const destinationPath =
         resolved.segments.length > 1 ? resolved.segments.slice(0, -1).join("/") : "";
+
+      const execFileAsync = promisify(execFile);
+
+      // Pre-inspection: Ensure archive contains no symlinks, absolute paths, or Zip Slip path traversals
+      try {
+        const { stdout: zipList } = await execFileAsync("unzip", ["-Z", "-1", resolved.absolutePath]);
+        const entries = zipList.split("\n");
+        for (const entry of entries) {
+          const trimmed = entry.trim();
+          if (!trimmed) continue;
+          if (
+            trimmed.startsWith("/") ||
+            trimmed.startsWith("\\") ||
+            trimmed.includes("\0") ||
+            /^[a-zA-Z]:/.test(trimmed)
+          ) {
+            throw new FileServiceError("Zip archive contains invalid paths", {
+              code: "invalid_path",
+              statusCode: 400,
+            });
+          }
+          const segments = trimmed.split(/[/\\]/);
+          if (segments.includes("..")) {
+            throw new FileServiceError("Zip archive contains path traversal entries", {
+              code: "invalid_path",
+              statusCode: 400,
+            });
+          }
+          const candidatePath = path.resolve(parentAbsolutePath, trimmed);
+          const relative = path.relative(parentAbsolutePath, candidatePath);
+          if (relative !== "" && (relative.startsWith("..") || path.isAbsolute(relative))) {
+            throw new FileServiceError("Zip archive entries escape destination directory", {
+              code: "path_outside_root",
+              statusCode: 400,
+            });
+          }
+        }
+
+        // Check for symbolic links in zip details
+        const { stdout: zipDetails } = await execFileAsync("unzip", ["-Z", resolved.absolutePath]);
+        for (const line of zipDetails.split("\n")) {
+          const lineTrimmed = line.trim();
+          if (!lineTrimmed) continue;
+          if (lineTrimmed.startsWith("l")) {
+            throw new FileServiceError("Zip archive contains symbolic links", {
+              code: "symlink_blocked",
+              statusCode: 403,
+            });
+          }
+        }
+      } catch (err) {
+        if (err instanceof FileServiceError) throw err;
+        throw new FileServiceError("Failed to inspect zip archive", {
+          code: "internal_error",
+          statusCode: 500,
+          cause: err,
+        });
+      }
 
       await new Promise<void>((resolve, reject) => {
         const proc = spawn("unzip", ["-o", resolved.absolutePath, "-d", parentAbsolutePath]);

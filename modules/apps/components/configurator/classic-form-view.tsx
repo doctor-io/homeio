@@ -153,6 +153,20 @@ export function ClassicFormView({
           </div>
         </Field>
 
+        <Field label="Link">
+          <Input
+            ariaLabel="Custom link"
+            value={state.webUiLink}
+            onChange={(value) => update({ webUiLink: value })}
+            placeholder="https://myapp.example.com"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Where the Open button sends you. Leave empty to use this server&apos;s
+            address. Set it when the app is published through a tunnel or reverse
+            proxy.
+          </p>
+        </Field>
+
         <Field label="Network">
           <Select
             ariaLabel="Network"

@@ -3,6 +3,7 @@ import "server-only";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
 import type {
@@ -141,13 +142,41 @@ function shellEscape(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
+export function isContainerRuntime(): boolean {
+  if (process.env.HOMEIO_CONTAINER === "true" || process.env.DOCKER === "true") {
+    return true;
+  }
+  try {
+    if (existsSync("/.dockerenv")) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 export async function scheduleSystemUpdate(): Promise<SystemUpdateApplyAcceptedResponse> {
+  if (isContainerRuntime()) {
+    throw new Error(
+      "Homeio is running in a Docker container. In-app self-update via systemd is disabled. Please update your container using: docker compose pull && docker compose up -d",
+    );
+  }
+
   const updateScriptPath = path.join(process.cwd(), "scripts", "update.sh");
 
   try {
     await stat(updateScriptPath);
   } catch {
     throw new Error(`Update script not found at ${updateScriptPath}. Cannot schedule Homeio update.`);
+  }
+
+  try {
+    await execFileAsync("which", ["systemd-run"]);
+  } catch {
+    throw new Error(
+      "systemd-run is not available on this host. Automated in-app update requires systemd. Please update Homeio manually or via git pull.",
+    );
   }
 
   // Guard against concurrent updates. Two simultaneous update runs would race

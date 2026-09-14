@@ -32,6 +32,7 @@ describe("POST /api/v1/system/backups/run", () => {
       dbDumpIncluded: true,
       dataRootIncluded: true,
       stacksRootIncluded: true,
+      storeConfigIncluded: true,
       status: "completed",
     });
 

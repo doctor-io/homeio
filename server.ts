@@ -6,7 +6,7 @@ import { closeServerGracefully } from "./lib/server/http/graceful-shutdown";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname =
-  process.env.HOMEIO_HTTP_HOST || (dev ? "localhost" : "127.0.0.1");
+  process.env.HOMEIO_HTTP_HOST || (dev ? "localhost" : "0.0.0.0");
 const port = parseInt(process.env.HOMEIO_HTTP_PORT || process.env.PORT || "3000", 10);
 
 const app = next({ dev, hostname, port, turbopack: false });

@@ -43,6 +43,21 @@ const STORE_SECTION_LIMIT = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Prefer the link the operator saved. The automatic one is built from the
+ * browser's own location, which is wrong behind a reverse proxy or tunnel.
+ */
+function resolveStoreDetailUrl(detail: StoreAppDetail) {
+  const customUrl = detail.installedConfig?.webUiUrl?.trim() ?? "";
+  if (customUrl.length > 0) return customUrl;
+
+  if (!detail.webUiPort) return null;
+
+  const protocol = typeof window !== "undefined" ? window.location.protocol : "http:";
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  return `${protocol}//${hostname}:${detail.webUiPort}`;
+}
+
 function isOperationBusy(op: AppOperationState | undefined) {
   return Boolean(op && isStoreOperationActiveStatus(op.status));
 }
@@ -359,6 +374,8 @@ function AppStoreDetailPanel({
   onRedeploy,
   onUninstall,
   onCustomInstall,
+  onRemoveCustom,
+  removingCustom,
 }: {
   app: StoreAppSummary | null;
   detail: StoreAppDetail | null | undefined;
@@ -371,6 +388,8 @@ function AppStoreDetailPanel({
   onRedeploy: () => void;
   onUninstall: () => void;
   onCustomInstall: () => void;
+  onRemoveCustom: () => void;
+  removingCustom: boolean;
 }) {
   const busy = isOperationBusy(operation);
 
@@ -459,9 +478,9 @@ function AppStoreDetailPanel({
                       <ArrowUpCircle className="size-3.5" /> Update
                     </button>
                   </UpdateInfoTooltip>
-                ) : detail.webUiPort ? (
+                ) : resolveStoreDetailUrl(detail) ? (
                   <a
-                    href={`http://${typeof window !== "undefined" ? window.location.hostname : "localhost"}:${detail.webUiPort}`}
+                    href={resolveStoreDetailUrl(detail) ?? undefined}
                     target="_blank"
                     rel="noreferrer"
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-all hover:brightness-110"
@@ -477,6 +496,17 @@ function AppStoreDetailPanel({
                 >
                   <Wrench className="size-3.5" /> Custom
                 </button>
+
+                {detail.sourceKind === "custom" && detail.status === "not_installed" && (
+                  <button
+                    onClick={onRemoveCustom}
+                    disabled={busy || removingCustom}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-status-red/30 bg-status-red/8 px-3 py-2 text-xs font-medium text-status-red transition-colors hover:bg-status-red/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 className="size-3.5" />
+                    {removingCustom ? "Removing…" : "Remove"}
+                  </button>
+                )}
 
                 {detail.status !== "not_installed" && (
                   <button
@@ -680,6 +710,36 @@ export function AppStore({
     }
   }
 
+  const [removingCustom, setRemovingCustom] = useState(false);
+
+  async function removeCustomApp() {
+    if (!selectedSummary) return;
+    setActionError(null);
+    setRemovingCustom(true);
+
+    try {
+      const response = await fetch(
+        `/api/v1/store/custom-apps/${encodeURIComponent(selectedSummary.id)}`,
+        { method: "DELETE" },
+      );
+
+      if (!response.ok) {
+        const json = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(json.error ?? `Failed to remove the custom app (${response.status})`);
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.storeCatalog }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.installedApps }),
+      ]);
+      setSelectedAppId(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Failed to remove the custom app");
+    } finally {
+      setRemovingCustom(false);
+    }
+  }
+
   async function submitDetailAction(action: "install" | "update" | "redeploy" | "uninstall") {
     if (!selectedSummary || !selectedDetail) return;
     setActionError(null);
@@ -734,6 +794,8 @@ export function AppStore({
           onRedeploy={() => void submitDetailAction("redeploy")}
           onUninstall={() => void submitDetailAction("uninstall")}
           onCustomInstall={() => { if (selectedDetail) setCustomInstallTemplate(selectedDetail); }}
+          onRemoveCustom={() => void removeCustomApp()}
+          removingCustom={removingCustom}
         />
         {customInstallTemplate && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">

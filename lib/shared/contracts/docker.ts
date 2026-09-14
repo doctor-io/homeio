@@ -40,3 +40,15 @@ export type DockerInfo = {
 export type DockerInfoResponse = {
   data: DockerInfo;
 };
+
+/** A container running on this host that Homeio did not deploy. */
+export type UnmanagedContainer = {
+  id: string;
+  name: string;
+  image: string;
+  /** Docker's own state: running, exited, paused, restarting, ... */
+  state: string;
+  /** Docker's human status line, e.g. "Up 3 days". */
+  status: string;
+  composeProject: string | null;
+};

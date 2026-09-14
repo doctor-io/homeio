@@ -29,7 +29,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN apk add --no-cache git && \
+# docker-cli / docker-cli-compose: the app shells out to `docker compose` to
+# install and run every app. su-exec: the entrypoint starts as root to line the
+# app user up with the Docker socket group, then drops back down.
+RUN apk add --no-cache git unzip docker-cli docker-cli-compose su-exec && \
     addgroup --system --gid 1001 homeio && \
     adduser --system --uid 1001 homeio && \
     mkdir -p /DATA && \
@@ -57,11 +60,12 @@ COPY --from=builder --chown=homeio:homeio /app/lib/server/db/schema.ts ./lib/ser
 COPY --chown=homeio:homeio docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 
-USER homeio
+# Deliberately root: the entrypoint needs it to join the socket's group, and it
+# drops to the homeio user before starting the app.
 
-EXPOSE 12026
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
-  CMD wget -qO- http://localhost:12026/api/health || exit 1
+  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 CMD ["sh", "docker-entrypoint.sh"]

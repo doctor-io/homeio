@@ -12,6 +12,13 @@ async function fetchNotifications(): Promise<NotificationRecord[]> {
   return data.notifications;
 }
 
+function sortByNewest(records: NotificationRecord[]) {
+  return [...records].sort(
+    (left, right) =>
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+  );
+}
+
 export function useNotifications() {
   const queryClient = useQueryClient();
 
@@ -30,7 +37,10 @@ export function useNotifications() {
         if (payload.type !== "notification.created") return;
         queryClient.setQueryData<NotificationRecord[]>(queryKeys.notifications, (prev = []) => {
           const next = [payload.notification, ...prev.filter((n) => n.id !== payload.notification.id)];
-          return next.slice(0, 50);
+          // Sort rather than assume the event that just arrived is the newest:
+          // several producers emit these, and delivery order does not have to
+          // match createdAt. Trim only once the order is right.
+          return sortByNewest(next).slice(0, 50);
         });
       } catch {
         // ignore parse errors

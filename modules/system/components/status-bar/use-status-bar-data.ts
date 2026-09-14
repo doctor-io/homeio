@@ -10,6 +10,35 @@ import { useSystemMetrics } from "@/modules/system/hooks/useSystemMetrics";
 import { formatRelativeTime, safePercent } from "@/modules/system/components/status-bar/utils";
 import { useStatusNotifications } from "@/modules/system/components/status-bar/use-status-notifications";
 import { useNotifications } from "@/modules/system/hooks/useNotifications";
+import type { Notification } from "@/modules/system/components/status-bar/types";
+import type { NotificationRecord } from "@/lib/shared/contracts/notifications";
+
+const MAX_MERGED_NOTIFICATIONS = 20;
+
+/**
+ * Persisted notifications and the client-side status ones are each ordered on
+ * their own. Concatenating them produced two sorted runs end to end — app
+ * events from yesterday sitting above a snapshot from minutes ago — so the
+ * join has to be ordered too, not just the parts.
+ */
+export function mergeNotifications(
+  persistent: NotificationRecord[],
+  ephemeral: Notification[],
+): Notification[] {
+  const persistentIds = new Set(persistent.map((item) => item.id));
+  const persistentMapped = persistent.map((item) => ({
+    id: item.id,
+    title: item.title,
+    message: item.body,
+    time: formatRelativeTime(item.createdAt),
+    createdAt: item.createdAt,
+    read: item.read,
+  }));
+
+  return [...persistentMapped, ...ephemeral.filter((item) => !persistentIds.has(item.id))]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, MAX_MERGED_NOTIFICATIONS);
+}
 
 export function useStatusBarData() {
   const { data: metrics, isError: isMetricsError } = useSystemMetrics();
@@ -65,18 +94,10 @@ export function useStatusBarData() {
     preferences: notificationPreferences,
   });
 
-  const mergedNotifications = useMemo(() => {
-    const persistentIds = new Set(persistentNotifications.map((n) => n.id));
-    const persistentMapped = persistentNotifications.map((n) => ({
-      id: n.id,
-      title: n.title,
-      message: n.body,
-      time: formatRelativeTime(n.createdAt),
-      read: n.read,
-    }));
-    const ephemeralOnly = ephemeralNotifications.filter((n) => !persistentIds.has(n.id));
-    return [...persistentMapped, ...ephemeralOnly].slice(0, 20);
-  }, [persistentNotifications, ephemeralNotifications]);
+  const mergedNotifications = useMemo(
+    () => mergeNotifications(persistentNotifications, ephemeralNotifications),
+    [persistentNotifications, ephemeralNotifications],
+  );
 
   const mergedUnreadCount = persistentUnreadCount + ephemeralUnreadCount;
 

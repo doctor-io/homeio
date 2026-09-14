@@ -256,6 +256,13 @@ export function AppearanceSection({
               key={wallpaper.id}
               type="button"
               title={wallpaper.name}
+              // The desktop waits for the image before it fades, so warming it
+              // on hover turns the click from "nothing happened" into instant.
+              onMouseEnter={() => {
+                const warm = new Image();
+                warm.decoding = "async";
+                warm.src = wallpaper.src;
+              }}
               onClick={() => onAppearanceChange({ wallpaper: wallpaper.src })}
               className={cn(
                 "relative h-14 w-24 shrink-0 overflow-hidden rounded-xl border-2 transition-all cursor-pointer",

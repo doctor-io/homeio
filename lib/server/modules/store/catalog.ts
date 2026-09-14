@@ -17,11 +17,11 @@ import {
 } from "@/lib/server/modules/store/casaos-compose-mapper";
 import {
   OFFICIAL_STORE_SOURCE_ID,
+  mutateStoreCatalogSources,
   readStoreCatalogConfig,
   readStoreCatalogSources,
   resolveStoreCatalogsRoot,
   writeStoreCatalogConfig,
-  writeStoreCatalogSources,
 } from "@/lib/server/modules/store/catalog-config";
 import type {
   StoreCatalogSource,
@@ -437,15 +437,18 @@ async function updateStoredSource(
   sourceId: string,
   updater: (source: StoreCatalogSource) => StoreCatalogSource,
 ) {
-  const sources = await readStoreCatalogSources();
-  const source = sources.find((entry) => entry.id === sourceId);
-  if (!source) {
-    throw new Error("Store source not found");
-  }
+  return mutateStoreCatalogSources((sources) => {
+    const source = sources.find((entry) => entry.id === sourceId);
+    if (!source) {
+      throw new Error("Store source not found");
+    }
 
-  const nextSources = sources.map((entry) => (entry.id === sourceId ? updater(entry) : entry));
-  await writeStoreCatalogSources(nextSources);
-  return nextSources.find((entry) => entry.id === sourceId)!;
+    const updated = updater(source);
+    return {
+      sources: sources.map((entry) => (entry.id === sourceId ? updated : entry)),
+      result: updated,
+    };
+  });
 }
 
 async function loadEnabledSourceSnapshots(options?: { bypassCache?: boolean }) {
@@ -638,11 +641,6 @@ export async function addStoreCatalogSource(input: { url: string; name?: string 
         throw new Error("Store source must use https");
       }
 
-      const sources = await readStoreCatalogSources();
-      if (sources.some((source) => source.url === input.url)) {
-        throw new Error("Store source already exists");
-      }
-
       const sourceId = randomUUID();
       const now = new Date().toISOString();
       const source: StoreCatalogSource = {
@@ -660,7 +658,14 @@ export async function addStoreCatalogSource(input: { url: string; name?: string 
         lastError: null,
       };
 
-      await writeStoreCatalogSources([...sources, source]);
+      await mutateStoreCatalogSources((sources) => {
+        if (sources.some((entry) => entry.url === input.url)) {
+          throw new Error("Store source already exists");
+        }
+
+        return { sources: [...sources, source], result: undefined };
+      });
+
       return refreshStoreCatalogSource(sourceId);
     },
   );
@@ -756,14 +761,18 @@ export async function removeStoreCatalogSource(sourceId: string) {
       meta: { sourceId },
     },
     async () => {
-      const sources = await readStoreCatalogSources();
-      const source = sources.find((entry) => entry.id === sourceId);
-      if (!source) {
-        throw new Error("Store source not found");
-      }
+      const source = await mutateStoreCatalogSources((sources) => {
+        const existing = sources.find((entry) => entry.id === sourceId);
+        if (!existing) {
+          throw new Error("Store source not found");
+        }
 
-      const nextSources = sources.filter((entry) => entry.id !== sourceId);
-      await writeStoreCatalogSources(nextSources);
+        return {
+          sources: sources.filter((entry) => entry.id !== sourceId),
+          result: existing,
+        };
+      });
+
       catalogCache.delete(sourceId);
       await rm(resolveRemoteSourceDirectory(sourceId), { recursive: true, force: true });
 

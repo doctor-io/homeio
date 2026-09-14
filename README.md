@@ -29,7 +29,9 @@ A self-hosted server manager with a desktop-style UI. Alternative to CasaOS, Umb
 
 - Desktop shell UI with dock, windows, command palette (`⌘K`), widgets, and lock screen
 - Real-time system metrics (CPU, memory, disk, network) via SSE
-- App Store: install, update, uninstall Docker Compose apps — compatible with CasaOS store archives
+- App Store: install, update, uninstall Docker Compose apps — compatible with CasaOS store archives; add your own catalog sources
+- Cloudflare Tunnel: publish an app on a public hostname from the UI — Homeio creates the DNS record and the ingress rule for you
+- Backup and restore: scheduled archives of the database, your files and your compose stacks, restorable from the UI
 - Container log viewer: real-time streaming, log-level badges, keyword filter, download
 - File manager: browse, upload (with progress), download, multi-select copy/move, conflict resolution, audio/video/image/PDF preview, Monaco code editor
 - Scheduled tasks: built-in cron runner for shell commands, app restarts, backups, and image pulls — no SSH required
@@ -37,7 +39,7 @@ A self-hosted server manager with a desktop-style UI. Alternative to CasaOS, Umb
 - USB drive support: auto-detect, mount, browse, and eject removable drives from the file manager
 - Local folder sharing over Samba and SMB network mount/unmount
 - Terminal with command allowlist (ls, cat, docker, df, ping, and more)
-- Docker container stats in real time
+- Docker container stats in real time, including containers Homeio did not deploy
 - Network manager: WiFi and Ethernet via NetworkManager
 - Weather widget with location-based conditions
 - PostgreSQL-backed persistence
@@ -101,7 +103,7 @@ curl -fsSL https://raw.githubusercontent.com/doctor-io/homeio/main/scripts/unins
 ## Security Notes
 
 - Change `AUTH_SESSION_SECRET` to a random 32+ character string before exposing outside your LAN
-- Put Homeio behind a TLS reverse proxy for HTTPS — the `Secure` cookie flag is set automatically when requests arrive over HTTPS. v1.7 will include a built-in reverse proxy manager with automatic Let's Encrypt certificates.
+- Put Homeio behind a TLS reverse proxy for HTTPS — the `Secure` cookie flag is set automatically when requests arrive over HTTPS. A built-in reverse proxy manager with automatic Let's Encrypt certificates is planned; in the meantime, Cloudflare Tunnel gives you HTTPS on a public hostname without opening a port.
 - The built-in terminal enforces a strict command allowlist — it is not a full shell
 
 ---
@@ -162,17 +164,9 @@ To opt out, set `HOMEIO_TELEMETRY=false` in your environment.
 
 ## Roadmap
 
-See [ROADMAP.md](./ROADMAP.md) — currently shipping v1.7.
+See [ROADMAP.md](./ROADMAP.md) — currently shipping v1.9. Recent releases are in [CHANGELOG.md](./CHANGELOG.md).
 
-**Coming in v1.7:**
-- Reverse proxy manager — expose any container over HTTPS with a custom domain, managed from within Homeio; auto-provisions Let's Encrypt certificates, no nginx config editing required
-- Dynamic DNS (DDNS) — automatically update Cloudflare, DuckDNS, or No-IP when your WAN IP changes
-- SMART disk health monitoring — drive health status, temperature, and pre-failure alerts via `smartctl`
-- Hardware sensor monitoring — CPU die temperature, NVMe temp, and fan RPM in the System module
-- Two-factor authentication (TOTP) — secure the single-user account with any authenticator app; backup codes included
-- Stability & Pi hardening — multi-arch Docker image (amd64 + arm64), Node.js heap cap, SSE authentication fixes, Docker compose timeout, and graceful shutdown improvements
-
-**Planned for v1.8:**
+**Planned next:**
 - Metrics history — persist and graph system and container metrics with time-range selectors (1 h / 24 h / 7 d / 30 d)
 - SMART disk health — real-time drive health status, temperature, and pre-failure alerts via `smartctl`
 - Hardware sensor monitoring — CPU die temperature, NVMe temp, and fan RPM
