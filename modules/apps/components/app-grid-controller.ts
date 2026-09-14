@@ -211,24 +211,27 @@ export function useAppGridController({
       } else if (action === "start") {
         updateAppStatus(menuApp.id, "running");
         try {
+          // The outcome toast comes from useStoreActions, which sees the
+          // operation actually finish rather than merely being accepted.
           await startApp(menuApp.id);
-          toast.success(`${menuApp.name} started`);
         } finally {
           clearAppStatus(menuApp.id);
         }
       } else if (action === "stop") {
         updateAppStatus(menuApp.id, "stopped");
         try {
+          // The outcome toast comes from useStoreActions, which sees the
+          // operation actually finish rather than merely being accepted.
           await stopApp(menuApp.id);
-          toast.success(`${menuApp.name} stopped`);
         } finally {
           clearAppStatus(menuApp.id);
         }
       } else if (action === "restart") {
         updateAppStatus(menuApp.id, "updating");
         try {
+          // The outcome toast comes from useStoreActions, which sees the
+          // operation actually finish rather than merely being accepted.
           await restartApp(menuApp.id);
-          toast.success(`${menuApp.name} restarted`);
         } finally {
           clearAppStatus(menuApp.id);
         }

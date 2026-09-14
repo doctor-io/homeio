@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock child_process BEFORE importing the runner so the promisified
 // execFileAsync wraps our fake instead of the real one.
@@ -33,6 +36,19 @@ vi.mock("@/lib/server/logging/logger", () => ({
 import { runComposePull } from "@/lib/server/modules/docker/compose-runner";
 
 describe("runComposeCommand timeout handling", () => {
+  // The runner refuses to spawn when the stack is gone, so these cases — which
+  // are about what happens *after* the spawn — need a real file to point at.
+  let composePath = "";
+  let envPath = "";
+
+  beforeEach(async () => {
+    const stackDir = await mkdtemp(path.join(os.tmpdir(), "compose-runner-"));
+    composePath = path.join(stackDir, "docker-compose.yml");
+    envPath = path.join(stackDir, ".env");
+    await writeFile(composePath, "services: {}\n", "utf8");
+    await writeFile(envPath, "", "utf8");
+  });
+
   it("surfaces a friendly message when the child process times out", async () => {
     execFileMock.mockImplementationOnce((callback: ExecCallback) => {
       const error: NodeJS.ErrnoException & { killed?: boolean; signal?: string } =
@@ -46,8 +62,8 @@ describe("runComposeCommand timeout handling", () => {
 
     await expect(
       runComposePull({
-        composePath: "/tmp/x/docker-compose.yml",
-        envPath: "/tmp/x/.env",
+        composePath,
+        envPath,
         stackName: "demo",
       }),
     ).rejects.toThrow(/timed out after 30s/);
@@ -64,10 +80,27 @@ describe("runComposeCommand timeout handling", () => {
 
     await expect(
       runComposePull({
-        composePath: "/tmp/x/docker-compose.yml",
-        envPath: "/tmp/x/.env",
+        composePath,
+        envPath,
         stackName: "demo",
       }),
     ).rejects.toThrow(/pull access denied/);
+  });
+
+  it("names the missing stack instead of blaming the docker binary", async () => {
+    // Node reports a missing cwd as `spawn docker ENOENT`, which reads as a
+    // broken Docker install. Restoring a database ahead of the files it
+    // describes leaves exactly this state, so the message has to say so.
+    const missing = path.join(os.tmpdir(), "compose-runner-gone", "docker-compose.yml");
+
+    await expect(
+      runComposePull({
+        composePath: missing,
+        envPath: path.join(path.dirname(missing), ".env"),
+        stackName: "demo",
+      }),
+    ).rejects.toThrow(/files for this app are missing/);
+
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 });

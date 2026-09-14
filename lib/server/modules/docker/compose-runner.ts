@@ -1,7 +1,7 @@
 import "server-only";
 
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
@@ -1060,9 +1060,26 @@ async function runComposeCommand(input: ComposeCommandInput) {
         ...input.args,
       ];
 
+      // The spawn below runs with the stack directory as its cwd, and Node
+      // reports a missing cwd as `spawn docker ENOENT` — a message that names
+      // the binary and sends people hunting for a broken Docker install. The
+      // stack directory disappears whenever a database is restored ahead of the
+      // files it describes, so check it and say what is actually wrong.
+      const stackDir = path.dirname(input.composePath);
+      const composeFileExists = await stat(input.composePath)
+        .then((entry) => entry.isFile())
+        .catch(() => false);
+
+      if (!composeFileExists) {
+        throw new Error(
+          `The files for this app are missing: ${input.composePath} does not exist. ` +
+            `Homeio still has a record of it, but there is nothing on disk to act on.`,
+        );
+      }
+
       const timeoutMs = serverEnv.DOCKER_COMPOSE_TIMEOUT_MS;
       const { stdout } = await execFileAsync("docker", args, {
-        cwd: path.dirname(input.composePath),
+        cwd: stackDir,
         timeout: timeoutMs,
         // Buffer cap protects against runaway compose output on Pi where
         // a stuck `docker compose logs` could exhaust memory.

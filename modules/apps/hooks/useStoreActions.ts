@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { StoreOperation, StoreOperationAction, StoreOperationEvent } from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
 import {
@@ -164,6 +165,28 @@ function isTerminalStatus(status: StoreOperation["status"]) {
   return status === "success" || status === "error";
 }
 
+const ACTION_OUTCOME_LABEL: Record<StoreOperationAction, string> = {
+  install: "install",
+  update: "update",
+  redeploy: "redeploy",
+  uninstall: "uninstall",
+  start: "start",
+  stop: "stop",
+  restart: "restart",
+  "check-updates": "check for updates on",
+};
+
+const ACTION_SUCCESS_LABEL: Record<StoreOperationAction, string> = {
+  install: "installed",
+  update: "updated",
+  redeploy: "redeployed",
+  uninstall: "uninstalled",
+  start: "started",
+  stop: "stopped",
+  restart: "restarted",
+  "check-updates": "checked for updates",
+};
+
 function mapOperationToState(operation: StoreOperation): AppOperationState {
   return {
     operationId: operation.id,
@@ -237,7 +260,41 @@ export function useStoreActions(): StoreActionsHandle {
   const streamCleanups = useRef<Map<string, () => void>>(new Map());
   const pollCleanups = useRef<Map<string, () => void>>(new Map());
 
+  // An operation's outcome arrives twice — once over SSE, once from the
+  // snapshot poll — and whichever lands first should be the one that speaks.
+  const reportedOutcomes = useRef(new Set<string>());
+
+  /**
+   * Install, update, uninstall and redeploy only return "accepted" to the
+   * caller; the real outcome shows up milliseconds later on the event stream.
+   * Nothing translated that into anything the user could see, so a failed
+   * uninstall closed its dialog and looked exactly like a successful one — the
+   * only trace was a notification in the panel.
+   */
+  const reportOperationOutcome = useCallback((state: AppOperationState) => {
+    if (!isTerminalStatus(state.status)) return;
+    if (reportedOutcomes.current.has(state.operationId)) return;
+    reportedOutcomes.current.add(state.operationId);
+
+    // The cache still holds the app when the outcome lands — invalidation
+    // happens after this — so prefer the name the user actually sees.
+    const installed = queryClient.getQueryData<Array<{ id: string; name?: string }>>(
+      queryKeys.installedApps,
+    );
+    const name = installed?.find((app) => app.id === state.appId)?.name ?? state.appId;
+
+    if (state.status === "success") {
+      toast.success(`${name} ${ACTION_SUCCESS_LABEL[state.action]}`);
+      return;
+    }
+
+    toast.error(`Failed to ${ACTION_OUTCOME_LABEL[state.action]} ${name}`, {
+      description: state.message ?? undefined,
+    });
+  }, [queryClient]);
+
   const clearTrackedOperation = useCallback((appId: string, operationId: string) => {
+    reportedOutcomes.current.delete(operationId);
     setOperationsByApp((previous) => {
       const current = previous[appId];
       if (!current || current.operationId !== operationId) {
@@ -351,6 +408,7 @@ export function useStoreActions(): StoreActionsHandle {
         queryClient.setQueryData(queryKeys.storeOperation(snapshot.id), snapshot);
 
         if (isTerminalStatus(snapshot.status)) {
+          reportOperationOutcome(mapOperationToState(snapshot));
           stopTracking();
           invalidateTerminalState(snapshot.appId, snapshot.id);
           const lingerMs = snapshot.status === "success"
@@ -440,6 +498,7 @@ export function useStoreActions(): StoreActionsHandle {
           );
 
           if (isTerminalStatus(event.status)) {
+            reportOperationOutcome(mapEventToState(event));
             stopTracking();
             invalidateTerminalState(event.appId, event.operationId);
             const lingerMs = event.status === "success"
@@ -460,7 +519,7 @@ export function useStoreActions(): StoreActionsHandle {
         stopTracking();
       });
     },
-    [clearTrackedOperation, queryClient],
+    [clearTrackedOperation, queryClient, reportOperationOutcome],
   );
 
   const installMutation = useMutation({

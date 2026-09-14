@@ -974,7 +974,19 @@ async function runUpdateOperation(
 async function runUninstallOperation(operationId: string, params: OperationParams) {
   const stack = await findInstalledStackByAppId(params.appId);
 
-  if (!stack || stack.status === "not_installed") {
+  // No record at all is not the same as a record saying "not installed". The
+  // desktop lists containers Homeio did not deploy under a synthetic
+  // `container:<id>`, and uninstalling one used to land here and report
+  // success — the container stayed up while the UI said it was gone. Refuse
+  // instead, and say why.
+  if (!stack) {
+    throw new Error(
+      `Homeio has no record of "${params.appId}", so it cannot uninstall it. ` +
+        `Containers Homeio did not deploy have to be removed with Docker directly.`,
+    );
+  }
+
+  if (stack.status === "not_installed") {
     await patchOperationAndEmit({
       operationId,
       appId: params.appId,

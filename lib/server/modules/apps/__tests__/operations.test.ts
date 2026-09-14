@@ -570,6 +570,27 @@ describe("store operations", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  it("refuses to uninstall a container Homeio never deployed", async () => {
+    // The desktop lists foreign containers as `container:<id>`. There is no
+    // stack record behind one, and that used to be read as "already
+    // uninstalled": the operation reported success while the container kept
+    // running, so the UI said it was gone and it was not.
+    vi.mocked(findInstalledStackByAppId).mockResolvedValue(null);
+    vi.mocked(createStoreOperation).mockResolvedValue(undefined);
+    vi.mocked(updateStoreOperation).mockResolvedValue(undefined);
+
+    const { operationId } = await startStoreOperation({
+      appId: "container:de8926a963f7",
+      action: "uninstall",
+    });
+
+    const latest = await waitForLatestEventType(operationId, "operation.failed");
+    expect(latest?.status).toBe("error");
+    expect(latest?.message).toMatch(/no record of/);
+    expect(deleteInstalledStackByAppId).not.toHaveBeenCalled();
+    expect(runComposeDown).not.toHaveBeenCalled();
+  });
+
   it("hard-deletes stack record on uninstall and removes data when requested", async () => {
     vi.mocked(findInstalledStackByAppId).mockResolvedValue({
       appId: "2fauth",
