@@ -170,18 +170,30 @@ remove_reverse_proxy() {
 	local default_available="/etc/nginx/sites-available/default"
 	local default_enabled="/etc/nginx/sites-enabled/default"
 
+	local removed_site="false"
+
 	if [[ -f "${nginx_conf}" || -L "${nginx_enabled}" ]]; then
 		print_status "Removing nginx site ${NGINX_SITE_NAME}..."
 		rm -f "${nginx_enabled}" >/dev/null 2>&1 || true
 		rm -f "${nginx_conf}" >/dev/null 2>&1 || true
+		removed_site="true"
 	fi
 
-	if [[ -f "${default_available}" && ! -e "${default_enabled}" ]]; then
+	# Only hand port 80 back to the default site if this run actually took it
+	# away. The restore used to be unconditional, so running the script against
+	# a site name that was not installed still enabled Debian's default vhost —
+	# and since that vhost listens with `default_server` while Homeio's listens
+	# on a plain `listen 80`, nginx started answering every request by IP with
+	# the "Welcome to nginx!" page and logged Homeio's block as a conflicting
+	# server name it was ignoring.
+	if [[ "${removed_site}" == "true" && -f "${default_available}" && ! -e "${default_enabled}" ]]; then
 		print_status "Restoring nginx default site..."
 		ln -sf "${default_available}" "${default_enabled}"
 	fi
 
-	nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+	if [[ "${removed_site}" == "true" ]]; then
+		nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+	fi
 }
 
 remove_app_files() {
