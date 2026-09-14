@@ -60,6 +60,24 @@ export function streamDockerContainerLogs(
 }
 
 /**
+ * Containers that colour their output — most Node images do, Uptime Kuma
+ * among them — emit SGR escape sequences the viewer has no way to render, so
+ * they showed up as literal `[36m` and `[38;5;119m` noise wrapped around every
+ * field. Worse, the codes glue onto the words: `\x1b[33mWARN:` has no word
+ * boundary before WARN, so level detection missed it entirely and the line
+ * fell through to the stderr badge, marking warnings as errors.
+ *
+ * Covers the CSI sequences containers actually produce (colour, cursor) and
+ * the two-character escapes; anything else is left alone rather than guessed at.
+ */
+ 
+const ANSI_ESCAPE_PATTERN = /\u001B(?:\[[0-?]*[ -\/]*[@-~]|[@-Z\\-_])/g;
+
+export function stripAnsi(value: string) {
+  return value.replace(ANSI_ESCAPE_PATTERN, "");
+}
+
+/**
  * Parses a single raw log line produced by Docker's multiplexed stream.
  * Docker prepends RFC3339Nano timestamps when `timestamps=1` is set:
  *   "2024-01-01T00:00:00.000000000Z actual log message here"
@@ -75,10 +93,10 @@ export function parseDockerLogLine(
     const msg = raw.slice(spaceIdx + 1);
     // Validate it looks like an ISO timestamp
     if (ts.includes("T") && ts.includes("Z")) {
-      return { timestamp: ts, stream, message: msg };
+      return { timestamp: ts, stream, message: stripAnsi(msg) };
     }
   }
-  return { timestamp: new Date().toISOString(), stream, message: raw };
+  return { timestamp: new Date().toISOString(), stream, message: stripAnsi(raw) };
 }
 
 /**
@@ -87,7 +105,7 @@ export function parseDockerLogLine(
 export function detectLogLevel(
   message: string,
 ): "ERROR" | "WARN" | "INFO" | "DEBUG" | null {
-  const upper = message.toUpperCase();
+  const upper = stripAnsi(message).toUpperCase();
   if (/\bERROR\b|\bERR\b|\bFATAL\b|\bCRIT\b/.test(upper)) return "ERROR";
   if (/\bWARN\b|\bWARNING\b/.test(upper)) return "WARN";
   if (/\bINFO\b/.test(upper)) return "INFO";
