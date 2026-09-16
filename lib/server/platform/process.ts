@@ -101,6 +101,14 @@ export type RunOptions = {
 export type RunResult = {
   stdout: string;
   stderr: string;
+  /**
+   * How the command ended. Only ever non-zero for a code the caller listed in
+   * `allowedExitCodes`, and there it is the answer rather than a failure:
+   * `mountpoint` says "no" with an exit code and nothing on stdout, so a caller
+   * that cannot read it has to choose between a wrong answer and an error log
+   * for a normal reply.
+   */
+  exitCode: number;
 };
 
 export class ProcessError extends Error {
@@ -191,12 +199,13 @@ export async function run(
     // value after the error, which is stdout on its own. The previous
     // hand-rolled wrappers each carried this branch; it belongs here now.
     if (typeof result === "string" || Buffer.isBuffer(result)) {
-      return { stdout: result.toString(), stderr: "" };
+      return { stdout: result.toString(), stderr: "", exitCode: 0 };
     }
 
     return {
       stdout: result?.stdout?.toString() ?? "",
       stderr: result?.stderr?.toString() ?? "",
+      exitCode: 0,
     };
   } catch (cause) {
     const error = new ProcessError(binary, cause as NodeJS.ErrnoException);
@@ -210,6 +219,7 @@ export async function run(
       return {
         stdout: partial?.stdout?.toString() ?? "",
         stderr: partial?.stderr?.toString() ?? "",
+        exitCode: error.exitCode,
       };
     }
 

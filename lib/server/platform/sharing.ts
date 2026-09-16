@@ -19,13 +19,24 @@ import { run, type RunResult } from "@/lib/server/platform/process";
 
 const SHORT_TIMEOUT_MS = 15_000;
 
-/** Whether a path is a mount point. Exits non-zero when it is not. */
+/**
+ * Whether a path is a mount point.
+ *
+ * `mountpoint -q` answers "no" by exiting non-zero — 32 on util-linux, 1 on
+ * older builds — so "no" and "broken" arrive the same way. Listing those codes
+ * makes the difference: a plain "no" comes back as a result, and only a real
+ * failure (the binary missing, a timeout) still throws. Before this, every
+ * check of a path that was not a mount point wrote an ERROR to the journal.
+ */
+const NOT_A_MOUNT_POINT = [1, 32];
+
 export async function isMountPoint(absolutePath: string): Promise<boolean> {
   return run("mountpoint", ["-q", absolutePath], {
     timeoutMs: SHORT_TIMEOUT_MS,
     loggableArgs: ["-q", absolutePath],
+    allowedExitCodes: NOT_A_MOUNT_POINT,
   })
-    .then(() => true)
+    .then((result) => result.exitCode === 0)
     .catch(() => false);
 }
 
