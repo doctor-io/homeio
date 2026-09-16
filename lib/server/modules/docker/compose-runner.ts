@@ -1,9 +1,7 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
 import {
@@ -17,8 +15,9 @@ import {
   resolveStoreStacksRoot,
 } from "@/lib/server/storage/data-root";
 import { parseEnvFileContent } from "@/lib/shared/env-file";
+import * as dockerPlatform from "@/lib/server/platform/docker";
+import { ProcessError } from "@/lib/server/platform/process";
 
-const execFileAsync = promisify(execFile);
 
 type ComposeCommandInput = {
   composePath: string;
@@ -1049,17 +1048,6 @@ async function runComposeCommand(input: ComposeCommandInput) {
       },
     },
     async () => {
-      const args = [
-        "compose",
-        "-f",
-        input.composePath,
-        "--env-file",
-        input.envPath,
-        "-p",
-        input.stackName,
-        ...input.args,
-      ];
-
       // The spawn below runs with the stack directory as its cwd, and Node
       // reports a missing cwd as `spawn docker ENOENT` — a message that names
       // the binary and sends people hunting for a broken Docker install. The
@@ -1078,26 +1066,26 @@ async function runComposeCommand(input: ComposeCommandInput) {
       }
 
       const timeoutMs = serverEnv.DOCKER_COMPOSE_TIMEOUT_MS;
-      const { stdout } = await execFileAsync("docker", args, {
-        cwd: stackDir,
-        timeout: timeoutMs,
-        // Buffer cap protects against runaway compose output on Pi where
-        // a stuck `docker compose logs` could exhaust memory.
-        maxBuffer: 10 * 1024 * 1024,
-      }).catch((err: unknown) => {
-        // Detect Node's child_process timeout (SIGTERM + killed) before
-        // anything else so the user sees a clear "timed out" message
-        // instead of a truncated stderr.
-        const errorObject = err as {
-          killed?: boolean;
-          signal?: string;
-          code?: string | number;
-          stderr?: string;
-        };
-        const timedOut =
-          errorObject?.killed === true ||
-          errorObject?.signal === "SIGTERM" ||
-          errorObject?.code === "ETIMEDOUT";
+      const { stdout } = await dockerPlatform
+        .compose(
+          {
+            composePath: input.composePath,
+            envPath: input.envPath,
+            projectName: input.stackName,
+            cwd: stackDir,
+            timeoutMs,
+            // Buffer cap protects against runaway compose output on Pi where
+            // a stuck `docker compose logs` could exhaust memory.
+            maxBuffer: 10 * 1024 * 1024,
+          },
+          input.args,
+        )
+        .catch((err: unknown) => {
+        // The platform wrapper has already worked out whether this was a
+        // timeout; what is left here is turning Docker's own words into
+        // something the operator can act on.
+        const errorObject = err as { stderr?: string };
+        const timedOut = err instanceof ProcessError && err.timedOut;
         if (timedOut) {
           throw new Error(
             `Docker compose command timed out after ${Math.round(timeoutMs / 1000)}s. ` +
@@ -1464,7 +1452,7 @@ export async function cleanupComposeDataOnUninstall(input: {
 
         for (const volumeName of cleanupSummary.namedVolumeSources) {
           try {
-            await execFileAsync("docker", ["volume", "rm", volumeName]);
+            await dockerPlatform.removeVolume(volumeName);
           } catch {
             // Best effort cleanup for legacy named volumes.
           }

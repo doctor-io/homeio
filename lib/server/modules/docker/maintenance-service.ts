@@ -1,10 +1,8 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { logServerAction } from "@/lib/server/logging/logger";
+import * as dockerPlatform from "@/lib/server/platform/docker";
 
-const execFileAsync = promisify(execFile);
 
 export type DockerPruneResult = {
   command: "images" | "volumes";
@@ -15,7 +13,7 @@ async function runDockerPrune(
   command: DockerPruneResult["command"],
   args: string[],
 ) {
-  const { stdout, stderr } = await execFileAsync("docker", args);
+  const { stdout, stderr } = await dockerPlatform.prune(args);
   const output = [stdout, stderr].filter((value) => value.trim().length > 0).join("\n").trim();
 
   logServerAction({

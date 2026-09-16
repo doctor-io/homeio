@@ -1,14 +1,12 @@
 import "server-only";
 
 import { request } from "node:http";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import { LruCache } from "@/lib/server/cache/lru";
 import { logServerAction } from "@/lib/server/logging/logger";
 import type { DockerInfo } from "@/lib/shared/contracts/docker";
+import * as dockerPlatform from "@/lib/server/platform/docker";
 
-const execFileAsync = promisify(execFile);
 
 const STATS_CACHE_KEY = "all";
 const statsCache = new LruCache<ContainerStats[]>(1, 5_000);
@@ -335,8 +333,7 @@ export async function getDockerInfo(): Promise<DockerInfo | null> {
 
     let composeVersion = "--";
     try {
-      const { stdout } = await execFileAsync("docker", ["compose", "version", "--short"]);
-      composeVersion = stdout.trim();
+      composeVersion = (await dockerPlatform.composeVersion()) ?? "--";
     } catch {
       // compose plugin not installed or unavailable
     }
