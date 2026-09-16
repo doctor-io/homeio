@@ -47,6 +47,31 @@ function extractFunction(source: string, name: string): string | null {
   return null;
 }
 
+describe("the maintenance page", () => {
+  const MAINTENANCE_PAGE = path.join(
+    "packages", "os", "overlay-common", "var", "lib",
+    "homeio-maintenance", "__homeio_unavailable.html",
+  );
+
+  it("ships as a file both scripts copy, rather than a heredoc in each", async () => {
+    const [install, update, page] = await Promise.all([
+      readFile(path.join(SCRIPTS, "install.sh"), "utf8"),
+      readFile(path.join(SCRIPTS, "update.sh"), "utf8"),
+      readFile(path.join(process.cwd(), MAINTENANCE_PAGE), "utf8"),
+    ]);
+
+    expect(page).toContain("<!doctype html>");
+
+    // Both scripts point at the same file, and neither carries the page again.
+    for (const [name, script] of [["install.sh", install], ["update.sh", update]] as const) {
+      expect(script, `${name} should copy the shipped page`).toContain(
+        "packages/os/overlay-common/var/lib/homeio-maintenance/__homeio_unavailable.html",
+      );
+      expect(script, `${name} still embeds an HTML document`).not.toMatch(/<!doctype html>/i);
+    }
+  });
+});
+
 describe("install.sh and update.sh shared helpers", () => {
   it.each(SHARED_FUNCTIONS)("%s is identical in both scripts", async (name) => {
     const [install, update] = await Promise.all([

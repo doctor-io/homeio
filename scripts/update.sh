@@ -437,150 +437,24 @@ configure_reverse_proxy() {
 
 	print_status "Configuring nginx reverse proxy on :${PUBLIC_PORT} -> 127.0.0.1:${APP_PORT}..."
 
+	# The page itself ships in the repository, at
+	# packages/os/overlay-common/var/lib/homeio-maintenance/. It used to be a
+	# heredoc in this script *and* in the other one, and the two had drifted:
+	# update.sh overwrote install.sh's copy on the first update, so the
+	# installer's version was never seen by anyone and never maintained.
+	#
+	# The checkout is on disk by the time this runs — the repository sync is a
+	# step earlier in both scripts — so it is a copy, not a generated file.
 	mkdir -p "${maintenance_root}"
-	cat >"${maintenance_file}" <<'EOF'
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="cache-control" content="no-store" />
-    <title>Homeio is restarting</title>
-    <style>
-      :root {
-        color-scheme: dark;
-        --bg: #07111c;
-        --panel: rgba(10, 24, 39, 0.82);
-        --border: rgba(148, 163, 184, 0.18);
-        --text: #f8fafc;
-        --muted: #94a3b8;
-        --accent: #38bdf8;
-        --warn: #f59e0b;
-        --error: #ef4444;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.16), transparent 38%),
-          radial-gradient(circle at 80% 70%, rgba(14, 165, 233, 0.12), transparent 42%),
-          var(--bg);
-        color: var(--text);
-        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-      }
-      .panel {
-        width: min(92vw, 32rem);
-        padding: 2rem;
-        border-radius: 1.5rem;
-        border: 1px solid var(--border);
-        background: var(--panel);
-        backdrop-filter: blur(14px);
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-        text-align: center;
-      }
-      .spinner {
-        width: 3rem;
-        height: 3rem;
-        margin: 0 auto 1rem;
-        border-radius: 999px;
-        border: 3px solid rgba(148, 163, 184, 0.24);
-        border-top-color: var(--accent);
-        animation: spin 0.9s linear infinite;
-      }
-      .spinner.warn { border-top-color: var(--warn); }
-      h1 {
-        margin: 0;
-        font-size: 1.35rem;
-      }
-      p {
-        margin: 0.75rem 0 0;
-        line-height: 1.6;
-        color: var(--muted);
-      }
-      .status {
-        margin-top: 1rem;
-        font-size: 0.85rem;
-        color: var(--muted);
-      }
-      .log-hint {
-        display: none;
-        margin-top: 1.25rem;
-        padding: 0.75rem 1rem;
-        border-radius: 0.75rem;
-        background: rgba(245, 158, 11, 0.1);
-        border: 1px solid rgba(245, 158, 11, 0.25);
-        font-size: 0.8rem;
-        color: var(--warn);
-        text-align: left;
-        line-height: 1.6;
-      }
-      .log-hint code {
-        display: block;
-        margin-top: 0.4rem;
-        font-family: monospace;
-        word-break: break-all;
-        color: #fde68a;
-      }
-      @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
-  </head>
-  <body>
-    <main class="panel">
-      <div class="spinner" id="spinner" aria-hidden="true"></div>
-      <h1>Homeio is restarting</h1>
-      <p>
-        The update is being applied. This page will automatically reload when
-        <code>/api/health</code> is available again.
-      </p>
-      <div class="status" id="status">Waiting for Homeio...</div>
-      <div class="log-hint" id="log-hint">
-        The update is taking longer than expected — it may still be building, or an error may have occurred.
-        Check the update log for details:
-        <code>sudo tail -f /var/log/homeio-self-update.log</code>
-        To manually restart the service:
-        <code>sudo systemctl restart home-server</code>
-      </div>
-    </main>
-    <script>
-      const statusEl = document.getElementById("status");
-      const spinnerEl = document.getElementById("spinner");
-      const logHintEl = document.getElementById("log-hint");
-      const startedAt = Date.now();
-      const WARN_AFTER_MS = 5 * 60 * 1000; // 5 minutes
-
-      async function checkHealth() {
-        try {
-          const response = await fetch("/api/health", { cache: "no-store" });
-          if (response.ok) {
-            statusEl.textContent = "Homeio is back. Reloading...";
-            window.location.reload();
-            return;
-          }
-        } catch (_) {
-          // Ignore while the backend is still down.
-        }
-
-        const elapsed = Date.now() - startedAt;
-        if (elapsed >= WARN_AFTER_MS) {
-          statusEl.textContent = "Still waiting — the update may have failed.";
-          spinnerEl.classList.add("warn");
-          logHintEl.style.display = "block";
-        } else {
-          const mins = Math.floor(elapsed / 60000);
-          const secs = Math.floor((elapsed % 60000) / 1000);
-          statusEl.textContent = `Waiting for Homeio… (${mins}m ${secs}s)`;
-        }
-
-        window.setTimeout(checkHealth, 2000);
-      }
-      window.setTimeout(checkHealth, 1500);
-    </script>
-  </body>
-</html>
-EOF
+	local maintenance_src="${INSTALL_DIR}/packages/os/overlay-common/var/lib/homeio-maintenance/__homeio_unavailable.html"
+	if [[ -f "${maintenance_src}" ]]; then
+		cp "${maintenance_src}" "${maintenance_file}"
+	else
+		# An older checkout predates the file. The page is what a visitor sees
+		# while the app restarts, so its absence is cosmetic — nginx falls back
+		# to its own 502 — and is not worth failing an install or an update for.
+		print_warn "Maintenance page not found at ${maintenance_src}; nginx will serve its default 502."
+	fi
 
 	cat >"${nginx_conf}" <<EOF
 upstream homeio_backend {
