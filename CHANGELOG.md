@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.2] - 2026-09-16
+
+Issue [#37](https://github.com/doctor-io/homeio/issues/37): locked out on the
+registration page, on a server that already had an account.
+
+### Fixed
+
+#### Authentication behind a proxy or CDN
+
+- **A cache in front could lock everyone out of their own server.** The proxy set
+  no `Cache-Control` on its own responses, so a tunnel or CDN configured to cache
+  aggressively was free to keep them — including the `307 -> /register` an install
+  answers while it is still empty. Once that redirect was cached, every later
+  visitor was sent to registration however many accounts existed, and an
+  authenticated one had their session cookie cleared on the way back. Incognito,
+  another browser and another device all failed identically, because the cache sat
+  upstream of all three. Every non-static response now says `private, no-store`;
+  immutable assets never reach that middleware and keep their long-lived caching.
+  The documentation recommends putting Homeio behind exactly such a tunnel.
+- A failed "are there any accounts" lookup was read as "fresh install". A momentary
+  database or network hiccup therefore signed everyone out and offered the machine
+  up for registration. Not knowing now answers "accounts exist": a genuinely fresh
+  install pays one redirect to `/login`, where the old answer cost a running
+  install its sessions.
+
+#### Container logs
+
+- Containers that colour their output — most Node images, Uptime Kuma among them —
+  had their escape sequences printed as literal `[36m` and `[38;5;119m` noise, most
+  of the width of the pane. Worse, `\x1b[33mWARN:` leaves no word boundary before
+  WARN, so level detection missed it and the line fell through to the stderr badge:
+  every warning was labelled a red error. Escapes are stripped where the line is
+  parsed, so the level is read from clean text.
+
+---
+
 ## [1.9.1] - 2026-09-14
 
 Issues [#31](https://github.com/doctor-io/homeio/issues/31), [#32](https://github.com/doctor-io/homeio/issues/32), [#33](https://github.com/doctor-io/homeio/issues/33) and [#35](https://github.com/doctor-io/homeio/issues/35), reported while migrating from CasaOS, plus the faults those reports turned up around them.
