@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createRequestId, logServerAction, withServerTiming } from "@/lib/server/logging/logger";
-import { wipeDisk } from "@/lib/server/modules/system/disk-service";
+import { describeDiskFailure, wipeDisk } from "@/lib/server/modules/system/disk-service";
 import type { DiskWipeRequest } from "@/lib/shared/contracts/disks";
 import { requireElevatedSession } from "@/lib/server/modules/auth/api";
 
@@ -38,13 +38,7 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to wipe disk";
-    const isValidationError =
-      error instanceof Error &&
-      (error.message.startsWith("Cannot wipe") ||
-        error.message.startsWith("Cannot modify") ||
-        error.message.startsWith("Invalid disk"));
-    const statusCode = isValidationError ? 400 : 500;
+    const { status, message } = describeDiskFailure(error, "Failed to wipe disk");
 
     logServerAction({
       level: "error",
@@ -55,6 +49,6 @@ export async function POST(request: NextRequest) {
       message,
       error,
     });
-    return NextResponse.json({ error: message }, { status: statusCode });
+    return NextResponse.json({ error: message }, { status });
   }
 }

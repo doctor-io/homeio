@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createRequestId, logServerAction, withServerTiming } from "@/lib/server/logging/logger";
 import { getAuthCookieName } from "@/lib/server/modules/auth/cookies";
 import { authenticateSession } from "@/lib/server/modules/auth/service";
-import { mountPartition } from "@/lib/server/modules/system/disk-service";
+import { describeDiskFailure, mountPartition } from "@/lib/server/modules/system/disk-service";
 import type { DiskMountRequest } from "@/lib/shared/contracts/disks";
 import { requireApiSession } from "@/lib/server/modules/auth/api";
 
@@ -46,15 +46,17 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
+    const { status, message } = describeDiskFailure(error, "Failed to mount partition");
+
     logServerAction({
       level: "error",
       layer: "api",
       action: "system.disks.mount.response",
       status: "error",
       requestId,
-      message: "Failed to mount partition",
+      message,
       error,
     });
-    return NextResponse.json({ error: "Failed to mount partition" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -6,14 +6,21 @@ const { wipeDiskMock, requireElevatedSessionMock } = vi.hoisted(() => ({
   requireElevatedSessionMock: vi.fn(),
 }));
 
-vi.mock("@/lib/server/modules/system/disk-service", () => ({
-  wipeDisk: wipeDiskMock,
-}));
+// Only the action is stubbed. The error classification is the thing under test
+// here, so it has to be the real one — a stub would let the route agree with a
+// contract nothing else keeps.
+vi.mock("@/lib/server/modules/system/disk-service", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/server/modules/system/disk-service")>(
+    "@/lib/server/modules/system/disk-service",
+  );
+  return { ...actual, wipeDisk: wipeDiskMock };
+});
 
 vi.mock("@/lib/server/modules/auth/api", () => ({
   requireElevatedSession: requireElevatedSessionMock,
 }));
 
+import { DiskRequestError } from "@/lib/server/modules/system/disk-service";
 import { POST } from "@/app/api/v1/system/disks/wipe/route";
 import { NextResponse } from "next/server";
 
@@ -63,7 +70,7 @@ describe("POST /api/v1/system/disks/wipe", () => {
       response: null,
     });
     wipeDiskMock.mockRejectedValueOnce(
-      new Error("Cannot modify system device containing critical mountpoint (/boot/efi)")
+      new DiskRequestError("Cannot modify system device containing critical mountpoint (/boot/efi)"),
     );
 
     const request = new Request("http://localhost/api/v1/system/disks/wipe", {

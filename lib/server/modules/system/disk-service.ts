@@ -8,6 +8,55 @@ import type {
   DiskMediaType,
   DiskPartition,
 } from "@/lib/shared/contracts/disks";
+import { ProcessError } from "@/lib/server/platform/process";
+
+/**
+ * The request is the problem: a device path that is not one, a label with a
+ * newline in it, a partition that is mounted, the disk the system boots from.
+ *
+ * Every one of these was a plain `Error` whose only distinguishing feature was
+ * how its message began. One route checked three prefixes and answered 400;
+ * the other five checked nothing and answered 500 with a fixed sentence, so
+ * "you gave me a bad path" reached the browser as "the server broke" and the
+ * reason was dropped on the floor. A type says it once, for all of them.
+ */
+export class DiskRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DiskRequestError";
+  }
+}
+
+/**
+ * The status and message a disk route should answer with.
+ *
+ * A tool's own words beat a fixed sentence: "The file /dev/nvme0n1p1 does not
+ * exist" tells the user what to do, "Failed to format partition" does not. It
+ * is the last line that carries it — mkfs opens with its version banner.
+ */
+export function describeDiskFailure(
+  error: unknown,
+  fallback: string,
+): { status: number; message: string } {
+  if (error instanceof DiskRequestError) {
+    return { status: 400, message: error.message };
+  }
+
+  if (error instanceof ProcessError) {
+    // Its own diagnosis when it has one — the last line, because mkfs opens
+    // with a version banner. A timeout and a missing binary say so in the
+    // message rather than on stderr, so those pass through too. What is left
+    // is Node's "Command failed", which says less than naming the operation.
+    const said = error.stderr.split("\n").map((line) => line.trim()).filter(Boolean).pop();
+    if (said) return { status: 500, message: said };
+    if (error.timedOut || error.code === "ENOENT") {
+      return { status: 500, message: error.message };
+    }
+    return { status: 500, message: fallback };
+  }
+
+  return { status: 500, message: fallback };
+}
 
 
 // ─── lsblk types ─────────────────────────────────────────────────────────────
@@ -160,15 +209,15 @@ async function checkDeviceNotMounted(deviceOrDisk: string, isWholeDisk = false):
 
       if (matches) {
         if (SYSTEM_CRITICAL_MOUNTPOINTS.has(mountPoint)) {
-          throw new Error(`Cannot modify system device containing critical mountpoint (${mountPoint})`);
+          throw new DiskRequestError(`Cannot modify system device containing critical mountpoint (${mountPoint})`);
         }
-        throw new Error(
+        throw new DiskRequestError(
           `Cannot modify active mounted device (${mountDevice} mounted on ${mountPoint}). Unmount it first.`,
         );
       }
     }
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Cannot modify")) throw err;
+    if (err instanceof DiskRequestError) throw err;
     // /proc/mounts might not exist on macOS in local dev
   }
 }
@@ -179,7 +228,7 @@ export async function formatPartition(
   label?: string,
 ): Promise<void> {
   if (!VALID_PARTITION_RE.test(device)) {
-    throw new Error("Invalid partition device path");
+    throw new DiskRequestError("Invalid partition device path");
   }
 
   await checkDeviceNotMounted(device, false);
@@ -189,7 +238,7 @@ export async function formatPartition(
 
   if (filesystem === "ntfs") args.push("--fast");
   if (label) {
-    if (/[\r\n\0]/.test(label)) throw new Error("Invalid characters in partition label");
+    if (/[\r\n\0]/.test(label)) throw new DiskRequestError("Invalid characters in partition label");
     args.push(flag, label);
   }
 
@@ -204,16 +253,16 @@ export async function mountPartition(
   addToFstab = false,
 ): Promise<void> {
   if (!VALID_PARTITION_RE.test(device)) {
-    throw new Error("Invalid partition device path");
+    throw new DiskRequestError("Invalid partition device path");
   }
   if (SYSTEM_CRITICAL_MOUNTPOINTS.has(mountPoint)) {
-    throw new Error(`Cannot mount partition over critical system directory: ${mountPoint}`);
+    throw new DiskRequestError(`Cannot mount partition over critical system directory: ${mountPoint}`);
   }
   if (!VALID_MOUNTPOINT_RE.test(mountPoint) || mountPoint.includes("..")) {
-    throw new Error("Mount point must be a safe, absolute path without control characters");
+    throw new DiskRequestError("Mount point must be a safe, absolute path without control characters");
   }
   if (/[\r\n\t\s]/.test(device) || /[\r\n\t\s]/.test(mountPoint)) {
-    throw new Error("Device and mount point cannot contain whitespace or newline characters");
+    throw new DiskRequestError("Device and mount point cannot contain whitespace or newline characters");
   }
 
   await mkdir(mountPoint, { recursive: true });
@@ -226,7 +275,7 @@ export async function mountPartition(
 
 async function appendFstabEntry(device: string, mountPoint: string): Promise<void> {
   if (/[\r\n\t\s]/.test(device) || /[\r\n\t\s]/.test(mountPoint)) {
-    throw new Error("Invalid characters in fstab entry");
+    throw new DiskRequestError("Invalid characters in fstab entry");
   }
 
   let existing = "";
@@ -259,10 +308,10 @@ async function appendFstabEntry(device: string, mountPoint: string): Promise<voi
 
 export async function unmountPartition(device: string): Promise<void> {
   if (SYSTEM_CRITICAL_MOUNTPOINTS.has(device)) {
-    throw new Error(`Cannot unmount critical system directory: ${device}`);
+    throw new DiskRequestError(`Cannot unmount critical system directory: ${device}`);
   }
   if (!VALID_PARTITION_RE.test(device) && !VALID_MOUNTPOINT_RE.test(device)) {
-    throw new Error("Invalid device or mount path");
+    throw new DiskRequestError("Invalid device or mount path");
   }
   await storage.unmount(device);
 }
@@ -274,10 +323,10 @@ export async function createPartition(
   start: string,
   end: string,
 ): Promise<void> {
-  if (!VALID_DISK_RE.test(disk)) throw new Error("Invalid disk device path");
+  if (!VALID_DISK_RE.test(disk)) throw new DiskRequestError("Invalid disk device path");
   if (!/^[0-9]+(?:\.[0-9]+)?(?:[kKMGTPE]?i?B|%)?$/.test(start.trim()) ||
       !/^[0-9]+(?:\.[0-9]+)?(?:[kKMGTPE]?i?B|%)?$/.test(end.trim())) {
-    throw new Error("Invalid partition boundaries");
+    throw new DiskRequestError("Invalid partition boundaries");
   }
 
   // Ensure GPT table exists (safe — no-op if already present)
@@ -293,13 +342,13 @@ export async function createPartition(
 // ─── delete partition ─────────────────────────────────────────────────────────
 
 export async function deletePartition(device: string): Promise<void> {
-  if (!VALID_PARTITION_RE.test(device)) throw new Error("Invalid partition device path");
+  if (!VALID_PARTITION_RE.test(device)) throw new DiskRequestError("Invalid partition device path");
 
   await checkDeviceNotMounted(device, false);
 
   const name = device.replace("/dev/", "");
   const info = parsePartitionInfo(name);
-  if (!info) throw new Error(`Cannot determine partition number from ${device}`);
+  if (!info) throw new DiskRequestError(`Cannot determine partition number from ${device}`);
 
   const disk = `/dev/${info.disk}`;
   await storage.removePartition(disk, info.number);
@@ -309,7 +358,7 @@ export async function deletePartition(device: string): Promise<void> {
 
 export async function wipeDisk(disk: string): Promise<void> {
   if (!VALID_DISK_RE.test(disk)) {
-    throw new Error("Invalid disk device path");
+    throw new DiskRequestError("Invalid disk device path");
   }
 
   // 1. Guard against mounted partitions in /proc/mounts
@@ -324,11 +373,11 @@ export async function wipeDisk(disk: string): Promise<void> {
     for (const part of matched.partitions) {
       if (part.mountpoint) {
         if (SYSTEM_CRITICAL_MOUNTPOINTS.has(part.mountpoint)) {
-          throw new Error(
+          throw new DiskRequestError(
             `Cannot wipe system disk containing the operating system (${part.mountpoint})`,
           );
         }
-        throw new Error(
+        throw new DiskRequestError(
           `Cannot wipe disk with active mounted partition (${part.device} on ${part.mountpoint}). Unmount all partitions first.`,
         );
       }

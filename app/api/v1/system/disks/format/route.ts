@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createRequestId, logServerAction, withServerTiming } from "@/lib/server/logging/logger";
 import { getAuthCookieName } from "@/lib/server/modules/auth/cookies";
 import { authenticateSession } from "@/lib/server/modules/auth/service";
-import { formatPartition } from "@/lib/server/modules/system/disk-service";
+import { describeDiskFailure, formatPartition } from "@/lib/server/modules/system/disk-service";
 import { DISK_FILESYSTEMS, type DiskFormatRequest } from "@/lib/shared/contracts/disks";
 import { requireElevatedSession } from "@/lib/server/modules/auth/api";
 
@@ -50,15 +50,17 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
+    const { status, message } = describeDiskFailure(error, "Failed to format partition");
+
     logServerAction({
       level: "error",
       layer: "api",
       action: "system.disks.format.response",
       status: "error",
       requestId,
-      message: "Failed to format partition",
+      message,
       error,
     });
-    return NextResponse.json({ error: "Failed to format partition" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }
