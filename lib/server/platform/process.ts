@@ -67,6 +67,12 @@ export type RunOptions = {
   maxBuffer?: number;
   env?: NodeJS.ProcessEnv;
   /**
+   * Exit codes to treat as success, beyond 0. `unzip` answers 1 for "extracted,
+   * with warnings", which some callers accept and others do not — so it is the
+   * caller that says, rather than the wrapper deciding for everyone.
+   */
+  allowedExitCodes?: readonly number[];
+  /**
    * Arguments safe to write to the log. Anything not listed is replaced, so a
    * connector token pasted into an argument does not end up in the journal.
    */
@@ -148,6 +154,18 @@ export async function run(
     };
   } catch (cause) {
     const error = new ProcessError(binary, cause as NodeJS.ErrnoException);
+
+    if (
+      error.exitCode !== null &&
+      options.allowedExitCodes?.includes(error.exitCode) &&
+      !error.timedOut
+    ) {
+      const partial = cause as { stdout?: string; stderr?: string };
+      return {
+        stdout: partial?.stdout?.toString() ?? "",
+        stderr: partial?.stderr?.toString() ?? "",
+      };
+    }
 
     logServerAction({
       level: "error",

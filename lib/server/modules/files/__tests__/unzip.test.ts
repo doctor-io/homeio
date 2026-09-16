@@ -40,8 +40,17 @@ vi.mock("@/lib/server/modules/files/path-resolver", () => ({
 
 import { unzipEntry } from "@/lib/server/modules/files/service";
 
+type ExecCallback = (err: Error | null, res?: { stdout: string; stderr: string }) => void;
+
+/**
+ * The callback is whatever the last argument is. `execFile` is called with or
+ * without an options object depending on the caller, and a mock that assumes
+ * a fixed arity silently never resolves — which shows up as a five-second
+ * timeout rather than as a failed assertion.
+ */
 function resolveExecFile(stdout: string) {
-  return (_cmd: string, _args: string[], cb: (err: Error | null, res?: { stdout: string; stderr: string }) => void) => {
+  return (...args: unknown[]) => {
+    const cb = args.at(-1) as ExecCallback;
     cb(null, { stdout, stderr: "" });
   };
 }
@@ -58,11 +67,16 @@ describe("unzipEntry security validation", () => {
   });
 
   it("rejects zip archives containing path traversal segments (..)", async () => {
-    execFileMock.mockImplementation((_cmd, args, cb) => {
-      if (args.includes("-1")) {
+    execFileMock.mockImplementation((...callArgs: unknown[]) => {
+      const args = callArgs[1] as string[];
+      const cb = callArgs.at(-1) as (e: null, r: { stdout: string; stderr: string }) => void;
+      // The listing call is `unzip -Z1 <zip>`; extraction is not.
+      if (args.some((arg) => arg.startsWith("-Z"))) {
         cb(null, { stdout: "sub/file.txt\n../../etc/shadow\n", stderr: "" });
+      } else {
+        cb(null, { stdout: "", stderr: "" });
       }
-    });
+      });
 
     await expect(unzipEntry({ path: "test.zip" })).rejects.toMatchObject({
       message: "Zip archive contains path traversal entries",
@@ -70,11 +84,16 @@ describe("unzipEntry security validation", () => {
   });
 
   it("rejects zip archives containing absolute paths", async () => {
-    execFileMock.mockImplementation((_cmd, args, cb) => {
-      if (args.includes("-1")) {
+    execFileMock.mockImplementation((...callArgs: unknown[]) => {
+      const args = callArgs[1] as string[];
+      const cb = callArgs.at(-1) as (e: null, r: { stdout: string; stderr: string }) => void;
+      // The listing call is `unzip -Z1 <zip>`; extraction is not.
+      if (args.some((arg) => arg.startsWith("-Z"))) {
         cb(null, { stdout: "/etc/passwd\n", stderr: "" });
+      } else {
+        cb(null, { stdout: "", stderr: "" });
       }
-    });
+      });
 
     await expect(unzipEntry({ path: "test.zip" })).rejects.toMatchObject({
       message: "Zip archive contains invalid paths",
@@ -82,8 +101,13 @@ describe("unzipEntry security validation", () => {
   });
 
   it("rejects zip archives containing symbolic links", async () => {
-    execFileMock.mockImplementation((_cmd, args, cb) => {
-      if (args.includes("-1")) {
+    execFileMock.mockImplementation((...callArgs: unknown[]) => {
+      const args = callArgs[1] as string[];
+      const cb = callArgs.at(-1) as (e: null, r: { stdout: string; stderr: string }) => void;
+
+      // `-Z1` lists names, plain `-Z` is the verbose listing the symlink check
+      // reads. Both start with -Z, so the exact flag is what tells them apart.
+      if (args.includes("-Z1")) {
         cb(null, { stdout: "malicious_link\n", stderr: "" });
       } else {
         // unzip -Z output with symlink flag 'lrwxrwxrwx'

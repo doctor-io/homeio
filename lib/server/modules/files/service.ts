@@ -13,8 +13,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -32,6 +30,7 @@ import {
   setPathStarredInDb,
 } from "@/lib/server/modules/files/stars-repository";
 import { listTrashEntriesFromDb } from "@/lib/server/modules/files/trash-repository";
+import * as archive from "@/lib/server/platform/archive";
 import type {
   FileInfoResponse,
   FileListEntry,
@@ -1505,11 +1504,9 @@ export async function unzipEntry(params: UnzipEntryParams): Promise<FileUnzipRes
       const destinationPath =
         resolved.segments.length > 1 ? resolved.segments.slice(0, -1).join("/") : "";
 
-      const execFileAsync = promisify(execFile);
-
       // Pre-inspection: Ensure archive contains no symlinks, absolute paths, or Zip Slip path traversals
       try {
-        const { stdout: zipList } = await execFileAsync("unzip", ["-Z", "-1", resolved.absolutePath]);
+        const { stdout: zipList } = await archive.listEntries(resolved.absolutePath).then((entries) => ({ stdout: entries.join("\n") }));
         const entries = zipList.split("\n");
         for (const entry of entries) {
           const trimmed = entry.trim();
@@ -1543,7 +1540,7 @@ export async function unzipEntry(params: UnzipEntryParams): Promise<FileUnzipRes
         }
 
         // Check for symbolic links in zip details
-        const { stdout: zipDetails } = await execFileAsync("unzip", ["-Z", resolved.absolutePath]);
+        const { stdout: zipDetails } = await archive.describe(resolved.absolutePath).then((stdout) => ({ stdout }));
         for (const line of zipDetails.split("\n")) {
           const lineTrimmed = line.trim();
           if (!lineTrimmed) continue;
@@ -1563,17 +1560,19 @@ export async function unzipEntry(params: UnzipEntryParams): Promise<FileUnzipRes
         });
       }
 
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn("unzip", ["-o", resolved.absolutePath, "-d", parentAbsolutePath]);
-        proc.on("close", (code) => {
-          // unzip exit code 1 = warnings only (acceptable)
-          if (code === 0 || code === 1) resolve();
-          else reject(new FileServiceError(`unzip exited with code ${String(code)}`, { code: "internal_error", statusCode: 500 }));
+      try {
+        await archive.extract(resolved.absolutePath, parentAbsolutePath, {
+          // unzip answers 1 for "extracted, with warnings".
+          allowedExitCodes: [1],
+          verbose: true,
         });
-        proc.on("error", (err) => {
-          reject(new FileServiceError("Failed to run unzip", { code: "internal_error", statusCode: 500, cause: err }));
+      } catch (err) {
+        throw new FileServiceError("Failed to run unzip", {
+          code: "internal_error",
+          statusCode: 500,
+          cause: err,
         });
-      });
+      }
 
       return { destinationPath };
     },

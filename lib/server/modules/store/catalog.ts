@@ -1,16 +1,16 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { execFile } from "node:child_process";
 import { LruCache } from "@/lib/server/cache/lru";
 import { serverEnv } from "@/lib/server/env";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
 import { ensureDataRootDirectories } from "@/lib/server/storage/data-root";
+import * as git from "@/lib/server/platform/git";
+import * as archive from "@/lib/server/platform/archive";
 import {
   type AppDefinition,
   parseComposeToApp,
@@ -28,7 +28,6 @@ import type {
   StoreCatalogSourceKind,
 } from "@/lib/shared/contracts/apps";
 
-const execFileAsync = promisify(execFile);
 
 export const CASAOS_APPSTORE_REPO_URL = "https://github.com/IceWhaleTech/CasaOS-AppStore";
 const CASAOS_REPO_DIRNAME = "CasaOS-AppStore";
@@ -174,17 +173,8 @@ async function ensureCatalogRoot(directoryPath: string) {
  * partially cleaned directory leaves the subdirectories behind without HEAD or
  * config, and every git command there fails with "not a git repository".
  */
-async function isGitRepository(directory: string) {
-  try {
-    await execFileAsync("git", ["-C", directory, "rev-parse", "--git-dir"]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function cloneOfficialCatalogRepo(absoluteTarget: string) {
-  await execFileAsync("git", ["clone", "--depth=1", CASAOS_APPSTORE_REPO_URL, absoluteTarget]);
+  await git.shallowClone(CASAOS_APPSTORE_REPO_URL, absoluteTarget);
 }
 
 async function ensureOfficialCatalogRepo(targetPath: string, options?: { forceSync?: boolean }) {
@@ -196,9 +186,8 @@ async function ensureOfficialCatalogRepo(targetPath: string, options?: { forceSy
   if (!existsSync(absoluteTarget)) {
     await cloneOfficialCatalogRepo(absoluteTarget);
   } else if (options?.forceSync) {
-    if (await isGitRepository(absoluteTarget)) {
-      await execFileAsync("git", ["-C", absoluteTarget, "fetch", "--depth=1", "origin"]);
-      await execFileAsync("git", ["-C", absoluteTarget, "reset", "--hard", "origin/HEAD"]);
+    if (await git.isRepository(absoluteTarget)) {
+      await git.resetToRemoteHead(absoluteTarget);
     } else {
       // The catalog is a disposable mirror of a public repository, so replacing
       // an unusable checkout costs nothing and is what the user asked for by
@@ -425,29 +414,9 @@ async function downloadRemoteCatalogArchive(source: StoreCatalogSource) {
 
     await rm(extractRoot, { recursive: true, force: true });
     await mkdir(extractRoot, { recursive: true });
-    const { stdout } = await execFileAsync("unzip", ["-Z1", zipPath]);
-    const archiveEntries = stdout
-      .split(/\r?\n/)
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
-
-    for (const entry of archiveEntries) {
-      const sanitizedEntry = entry.replaceAll("\\", "/");
-      if (sanitizedEntry.startsWith("/")) {
-        throw new Error(`Unsafe archive path: ${entry}`);
-      }
-
-      const resolvedEntryPath = path.resolve(extractRoot, sanitizedEntry);
-      const extractRootWithSeparator = `${path.resolve(extractRoot)}${path.sep}`;
-      if (
-        resolvedEntryPath !== path.resolve(extractRoot) &&
-        !resolvedEntryPath.startsWith(extractRootWithSeparator)
-      ) {
-        throw new Error(`Unsafe archive path: ${entry}`);
-      }
-    }
-
-    await execFileAsync("unzip", ["-oq", zipPath, "-d", extractRoot]);
+    // Lists, checks every entry, then extracts — the three cannot be
+    // separated any more, which is the point of putting it there.
+    await archive.extract(zipPath, extractRoot);
 
     return await ensureCatalogRoot(extractRoot);
   } finally {
