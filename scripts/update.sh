@@ -7,6 +7,9 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+SCRIPT_NAME="update.sh"
+HOMEIO_VERBOSE="${HOMEIO_VERBOSE:-false}"
+
 APP_NAME="home-server"
 INSTALL_DIR="${HOMEIO_INSTALL_DIR:-/opt/home-server}"
 ENV_FILE="${HOMEIO_ENV_FILE:-${INSTALL_DIR}/.env}"
@@ -63,8 +66,23 @@ command_exists() {
 	command -v "$1" >/dev/null 2>&1
 }
 
+detect_arch() {
+	case "$(uname -m)" in
+		x86_64)
+			echo "x64"
+			;;
+		aarch64)
+			echo "arm64"
+			;;
+		*)
+			print_error "Unsupported architecture: $(uname -m). Supported: x86_64, aarch64."
+			exit 1
+			;;
+	esac
+}
+
 require_root() {
-	[[ "${EUID}" -eq 0 ]] || { print_error "Run this updater as root (for example: sudo bash update.sh)."; exit 1; }
+	[[ "${EUID}" -eq 0 ]] || { print_error "Run this script as root (for example: sudo bash ${SCRIPT_NAME})."; exit 1; }
 }
 
 hash_file() {
@@ -93,8 +111,13 @@ ensure_security_dependencies() {
 	command_exists fail2ban-client || packages+=("fail2ban")
 
 	if (( ${#packages[@]} > 0 )); then
-		apt-get update -qq >/dev/null
-		apt-get install -y -qq "${packages[@]}" >/dev/null
+		if [[ "${HOMEIO_VERBOSE}" == "true" ]]; then
+			apt-get update -y
+			apt-get install -y "${packages[@]}"
+		else
+			apt-get update -qq >/dev/null
+			apt-get install -y -qq "${packages[@]}" >/dev/null
+		fi
 	fi
 
 	systemctl enable --now fail2ban >/dev/null 2>&1 || true
@@ -230,14 +253,11 @@ run_database_migrations() {
 
 install_go() {
 	local arch go_arch
-	case "$(uname -m)" in
-		x86_64)  arch="amd64" ;;
-		aarch64) arch="arm64" ;;
-		*) print_error "Unsupported architecture: $(uname -m)"; exit 1 ;;
-	esac
-	go_arch="${arch}"
+	arch="$(detect_arch)"
+	go_arch="amd64"
+	[[ "${arch}" == "arm64" ]] && go_arch="arm64"
 
-	if command -v go >/dev/null 2>&1; then
+	if command_exists go; then
 		local current
 		current="$(go version 2>/dev/null | awk '{print $3}' | sed 's/^go//')"
 		if [[ "${current}" == "${GO_VERSION}" ]]; then
@@ -264,20 +284,19 @@ install_go() {
 
 build_upload_server() {
 	print_status "Building upload server (Go)..."
-	export PATH="/usr/local/go/bin:${PATH}"
-	# systemd-run starts the updater in a sparse environment with no $HOME.
-	# `go build` refuses to run without GOCACHE/XDG_CACHE_HOME/HOME, so set
-	# sane defaults here. Keeps build_upload_server safe regardless of how
-	# update.sh was invoked.
+
+	# Go refuses to build without a cache directory, and a transient systemd
+	# unit has no HOME to derive one from — that is how an in-app update once
+	# left the server stuck on "Applying Homeio update…" forever.
 	export HOME="${HOME:-/root}"
 	export GOCACHE="${GOCACHE:-${HOME}/.cache/go-build}"
 	export GOPATH="${GOPATH:-${HOME}/go}"
+	mkdir -p "${GOCACHE}" "${GOPATH}"
 
 	local src="${INSTALL_DIR}/services/upload-server"
-	[[ -d "${src}" ]] || { print_warn "Upload server source not found at ${src}; skipping."; return; }
+	[[ -d "${src}" ]] || { print_error "Upload server source not found at ${src}"; exit 1; }
 
 	mkdir -p "${INSTALL_DIR}/bin"
-	mkdir -p "${GOCACHE}" "${GOPATH}"
 
 	local build_log
 	build_log="$(mktemp)"
@@ -289,6 +308,7 @@ build_upload_server() {
 		exit 1
 	fi
 	rm -f "${build_log}"
+
 	print_status "Upload server built: ${INSTALL_DIR}/bin/upload-server"
 }
 

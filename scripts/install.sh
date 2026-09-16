@@ -7,6 +7,8 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+SCRIPT_NAME="install.sh"
+
 APP_NAME="home-server"
 INSTALL_DIR="${HOMEIO_INSTALL_DIR:-/opt/home-server}"
 ENV_FILE="${INSTALL_DIR}/.env"
@@ -55,7 +57,7 @@ command_exists() {
 }
 
 require_root() {
-	[[ "${EUID}" -eq 0 ]] || { print_error "Run this installer as root (for example: sudo bash install.sh)."; exit 1; }
+	[[ "${EUID}" -eq 0 ]] || { print_error "Run this script as root (for example: sudo bash ${SCRIPT_NAME})."; exit 1; }
 }
 
 run_cmd() {
@@ -491,27 +493,30 @@ install_go() {
 
 build_upload_server() {
 	print_status "Building upload server (Go)..."
-	export PATH="/usr/local/go/bin:${PATH}"
-	# Go requires a build cache. Some install/update entrypoints run with a
-	# minimal environment, so provide explicit cache defaults for the compiler.
+
+	# Go refuses to build without a cache directory, and a transient systemd
+	# unit has no HOME to derive one from — that is how an in-app update once
+	# left the server stuck on "Applying Homeio update…" forever.
 	export HOME="${HOME:-/root}"
 	export GOCACHE="${GOCACHE:-${HOME}/.cache/go-build}"
 	export GOPATH="${GOPATH:-${HOME}/go}"
+	mkdir -p "${GOCACHE}" "${GOPATH}"
 
 	local src="${INSTALL_DIR}/services/upload-server"
 	[[ -d "${src}" ]] || { print_error "Upload server source not found at ${src}"; exit 1; }
 
 	mkdir -p "${INSTALL_DIR}/bin"
-	mkdir -p "${GOCACHE}" "${GOPATH}"
 
-	if [[ "${HOMEIO_VERBOSE}" == "true" ]]; then
-		(cd "${src}" && env HOME="${HOME}" GOCACHE="${GOCACHE}" GOPATH="${GOPATH}" go build -o "${INSTALL_DIR}/bin/upload-server" .)
-	else
-		if ! (cd "${src}" && env HOME="${HOME}" GOCACHE="${GOCACHE}" GOPATH="${GOPATH}" go build -o "${INSTALL_DIR}/bin/upload-server" .) >/dev/null 2>&1; then
-			print_error "Failed to build upload server. Re-run with HOMEIO_VERBOSE=true for details."
-			exit 1
-		fi
+	local build_log
+	build_log="$(mktemp)"
+	if ! (cd "${src}" && env HOME="${HOME}" GOCACHE="${GOCACHE}" GOPATH="${GOPATH}" go build -o "${INSTALL_DIR}/bin/upload-server" .) >"${build_log}" 2>&1; then
+		print_error "Failed to build upload server."
+		print_error "Last output:"
+		tail -10 "${build_log}" >&2
+		rm -f "${build_log}"
+		exit 1
 	fi
+	rm -f "${build_log}"
 
 	print_status "Upload server built: ${INSTALL_DIR}/bin/upload-server"
 }

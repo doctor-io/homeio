@@ -20,6 +20,7 @@ ENV_DIR="${HOMEIO_ENV_DIR:-/etc/home-server}"
 ENV_FILE="${HOMEIO_ENV_FILE:-${ENV_DIR}/home-server.env}"
 SERVICE_NAME="${HOMEIO_SERVICE_NAME:-home-server}"
 DBUS_SERVICE_NAME="${HOMEIO_DBUS_SERVICE_NAME:-home-server-dbus}"
+UPLOAD_SERVICE_NAME="${HOMEIO_UPLOAD_SERVICE_NAME:-home-server-upload}"
 NGINX_SITE_NAME="${HOMEIO_NGINX_SITE_NAME:-home-server}"
 
 # Where the user's own files live. Read it back from the install's env rather
@@ -45,6 +46,11 @@ fi
 DBUS_SERVICE_UNIT="${DBUS_SERVICE_NAME}"
 if [[ "${DBUS_SERVICE_UNIT}" != *.service ]]; then
 	DBUS_SERVICE_UNIT="${DBUS_SERVICE_UNIT}.service"
+fi
+
+UPLOAD_SERVICE_UNIT="${UPLOAD_SERVICE_NAME}"
+if [[ "${UPLOAD_SERVICE_UNIT}" != *.service ]]; then
+	UPLOAD_SERVICE_UNIT="${UPLOAD_SERVICE_UNIT}.service"
 fi
 
 print_status() { echo -e "${GREEN}[+]${NC} $1"; }
@@ -138,6 +144,12 @@ stop_and_remove_service() {
 		print_status "Stopping and disabling ${DBUS_SERVICE_UNIT}..."
 		systemctl stop "${DBUS_SERVICE_UNIT}" >/dev/null 2>&1 || true
 		systemctl disable "${DBUS_SERVICE_UNIT}" >/dev/null 2>&1 || true
+		# install.sh writes this one too, and uninstall never knew about it:
+		# the unit survived, enabled, pointing at a directory that had just
+		# been deleted.
+		print_status "Stopping and disabling ${UPLOAD_SERVICE_UNIT}..."
+		systemctl stop "${UPLOAD_SERVICE_UNIT}" >/dev/null 2>&1 || true
+		systemctl disable "${UPLOAD_SERVICE_UNIT}" >/dev/null 2>&1 || true
 	fi
 
 	local unit_file="/etc/systemd/system/${SERVICE_UNIT}"
@@ -148,6 +160,10 @@ stop_and_remove_service() {
 	local dbus_unit_file="/etc/systemd/system/${DBUS_SERVICE_UNIT}"
 	if [[ -f "${dbus_unit_file}" ]]; then
 		rm -f "${dbus_unit_file}"
+	fi
+	local upload_unit_file="/etc/systemd/system/${UPLOAD_SERVICE_UNIT}"
+	if [[ -f "${upload_unit_file}" ]]; then
+		rm -f "${upload_unit_file}"
 	fi
 
 	if command_exists systemctl; then
@@ -269,7 +285,7 @@ print_summary() {
 	echo -e "${GREEN}╰────────────────────────────────────────────────────╯${NC}"
 	echo ""
 	echo -e "${BLUE}Removed:${NC}"
-	echo "  * Services: ${SERVICE_UNIT}, ${DBUS_SERVICE_UNIT}"
+	echo "  * Services: ${SERVICE_UNIT}, ${DBUS_SERVICE_UNIT}, ${UPLOAD_SERVICE_UNIT}"
 	echo "  * Application: ${INSTALL_DIR}"
 	echo "  * Homeio state: ${STATE_DIR}"
 	echo "  * Configuration: ${ENV_FILE}"
