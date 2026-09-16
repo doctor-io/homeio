@@ -8,6 +8,7 @@ import type {
   SystemUpdateStatus,
 } from "@/lib/shared/contracts/system";
 import { DEFAULT_SCHEDULED_REBOOT_CONFIG } from "@/modules/settings/hooks/backend/constants";
+import { throwIfElevationRequired } from "@/modules/auth/elevation/elevation-error";
 import type {
   BackupRunAcceptedResponse,
   ScheduledRebootConfig,
@@ -29,7 +30,9 @@ type TimedSettingsRequestOptions<T> = {
 };
 
 async function readErrorMessage(response: Response, fallbackMessage: string) {
-  const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+  // Throws ElevationRequiredError first when that is what came back; a body can
+  // only be read once, so the check has to live where the reading happens.
+  const payload = (await throwIfElevationRequired(response)) as ApiErrorPayload;
   return payload.error ?? `${fallbackMessage} (${response.status})`;
 }
 

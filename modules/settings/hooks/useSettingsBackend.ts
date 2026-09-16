@@ -64,8 +64,10 @@ import { useNetworkStatus } from "@/modules/system/hooks/useNetworkStatus";
 import { useNetworkShares } from "@/modules/files/hooks/useNetworkShares";
 import { useSystemMetrics } from "@/modules/system/hooks/useSystemMetrics";
 import { useWifiNetworks } from "@/modules/system/hooks/useWifiNetworks";
+import { useElevation } from "@/modules/auth/elevation/elevation-provider";
 
 export function useSettingsBackend() {
+  const { runElevated } = useElevation();
   const queryClient = useQueryClient();
   const { isUpdateRecoveryActive, setIsUpdateRecoveryActive } = useUpdateRecoveryState();
 
@@ -790,7 +792,10 @@ export function useSettingsBackend() {
         await backupRunMutation.mutateAsync(undefined);
       },
       restoreBackup: async (backupId: string) => {
-        await restoreBackupMutation.mutateAsync(backupId);
+        // Replaces everything on the machine with the archive's contents, so
+        // the server asks for the password again; this turns that into a
+        // prompt rather than an error the user cannot act on.
+        await runElevated(() => restoreBackupMutation.mutateAsync(backupId));
       },
       rebootNow: async () => {
         await rebootMutation.mutateAsync(undefined);
@@ -808,7 +813,7 @@ export function useSettingsBackend() {
         await pruneVolumesMutation.mutateAsync(undefined);
       },
       factoryReset: async () => {
-        await factoryResetMutation.mutateAsync(undefined);
+        await runElevated(() => factoryResetMutation.mutateAsync(undefined));
       },
     },
   };

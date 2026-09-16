@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/shared/query-keys";
+import { throwIfElevationRequired } from "@/modules/auth/elevation/elevation-error";
+import { useElevation } from "@/modules/auth/elevation/elevation-provider";
 import type {
   DiskListResponse,
   DiskFormatRequest,
@@ -26,7 +28,9 @@ async function postDiskAction(url: string, body: unknown): Promise<void> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    // Throws ElevationRequiredError when that is what the refusal is, so the
+    // caller can offer the password instead of only reporting a failure.
+    const json = await throwIfElevationRequired(res);
     throw new Error(json.error ?? "Action failed");
   }
 }
@@ -41,10 +45,13 @@ export function useDisks() {
 }
 
 export function useDiskFormat() {
+  const { runElevated } = useElevation();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (req: DiskFormatRequest) =>
-      postDiskAction("/api/v1/system/disks/format", req),
+      // Irreversible: the server refuses without a fresh password, and
+      // this turns that refusal into a prompt rather than an error.
+      runElevated(() => postDiskAction("/api/v1/system/disks/format", req)),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.disks }),
   });
 }
@@ -77,19 +84,25 @@ export function useDiskCreatePartition() {
 }
 
 export function useDiskDeletePartition() {
+  const { runElevated } = useElevation();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (req: DiskDeletePartitionRequest) =>
-      postDiskAction("/api/v1/system/disks/delete-partition", req),
+      // Irreversible: the server refuses without a fresh password, and
+      // this turns that refusal into a prompt rather than an error.
+      runElevated(() => postDiskAction("/api/v1/system/disks/delete-partition", req)),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.disks }),
   });
 }
 
 export function useDiskWipe() {
+  const { runElevated } = useElevation();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (req: DiskWipeRequest) =>
-      postDiskAction("/api/v1/system/disks/wipe", req),
+      // Irreversible: the server refuses without a fresh password, and
+      // this turns that refusal into a prompt rather than an error.
+      runElevated(() => postDiskAction("/api/v1/system/disks/wipe", req)),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.disks }),
   });
 }

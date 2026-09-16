@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { ElevationProvider } from "@/modules/auth/elevation/elevation-provider";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,8 +24,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster position="bottom-center" offset="5.75rem" />
+        <ElevationProvider>
+          {children}
+          <Toaster position="bottom-center" offset="5.75rem" />
+        </ElevationProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );
