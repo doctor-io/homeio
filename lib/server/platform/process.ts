@@ -55,6 +55,7 @@ export const ALLOWED_BINARIES = {
   hostnamectl: "reading and setting the system hostname",
   hostname: "reading the hostname where hostnamectl is absent",
   which: "locating a binary before depending on it",
+  journalctl: "reading the system and unit journals",
   pg_dump: "database backups",
   bash: "restore and factory-reset scripts, which are shell by nature",
   sh: "vendor install scripts",

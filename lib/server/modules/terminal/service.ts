@@ -234,6 +234,21 @@ Note: commands run in non-interactive mode with a timeout.`,
   ];
 }
 
+/**
+ * Deliberately outside `lib/server/platform`, and listed as an exception in
+ * `platform-boundary.test.ts`.
+ *
+ * Everywhere else in the server, what gets run is decided when the code is
+ * written, so an allowlist of binaries is the right guard. Here the whole
+ * feature is "run the command the operator typed", and the guard that fits
+ * that is ALLOWED_COMMANDS above — checked before this is ever reached.
+ * Wrapping it in the platform allowlist as well would mean a second command
+ * list that can disagree with the first, and this codebase has already paid
+ * for one of those.
+ *
+ * `shell: false` is the other half: the command and its arguments stay
+ * separate, so nothing in an argument can become a command.
+ */
 function executeExternalCommand(
   command: string,
   args: string[],

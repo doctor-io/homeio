@@ -4,12 +4,10 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import type { StructuredLogEntry } from "@/lib/shared/contracts/logging";
+import { run } from "@/lib/server/platform/process";
 
-const execAsync = promisify(exec);
 
 export type LogSource = "homeio" | "system" | "docker";
 
@@ -117,12 +115,25 @@ export async function getHomeioLogs(): Promise<LogsResult> {
 
 async function runJournalctl(unit?: string): Promise<LogsResult> {
   const source: LogSource = unit ? "docker" : "system";
-  const unitFlag = unit ? `-u ${unit}` : "";
-  const cmd = `journalctl ${unitFlag} -n ${MAX_LINES} --no-pager --output=short-iso 2>&1`;
+  const args = [
+    ...(unit ? ["-u", unit] : []),
+    "-n",
+    String(MAX_LINES),
+    "--no-pager",
+    "--output=short-iso",
+  ];
 
   try {
-    const { stdout } = await execAsync(cmd, { timeout: 8_000 });
-    const lines = stdout
+    // Was a shell string with the unit interpolated into it. Nothing
+    // user-supplied ever reached it — the route validates `source` against
+    // three fixed values — but the shell was only there to fold stderr into
+    // stdout, which is free when both come back separately.
+    const { stdout, stderr } = await run("journalctl", args, {
+      timeoutMs: 8_000,
+      loggableArgs: args,
+    });
+
+    const lines = `${stdout}${stderr}`
       .split("\n")
       .filter((l) => l.trim())
       .slice(-MAX_LINES);
