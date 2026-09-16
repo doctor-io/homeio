@@ -1,11 +1,10 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { logServerAction } from "@/lib/server/logging/logger";
+import * as sharing from "@/lib/server/platform/sharing";
 import {
   deleteLocalShareFromDb,
   getLocalShareBySourcePathFromDb,
@@ -24,7 +23,6 @@ import type {
   LocalFolderShareStatus,
 } from "@/lib/shared/contracts/files";
 
-const execFileAsync = promisify(execFile);
 const PG_UNIQUE_VIOLATION = "23505";
 const SHARE_NAME_UNIQUE_CONSTRAINT = "files_local_shares_share_name_idx";
 const SOURCE_PATH_UNIQUE_CONSTRAINT = "files_local_shares_source_path_idx";
@@ -84,35 +82,12 @@ function withSuffix(baseName: string, attempt: number) {
   return sanitizeShareName(`${baseName}-${attempt + 1}`, baseName);
 }
 
-async function runCommand(command: string, args: string[]) {
-  try {
-    const result = await execFileAsync(command, args, {
-      timeout: 15_000,
-      maxBuffer: 1024 * 1024,
-    });
-    return typeof result === "string"
-      ? {
-          stdout: result,
-          stderr: "",
-        }
-      : {
-          stdout: result.stdout ?? "",
-          stderr: result.stderr ?? "",
-        };
-  } catch (error) {
-    const commandError = error as NodeJS.ErrnoException & {
-      command?: string;
-      args?: string[];
-    };
-    commandError.command = command;
-    commandError.args = args;
-    throw commandError;
-  }
-}
 
 async function isMountPoint(absolutePath: string) {
   try {
-    await runCommand("mountpoint", ["-q", absolutePath]);
+    if (!(await sharing.isMountPoint(absolutePath))) {
+      throw new Error("not a mount point");
+    }
     return true;
   } catch {
     return false;
@@ -121,7 +96,7 @@ async function isMountPoint(absolutePath: string) {
 
 async function isUsersharePresent(shareName: string) {
   try {
-    await runCommand("net", ["usershare", "info", shareName]);
+    await sharing.netUsershare(["info", shareName]);
     return true;
   } catch {
     return false;
@@ -410,15 +385,14 @@ async function ensureShareMounted(sourceAbsolutePath: string, exportAbsolutePath
   });
   const mounted = await isMountPoint(exportAbsolutePath);
   if (!mounted) {
-    await runCommand("mount", ["--bind", sourceAbsolutePath, exportAbsolutePath]);
+    await sharing.bindMount(sourceAbsolutePath, exportAbsolutePath);
   }
 }
 
 async function ensureUsershareExported(shareName: string, exportAbsolutePath: string) {
   const exported = await isUsersharePresent(shareName);
   if (!exported) {
-    await runCommand("net", [
-      "usershare",
+    await sharing.netUsershare([
       "add",
       shareName,
       exportAbsolutePath,
@@ -457,7 +431,7 @@ async function releaseShareExport(
 
   if (usershareExists) {
     try {
-      await runCommand("net", ["usershare", "delete", record.shareName]);
+      await sharing.netUsershare(["delete", record.shareName]);
     } catch (error) {
       if (tolerateMissing && isUsershareMissingError(error)) {
         // Already deleted by an out-of-band cleanup.
@@ -473,14 +447,14 @@ async function releaseShareExport(
 
   if (mountExists) {
     try {
-      await runCommand("umount", [exportResolved.absolutePath]);
+      await sharing.unmount(exportResolved.absolutePath);
     } catch (error) {
       if (tolerateMissing && isMountMissingError(error)) {
         // Already unmounted or mount path no longer exists.
       } else if (isMountBusyError(error)) {
         try {
           // Busy bind mounts can require lazy unmount to detach cleanly.
-          await runCommand("umount", ["-l", exportResolved.absolutePath]);
+          await sharing.unmount(exportResolved.absolutePath, { lazy: true });
         } catch (lazyError) {
           if (!(tolerateMissing && isMountMissingError(lazyError))) {
             throw lazyError;

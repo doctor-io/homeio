@@ -1,10 +1,8 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
 import { lstat, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import { logServerAction } from "@/lib/server/logging/logger";
 import {
@@ -21,6 +19,7 @@ import {
   type NetworkShareRecord,
 } from "@/lib/server/modules/files/network-shares-repository";
 import { decryptSecret, encryptSecret } from "@/lib/server/modules/files/secrets";
+import * as sharing from "@/lib/server/platform/sharing";
 import type {
   CreateNetworkShareRequest,
   DiscoverServersResponse,
@@ -30,7 +29,6 @@ import type {
   NetworkShareStatus,
 } from "@/lib/shared/contracts/files";
 
-const execFileAsync = promisify(execFile);
 
 const WATCH_INTERVAL_MS = 60_000;
 
@@ -181,38 +179,14 @@ function isUnmountMissingError(error: unknown) {
   );
 }
 
-async function runCommand(command: string, args: string[]) {
-  const result = await execFileAsync(command, args, {
-    timeout: 15_000,
-    maxBuffer: 1024 * 1024,
-  });
-
-  if (typeof result === "string" || Buffer.isBuffer(result)) {
-    return {
-      stdout: result,
-      stderr: "",
-    };
-  }
-
-  if (result && typeof result === "object" && "stdout" in result) {
-    const castResult = result as { stdout?: string | Buffer; stderr?: string | Buffer };
-    return {
-      stdout: castResult.stdout ?? "",
-      stderr: castResult.stderr ?? "",
-    };
-  }
-
-  return {
-    stdout: "",
-    stderr: "",
-  };
-}
 
 async function isMounted(mountPath: string) {
   const resolved = await resolveMountPath(mountPath);
 
   try {
-    await runCommand("mountpoint", ["-q", resolved.absolutePath]);
+    if (!(await sharing.isMountPoint(resolved.absolutePath))) {
+      throw new Error("not mounted");
+    }
     return true;
   } catch {
     return false;
@@ -309,14 +283,12 @@ async function mountShareRecord(record: NetworkShareRecord) {
       "iocharset=utf8",
     ].join(",");
 
-    await runCommand("mount", [
-      "-t",
-      "cifs",
-      smbPath,
-      resolved.absolutePath,
-      "-o",
-      mountOptions,
-    ]);
+    // The credentials file path is fine to log; the options string names it
+    // rather than carrying the password, but the rest stays out anyway.
+    await sharing.mount(
+      ["-t", "cifs", smbPath, resolved.absolutePath, "-o", mountOptions],
+      ["-t", "cifs", resolved.absolutePath],
+    );
   } finally {
     // Always remove the credentials file — whether mount succeeded or failed.
     await rm(credsPath, { force: true }).catch(() => undefined);
@@ -353,7 +325,7 @@ async function unmountShareRecord(
 
   if (mounted) {
     try {
-      await runCommand("umount", [resolved.absolutePath]);
+      await sharing.unmount(resolved.absolutePath);
     } catch (error) {
       if (!isUnmountMissingError(error)) {
         throw error;
@@ -626,19 +598,15 @@ export async function unmountShare(shareId: string) {
 
 export async function discoverServers(): Promise<DiscoverServersResponse> {
   try {
-    const { stdout } = await runCommand("avahi-browse", [
+    const { stdout } = await sharing.avahiBrowse([
       "--resolve",
       "--terminate",
       "_smb._tcp",
       "--parsable",
     ]);
 
-    const output =
-      typeof stdout === "string"
-        ? stdout
-        : Buffer.isBuffer(stdout)
-          ? stdout.toString("utf8")
-          : "";
+    // The platform wrapper always hands back a string.
+    const output = stdout;
     const servers = output
       .split("\n")
       .map((line) => line.split(";")[6]?.trim() ?? "")
@@ -683,7 +651,7 @@ export async function discoverShares(input: {
   }
 
   try {
-    const { stdout } = await runCommand("smbclient", [
+    const { stdout } = await sharing.smbclient([
       "--list",
       `//${host}`,
       "--user",
@@ -693,12 +661,8 @@ export async function discoverShares(input: {
       "--grepable",
     ]);
 
-    const output =
-      typeof stdout === "string"
-        ? stdout
-        : Buffer.isBuffer(stdout)
-          ? stdout.toString("utf8")
-          : "";
+    // The platform wrapper always hands back a string.
+    const output = stdout;
     const shares = output
       .split("\n")
       .map((line) => line.trim())

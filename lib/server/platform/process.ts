@@ -30,6 +30,10 @@ export const ALLOWED_BINARIES = {
   tar: "backup archives",
   unzip: "app store archive extraction",
   mount: "removable and network storage",
+  mountpoint: "asking whether a path is already a mount",
+  net: "Samba usershare management",
+  smbclient: "listing what an SMB server offers",
+  "avahi-browse": "discovering shares advertised on the local network",
   umount: "removable and network storage",
   lsblk: "disk inventory",
   parted: "partitioning",
@@ -101,6 +105,14 @@ export type RunResult = {
 export class ProcessError extends Error {
   readonly binary: AllowedBinary;
   readonly exitCode: number | null;
+  /**
+   * The system error code — `ENOENT` when the binary is not installed,
+   * `EACCES` when it cannot be run. Several features degrade rather than fail
+   * when a tool is absent, and this is how they tell the difference between
+   * "not here" and "here and unhappy". Dropping it, as an earlier version of
+   * this class did, turns a missing command into a generic failure.
+   */
+  readonly code: string | null;
   readonly stderr: string;
   readonly timedOut: boolean;
 
@@ -120,6 +132,7 @@ export class ProcessError extends Error {
     this.name = "ProcessError";
     this.binary = binary;
     this.exitCode = typeof cause.code === "number" ? cause.code : null;
+    this.code = typeof cause.code === "string" ? cause.code : null;
     this.stderr = stderr;
     this.timedOut = timedOut;
   }
@@ -161,6 +174,15 @@ export async function run(
       maxBuffer: options.maxBuffer ?? 1024 * 1024,
       env: options.env,
     });
+
+    // `promisify(execFile)` normally resolves with `{ stdout, stderr }`,
+    // through a custom symbol on the real function. Replace child_process and
+    // that symbol goes with it, leaving plain promisify semantics: the first
+    // value after the error, which is stdout on its own. The previous
+    // hand-rolled wrappers each carried this branch; it belongs here now.
+    if (typeof result === "string" || Buffer.isBuffer(result)) {
+      return { stdout: result.toString(), stderr: "" };
+    }
 
     return {
       stdout: result?.stdout?.toString() ?? "",
