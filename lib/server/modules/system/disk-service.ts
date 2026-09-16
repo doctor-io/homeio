@@ -1,8 +1,7 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
-import { promisify } from "node:util";
+import * as storage from "@/lib/server/platform/storage";
 import type {
   DiskDevice,
   DiskFilesystem,
@@ -10,7 +9,6 @@ import type {
   DiskPartition,
 } from "@/lib/shared/contracts/disks";
 
-const execFileAsync = promisify(execFile);
 
 // ─── lsblk types ─────────────────────────────────────────────────────────────
 
@@ -66,13 +64,10 @@ function mediaTypeFromDevice(dev: LsblkDevice): DiskMediaType {
 export async function listDisks(): Promise<DiskDevice[]> {
   let stdout: string;
   try {
-    const result = await execFileAsync("lsblk", [
-      "--json",
-      "--bytes",
-      "--output",
-      "NAME,MODEL,VENDOR,SERIAL,SIZE,TYPE,FSTYPE,LABEL,UUID,MOUNTPOINT,TRAN,RM,RO,ROTA,PARTTYPE",
+    stdout = await storage.listBlockDevices([
+      "NAME", "MODEL", "VENDOR", "SERIAL", "SIZE", "TYPE", "FSTYPE",
+      "LABEL", "UUID", "MOUNTPOINT", "TRAN", "RM", "RO", "ROTA", "PARTTYPE",
     ]);
-    stdout = result.stdout;
   } catch {
     return [];
   }
@@ -126,16 +121,6 @@ export async function listDisks(): Promise<DiskDevice[]> {
 }
 
 // ─── format ───────────────────────────────────────────────────────────────────
-
-const MKFS_COMMAND: Record<DiskFilesystem, string> = {
-  ext4: "mkfs.ext4",
-  ext3: "mkfs.ext3",
-  btrfs: "mkfs.btrfs",
-  xfs: "mkfs.xfs",
-  ntfs: "mkfs.ntfs",
-  vfat: "mkfs.vfat",
-  exfat: "mkfs.exfat",
-};
 
 const LABEL_FLAG: Record<DiskFilesystem, string> = {
   ext4: "-L",
@@ -199,7 +184,6 @@ export async function formatPartition(
 
   await checkDeviceNotMounted(device, false);
 
-  const cmd = MKFS_COMMAND[filesystem];
   const flag = LABEL_FLAG[filesystem];
   const args: string[] = [];
 
@@ -209,9 +193,7 @@ export async function formatPartition(
     args.push(flag, label);
   }
 
-  args.push(device);
-
-  await execFileAsync(cmd, args);
+  await storage.format(device, filesystem, args);
 }
 
 // ─── mount ────────────────────────────────────────────────────────────────────
@@ -235,7 +217,7 @@ export async function mountPartition(
   }
 
   await mkdir(mountPoint, { recursive: true });
-  await execFileAsync("mount", [device, mountPoint]);
+  await storage.mount(device, mountPoint);
 
   if (addToFstab) {
     await appendFstabEntry(device, mountPoint);
@@ -282,7 +264,7 @@ export async function unmountPartition(device: string): Promise<void> {
   if (!VALID_PARTITION_RE.test(device) && !VALID_MOUNTPOINT_RE.test(device)) {
     throw new Error("Invalid device or mount path");
   }
-  await execFileAsync("umount", [device]);
+  await storage.unmount(device);
 }
 
 // ─── create partition ─────────────────────────────────────────────────────────
@@ -300,21 +282,12 @@ export async function createPartition(
 
   // Ensure GPT table exists (safe — no-op if already present)
   try {
-    await execFileAsync("parted", ["--script", disk, "mklabel", "gpt"]);
+    await storage.createPartitionTable(disk);
   } catch {
     // Disk may already have a partition table
   }
 
-  await execFileAsync("parted", [
-    "--script",
-    "--align",
-    "optimal",
-    disk,
-    "mkpart",
-    "primary",
-    start.trim(),
-    end.trim(),
-  ]);
+  await storage.createPartition(disk, start.trim(), end.trim());
 }
 
 // ─── delete partition ─────────────────────────────────────────────────────────
@@ -329,7 +302,7 @@ export async function deletePartition(device: string): Promise<void> {
   if (!info) throw new Error(`Cannot determine partition number from ${device}`);
 
   const disk = `/dev/${info.disk}`;
-  await execFileAsync("parted", ["--script", disk, "rm", String(info.number)]);
+  await storage.removePartition(disk, info.number);
 }
 
 // ─── wipe disk ────────────────────────────────────────────────────────────────
@@ -363,5 +336,5 @@ export async function wipeDisk(disk: string): Promise<void> {
   }
 
   // wipefs removes all filesystem and partition table signatures
-  await execFileAsync("wipefs", ["--all", "--force", disk]);
+  await storage.wipeSignatures(disk);
 }

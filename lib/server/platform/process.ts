@@ -34,6 +34,16 @@ export const ALLOWED_BINARIES = {
   lsblk: "disk inventory",
   parted: "partitioning",
   wipefs: "erasing a disk the operator asked to erase",
+  // One entry per filesystem rather than a pattern: the point of the list is
+  // that a reader can see everything the app can run, and "mkfs.*" hides how
+  // many of those there are and what they do.
+  "mkfs.ext4": "formatting a partition as ext4",
+  "mkfs.ext3": "formatting a partition as ext3",
+  "mkfs.btrfs": "formatting a partition as btrfs",
+  "mkfs.xfs": "formatting a partition as xfs",
+  "mkfs.ntfs": "formatting a partition as ntfs",
+  "mkfs.vfat": "formatting a partition as vfat",
+  "mkfs.exfat": "formatting a partition as exfat",
   udisksctl: "desktop-session disk operations",
   tailscale: "tailnet status and enrolment",
   ufw: "firewall rules",

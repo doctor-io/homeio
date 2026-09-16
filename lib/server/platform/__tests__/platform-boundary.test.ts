@@ -62,7 +62,8 @@ describe("platform boundary", () => {
 
   it("names every binary it is allowed to run, with a reason", () => {
     for (const [binary, reason] of Object.entries(ALLOWED_BINARIES)) {
-      expect(binary).toMatch(/^[a-z][a-z0-9_-]*$/);
+      // Dots are legitimate: the mkfs family is mkfs.ext4, mkfs.btrfs…
+      expect(binary).toMatch(/^[a-z][a-z0-9_.-]*$/);
       // The reason is the point: a list of names tells a reviewer nothing about
       // whether the entry should still be there.
       expect(reason.length).toBeGreaterThan(8);

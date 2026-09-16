@@ -1,14 +1,12 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { mkdir, access } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import type { UsbDrive, UsbPartition } from "@/lib/shared/contracts/usb";
 import { emitUsbEvent } from "./usb-emitter";
+import * as storage from "@/lib/server/platform/storage";
 
-const execFileAsync = promisify(execFile);
 
 const USB_MOUNT_ROOT = path.join(serverEnv.FILES_ROOT, "Removable");
 const POLL_INTERVAL_MS = 5_000;
@@ -59,12 +57,10 @@ function driveId(device: LsblkDevice): string {
 async function detectUsbDrives(): Promise<UsbDrive[]> {
   let stdout: string;
   try {
-    const result = await execFileAsync("lsblk", [
-      "--json",
-      "--output",
-      "NAME,VENDOR,MODEL,SIZE,TYPE,MOUNTPOINT,FSTYPE,RM,HOTPLUG,LABEL,UUID,TRAN",
+    stdout = await storage.listBlockDevices([
+      "NAME", "VENDOR", "MODEL", "SIZE", "TYPE", "MOUNTPOINT",
+      "FSTYPE", "RM", "HOTPLUG", "LABEL", "UUID", "TRAN",
     ]);
-    stdout = result.stdout;
   } catch {
     return [];
   }
@@ -136,7 +132,7 @@ export async function mountUsbDrive(driveId: string): Promise<UsbDrive> {
   await mkdir(mountPath, { recursive: true });
 
   const fstype = partition.fstype && partition.fstype !== "auto" ? partition.fstype : "auto";
-  await execFileAsync("mount", ["-t", fstype, `/dev/${partition.name}`, mountPath]);
+  await storage.mount(`/dev/${partition.name}`, mountPath, { fsType: fstype });
 
   const updated = await detectUsbDrives();
   const updatedDrive = updated.find((d) => d.id === driveId);
@@ -152,11 +148,11 @@ export async function unmountUsbDrive(driveId: string): Promise<void> {
 
   // Use our own mount path or the detected mountpoint
   const mountpoint = drive.mountpoint ?? mountpointForDrive(drive);
-  await execFileAsync("umount", [mountpoint]).catch(async () => {
+  await storage.unmount(mountpoint).catch(async () => {
     // Try the partition mountpoint as fallback
     const partition = drive.partitions.find((p) => p.mountpoint);
     if (partition?.mountpoint) {
-      await execFileAsync("umount", [partition.mountpoint]);
+      await storage.unmount(partition.mountpoint);
     }
   });
 
@@ -171,12 +167,7 @@ export async function ejectUsbDrive(driveId: string): Promise<void> {
   if (!drive) return;
 
   try {
-    await execFileAsync("udisksctl", [
-      "power-off",
-      "--block-device",
-      drive.device,
-      "--no-user-interaction",
-    ]);
+    await storage.powerOff(drive.device);
   } catch {
     // udisksctl not available or already ejected — that's fine
   }
