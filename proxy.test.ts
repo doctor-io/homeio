@@ -187,7 +187,11 @@ describe("middleware auth guard", () => {
     expect(response.headers.get("x-auth-entry")).toBe("/register");
   });
 
-  it("falls back to register when auth status lookup fails", async () => {
+  it("sends you to login, not register, when the auth status lookup fails", async () => {
+    // This used to answer /register. Not knowing whether accounts exist is not
+    // the same as knowing there are none, and treating it as "fresh install"
+    // offers a running machine up for registration and throws away the session
+    // of anyone signed in. One redirect to /login is the cheaper wrong answer.
     process.env.AUTH_SESSION_SECRET = secret;
     vi.spyOn(global, "fetch").mockRejectedValueOnce(new Error("network failure"));
 
@@ -195,7 +199,36 @@ describe("middleware auth guard", () => {
     const response = await proxy(request);
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toContain("/register");
+    expect(response.headers.get("location")).toContain("/login");
+    expect(response.headers.get("location")).not.toContain("/register");
+  });
+
+  it("forbids a shared cache from keeping any answer it gives", async () => {
+    // A tunnel or CDN in front that caches redirects serves one visitor's
+    // answer to everybody: an install that was briefly empty answers
+    // 307 -> /register, and once that is cached every later visitor is sent to
+    // registration however many accounts exist. Incognito and a second device
+    // do not help, because the cache sits upstream of both.
+    process.env.AUTH_SESSION_SECRET = secret;
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: { hasUsers: true } }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await proxy(new NextRequest("http://localhost/"));
+
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("leaves immutable assets cacheable", async () => {
+    process.env.AUTH_SESSION_SECRET = secret;
+
+    const response = await proxy(
+      new NextRequest("http://localhost/_next/static/chunks/main.js"),
+    );
+
+    expect(response.headers.get("Cache-Control")).toBeNull();
   });
 
   it("allows unauthenticated calls to the TOTP login route through", async () => {

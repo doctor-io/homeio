@@ -125,7 +125,15 @@ async function hasUsersInDb(request: NextRequest) {
     if (authStatusCache) {
       return authStatusCache.hasUsers;
     }
-    return false;
+
+    // Not knowing is not the same as knowing there is nobody. Answering `false`
+    // here says "fresh install": the visitor is sent to registration, and an
+    // authenticated one has their session cookie cleared on the way — a
+    // momentary database or network hiccup logging everyone out and offering
+    // the machine up for registration. Assuming accounts exist costs a real
+    // fresh install one redirect to /login; the other way costs a running
+    // install its sessions.
+    return true;
   }
 }
 
@@ -143,7 +151,37 @@ function clearSessionCookie(response: NextResponse) {
   return response;
 }
 
+/**
+ * Nothing this middleware touches may sit in a shared cache.
+ *
+ * Homeio is commonly published through a tunnel or a CDN — the docs recommend
+ * exactly that — and a cache in front that keeps redirects will serve one
+ * visitor's answer to everybody. An install that was briefly empty answers
+ * `307 -> /register`; once that is cached, every later visitor is sent to
+ * registration no matter how many accounts exist, and the session cookie they
+ * just earned is thrown away on the way back. Incognito does not help, nor
+ * does another browser or another device: the cache is upstream of all of them,
+ * which is exactly what makes it look like a server-side bug.
+ *
+ * Immutable assets are unaffected — `_next/static` never reaches this
+ * middleware, by the matcher below — so they keep the long-lived caching that
+ * makes them worth caching.
+ */
+function withoutSharedCaching(response: NextResponse) {
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
+  const response = await route(request);
+
+  // Static files are the exception, and the only one: they carry no session,
+  // they change name when they change content, and caching them is the whole
+  // point of putting a CDN in front of anything.
+  return isStaticRoute(request.nextUrl.pathname) ? response : withoutSharedCaching(response);
+}
+
+async function route(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   if (isStaticRoute(pathname)) {
