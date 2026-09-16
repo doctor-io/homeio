@@ -21,8 +21,22 @@ import { run } from "@/lib/server/platform/process";
  * that used `execFile` directly had to remember that; several did not, and read
  * a stopped service as an error.
  */
+/**
+ * The exit codes these two queries use to mean "no".
+ *
+ * 1 is disabled or generic, 3 inactive, 4 no such unit — none of them a fault.
+ * Listing them keeps a routine "is this running?" out of the journal's error
+ * stream: the answer is on stdout either way, and a service that is simply not
+ * installed was producing an ERROR line on every poll.
+ */
+const ANSWERED_BY_EXIT_CODE = [1, 2, 3, 4];
+
 export async function isActive(unit: string): Promise<string> {
-  return run("systemctl", ["is-active", unit], { timeoutMs: 10_000, loggableArgs: ["is-active", unit] })
+  return run("systemctl", ["is-active", unit], {
+    timeoutMs: 10_000,
+    loggableArgs: ["is-active", unit],
+    allowedExitCodes: ANSWERED_BY_EXIT_CODE,
+  })
     .then(({ stdout }) => stdout.trim() || "unknown")
     .catch((error: unknown) => {
       const stdout = (error as { stdout?: string })?.stdout;
@@ -49,7 +63,11 @@ export async function restart(unit: string) {
  * that is not enabled.
  */
 export async function isEnabled(unit: string): Promise<string> {
-  return run("systemctl", ["is-enabled", unit], { timeoutMs: 10_000, loggableArgs: ["is-enabled", unit] })
+  return run("systemctl", ["is-enabled", unit], {
+    timeoutMs: 10_000,
+    loggableArgs: ["is-enabled", unit],
+    allowedExitCodes: ANSWERED_BY_EXIT_CODE,
+  })
     .then(({ stdout }) => stdout.trim() || "unknown")
     .catch((error: unknown) => {
       const stdout = (error as { stdout?: string })?.stdout;
