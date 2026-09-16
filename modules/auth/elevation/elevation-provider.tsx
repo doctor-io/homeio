@@ -144,8 +144,8 @@ export function ElevationProvider({ children }: { children: React.ReactNode }) {
               <DialogTitle>Confirm it&apos;s you</DialogTitle>
               <DialogDescription>
                 This action cannot be undone, so Homeio asks for your password
-                again before doing it. You will not be asked again for a few
-                minutes.
+                again before doing it. You won&apos;t be asked again for a few
+                minutes, unless the server restarts.
               </DialogDescription>
             </DialogHeader>
 

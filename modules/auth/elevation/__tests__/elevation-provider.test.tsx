@@ -102,6 +102,20 @@ describe("ElevationProvider", () => {
     vi.stubGlobal("fetch", buildFetch(() => jsonResponse(200, { data: { expiresAt: 1 } })));
   });
 
+  it("does not promise the user more than the store can keep", async () => {
+    renderHarness(1);
+
+    click("Wipe disk");
+    await screen.findByLabelText("Password");
+
+    // The grant lives in the server's memory and a restart drops it, which is
+    // a deliberate choice (see elevation.ts). A dialog that says "you will not
+    // be asked again" without that caveat is telling the user something the
+    // mechanism cannot deliver — and it came back twice during a deploy.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("unless the server restarts");
+  });
+
   it("stays out of the way when the server does not ask", async () => {
     const state = renderHarness(0);
 

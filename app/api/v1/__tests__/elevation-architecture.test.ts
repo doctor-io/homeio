@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 /**
  * Which routes may do something that cannot be undone, and what they ask for.
@@ -75,6 +75,40 @@ describe("elevation", () => {
     // hand the phone in someone else's hand five minutes of the same power.
     expect(isElevated("laptop-session")).toBe(true);
     expect(isElevated("phone-session")).toBe(false);
+  });
+
+  it("loses every grant when the process restarts", async () => {
+    const { grantElevation, isElevated, clearAllElevations } = await import(
+      "@/lib/server/modules/auth/elevation"
+    );
+    clearAllElevations();
+    grantElevation("session-token");
+    expect(isElevated("session-token")).toBe(true);
+
+    // A fresh module instance is what a restart leaves behind: the Map is
+    // module state, so re-importing it is the same emptiness systemd produces.
+    vi.resetModules();
+    const restarted = await import("@/lib/server/modules/auth/elevation");
+
+    expect(restarted.isElevated("session-token")).toBe(false);
+  });
+
+  it("keeps grants nowhere a restart could not clear", async () => {
+    // The comment in elevation.ts says in memory and only in memory. This is
+    // what stops that from being a comment. Persisting elevation is a plausible
+    // "fix" for the prompt coming back after a deploy, and it would trade a
+    // five-minute window for a grant a restart can no longer revoke.
+    const source = await readFile(
+      path.join(process.cwd(), "lib", "server", "modules", "auth", "elevation.ts"),
+      "utf8",
+    );
+
+    for (const forbidden of ["/db", "drizzle", "node:fs", "redis", "localStorage"]) {
+      expect(source, `elevation must not reach for ${forbidden}`).not.toContain(
+        `from "${forbidden}`,
+      );
+    }
+    expect(source).not.toMatch(/\bfrom "[^"]*\/db\//);
   });
 
   it("drops the grant when the session ends", async () => {

@@ -14,12 +14,26 @@ import { createHash } from "node:crypto";
  * you are; it does not prove you meant *this*. So the destructive routes ask
  * again, and the answer is good for a few minutes rather than for the session.
  *
- * Deliberately in memory:
+ * Deliberately in memory, and this is the whole of the choice:
  *
  * - A restart drops every elevation. That is the safe direction to fail, and a
- *   restart is exactly when you least want a stale grant lying around.
+ *   restart is exactly when you least want a stale grant lying around. It is
+ *   also the visible cost: deploying mid-flow makes the prompt come back, and
+ *   that happened twice while this feature was being tested on a real server.
+ *   The prompt saying so is part of the bargain — see the dialog's wording.
  * - Nothing is written to the database, so there is no elevation record to
- *   steal, replay or forget to expire.
+ *   steal, replay or forget to expire. Persisting it would buy survival across
+ *   a restart and pay for it with a grant that a restart can no longer clear;
+ *   for a five-minute window on a single-user machine that is a bad trade.
+ * - It follows that grants live in one process and are not shared. Homeio runs
+ *   a single Node process (`server.ts`, no cluster, no workers), so today that
+ *   costs nothing. Anyone adding a second process has to move this somewhere
+ *   shared or accept that users get re-prompted at random — which is the kind
+ *   of thing that is obvious here and baffling in a bug report.
+ *
+ * `elevation-architecture.test.ts` holds this to it: the property is asserted,
+ * not just described, because a comment does not stop anyone from persisting
+ * this and a passing suite would not have noticed.
  */
 
 const ELEVATION_TTL_MS = 5 * 60_000;
