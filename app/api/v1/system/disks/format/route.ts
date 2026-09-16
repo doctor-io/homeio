@@ -5,12 +5,12 @@ import { getAuthCookieName } from "@/lib/server/modules/auth/cookies";
 import { authenticateSession } from "@/lib/server/modules/auth/service";
 import { formatPartition } from "@/lib/server/modules/system/disk-service";
 import { DISK_FILESYSTEMS, type DiskFormatRequest } from "@/lib/shared/contracts/disks";
-import { requireApiSession } from "@/lib/server/modules/auth/api";
+import { requireElevatedSession } from "@/lib/server/modules/auth/api";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const apiSession = await requireApiSession(request);
+  const apiSession = await requireElevatedSession(request);
   if (apiSession.response) return apiSession.response;
   const requestId = createRequestId();
   const sessionToken = request.cookies.get(getAuthCookieName())?.value;

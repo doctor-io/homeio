@@ -8,6 +8,7 @@ import {
   getExpiredSessionCookieOptions,
 } from "@/lib/server/modules/auth/cookies";
 import { logoutSession } from "@/lib/server/modules/auth/service";
+import { revokeElevation } from "@/lib/server/modules/auth/elevation";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,10 @@ export async function POST(request: NextRequest) {
     },
     async () => {
       await logoutSession(sessionToken);
+      // A session that ends takes its privileges with it. Otherwise the next
+      // person to sign in on this machine inherits whatever window the last
+      // one had left open.
+      revokeElevation(sessionToken);
       return Promise.resolve();
     },
   );

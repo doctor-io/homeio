@@ -5,7 +5,24 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/modules/auth/api", async () => {
   const { NextResponse } = await import("next/server");
 
+  const authenticated = async () => ({
+    session: {
+      sessionId: "test-session",
+      userId: "test-user",
+      username: "admin",
+      passwordHash: "test-password-hash",
+      expiresAt: new Date(Date.now() + 3600_000),
+    },
+    response: null,
+  });
+
   return {
+    // Both guards default to letting the request through, the same way
+    // requireApiSession already did. Which routes are *expected* to demand
+    // elevation is asserted in elevation-architecture.test.ts, against the
+    // source — a permissive default here cannot hide a missing guard there.
+    requireElevatedSession: vi.fn(authenticated),
+    getSessionTokenFromRequest: vi.fn(() => "test-session-token"),
     requireApiSession: vi.fn(async () => ({
       session: {
         sessionId: "test-session",

@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { wipeDiskMock, requireApiSessionMock } = vi.hoisted(() => ({
+const { wipeDiskMock, requireElevatedSessionMock } = vi.hoisted(() => ({
   wipeDiskMock: vi.fn(),
-  requireApiSessionMock: vi.fn(),
+  requireElevatedSessionMock: vi.fn(),
 }));
 
 vi.mock("@/lib/server/modules/system/disk-service", () => ({
@@ -11,7 +11,7 @@ vi.mock("@/lib/server/modules/system/disk-service", () => ({
 }));
 
 vi.mock("@/lib/server/modules/auth/api", () => ({
-  requireApiSession: requireApiSessionMock,
+  requireElevatedSession: requireElevatedSessionMock,
 }));
 
 import { POST } from "@/app/api/v1/system/disks/wipe/route";
@@ -21,11 +21,11 @@ describe("POST /api/v1/system/disks/wipe", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     wipeDiskMock.mockReset();
-    requireApiSessionMock.mockReset();
+    requireElevatedSessionMock.mockReset();
   });
 
   it("returns 401 when unauthenticated", async () => {
-    requireApiSessionMock.mockResolvedValueOnce({
+    requireElevatedSessionMock.mockResolvedValueOnce({
       session: null,
       response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     });
@@ -40,7 +40,7 @@ describe("POST /api/v1/system/disks/wipe", () => {
   });
 
   it("returns 400 when disk is missing", async () => {
-    requireApiSessionMock.mockResolvedValueOnce({
+    requireElevatedSessionMock.mockResolvedValueOnce({
       session: { userId: "user-1" },
       response: null,
     });
@@ -58,7 +58,7 @@ describe("POST /api/v1/system/disks/wipe", () => {
   });
 
   it("returns 400 when wipeDisk rejects for system/mounted disk safety", async () => {
-    requireApiSessionMock.mockResolvedValueOnce({
+    requireElevatedSessionMock.mockResolvedValueOnce({
       session: { userId: "user-1" },
       response: null,
     });
@@ -79,7 +79,7 @@ describe("POST /api/v1/system/disks/wipe", () => {
   });
 
   it("returns 200 when disk wipe succeeds", async () => {
-    requireApiSessionMock.mockResolvedValueOnce({
+    requireElevatedSessionMock.mockResolvedValueOnce({
       session: { userId: "user-1" },
       response: null,
     });

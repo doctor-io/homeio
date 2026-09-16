@@ -17,6 +17,7 @@ import {
   recordLoginFailure,
 } from "@/lib/server/modules/auth/rate-limit";
 import type { ApiTokenScope } from "@/lib/shared/contracts/api-tokens";
+import { isElevated } from "@/lib/server/modules/auth/elevation";
 
 export type ApiSession = NonNullable<Awaited<ReturnType<typeof authenticateSession>>>;
 
@@ -55,7 +56,7 @@ function parseCookies(headerValue: string | null) {
   return cookies;
 }
 
-function getSessionTokenFromRequest(request: Request) {
+export function getSessionTokenFromRequest(request: Request) {
   const cookies = parseCookies(request.headers.get("cookie"));
   return cookies[getAuthCookieName()] ?? null;
 }
@@ -173,4 +174,35 @@ export async function requireApiSession(
     tokenId: record.id,
     scopes: record.scopes,
   };
+}
+
+/**
+ * Refuses a request that has not re-authenticated recently.
+ *
+ * Layered on top of {@link requireApiSession} rather than replacing it: a
+ * caller needs a valid session *and* a fresh answer to "prove it is you". The
+ * session says who; the elevation says you meant this one.
+ *
+ * Bearer tokens can never be elevated. A token is a stored credential — it
+ * cannot be asked anything — so a route that requires elevation is closed to
+ * them by construction. That is the intended answer: no API token wipes a disk.
+ */
+export async function requireElevatedSession(request: Request): Promise<ApiSessionResult> {
+  const apiSession = await requireApiSession(request);
+  if (apiSession.response) return apiSession;
+
+  if (!isElevated(getSessionTokenFromRequest(request))) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        {
+          error: "This action needs your password again",
+          code: "elevation_required",
+        },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return apiSession;
 }

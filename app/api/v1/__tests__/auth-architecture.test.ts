@@ -39,7 +39,14 @@ describe("api v1 auth architecture", () => {
       .filter((file) => !publicRoutes.has(file))
       .filter((file) => {
         const content = readFileSync(path.join(apiRoot, file), "utf8");
-        return !content.includes("requireApiSession");
+        // `requireElevatedSession` is `requireApiSession` plus a re-auth check,
+        // so a route using it is authenticated by a stricter rule, not a
+        // different one. See elevation-architecture.test.ts for which routes
+        // are expected to reach for it.
+        return (
+          !content.includes("requireApiSession") &&
+          !content.includes("requireElevatedSession")
+        );
       });
 
     expect(missingAuth).toEqual([]);

@@ -187,7 +187,12 @@ describe("module boundaries", () => {
       if (!HTTP_HANDLER_PATTERN.test(source)) continue;
 
       const relativePath = filePath.slice(REPO_ROOT.length + 1);
-      const hasAuth = source.includes("requireApiSession");
+      // `requireElevatedSession` wraps `requireApiSession` and adds a
+      // re-authentication check on top, so a route using it satisfies this
+      // rule by a stricter standard rather than escaping it.
+      const hasAuth =
+        source.includes("requireApiSession") ||
+        source.includes("requireElevatedSession");
       const allowlisted = V1_AUTH_ALLOWLIST.has(relativePath);
 
       if (!hasAuth && !allowlisted) {
