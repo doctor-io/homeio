@@ -1,9 +1,9 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as systemd from "@/lib/server/platform/systemd";
+import * as host from "@/lib/server/platform/host";
 import {
   SYSTEM_SECURITY_BAN_DURATION_MAX,
   SYSTEM_SECURITY_BAN_DURATION_MIN,
@@ -75,32 +75,13 @@ function isToolUnavailable(error: unknown) {
   );
 }
 
-async function readCommandOutput(command: string, args: string[]) {
-  const { stdout } = await execFileAsync(command, args);
-  return stdout.trim();
-}
 
-function execFileAsync(command: string, args: string[]) {
-  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(command, args, (error, stdout = "", stderr = "") => {
-      if (error) {
-        const execError = error as Error & { stdout?: string; stderr?: string };
-        execError.stdout = stdout;
-        execError.stderr = stderr;
-        reject(execError);
-        return;
-      }
-
-      resolve({ stdout, stderr });
-    });
-  });
-}
 
 async function readUfwStatus() {
   let stdout = "";
 
   try {
-    stdout = await readCommandOutput("ufw", ["status", "verbose"]);
+    stdout = await host.firewallStatus();
   } catch (error) {
     if (isToolUnavailable(error)) {
       return null;
@@ -128,7 +109,7 @@ async function readUfwStatus() {
 
 async function readFail2BanEnabled() {
   try {
-    const state = await readCommandOutput("systemctl", ["is-enabled", "fail2ban"]);
+    const state = await systemd.isEnabled("fail2ban");
     return state === "enabled";
   } catch (error) {
     const { stdout } = getExecFailureDetails(error);
@@ -239,9 +220,9 @@ async function applyFirewallSettings(input: {
   outgoingPolicy: SystemSecurityPolicy;
 }) {
   try {
-    await execFileAsync("ufw", ["default", input.incomingPolicy, "incoming"]);
-    await execFileAsync("ufw", ["default", input.outgoingPolicy, "outgoing"]);
-    await execFileAsync("ufw", ["--force", input.enabled ? "enable" : "disable"]);
+    await host.setFirewallDefault(input.incomingPolicy, "incoming");
+    await host.setFirewallDefault(input.outgoingPolicy, "outgoing");
+    await host.setFirewallEnabled(input.enabled);
   } catch (error) {
     if (isToolUnavailable(error)) {
       throw new Error("UFW is not installed or unavailable on this host.");

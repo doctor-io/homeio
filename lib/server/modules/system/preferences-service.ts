@@ -1,9 +1,9 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { SYSTEM_TIMEZONE_OPTIONS, type SystemPreferences } from "@/lib/shared/contracts/system";
 import * as systemd from "@/lib/server/platform/systemd";
+import * as host from "@/lib/server/platform/host";
 
 const ALLOWED_TIMEZONE_SET = new Set<string>(SYSTEM_TIMEZONE_OPTIONS);
 
@@ -23,26 +23,7 @@ function normalizeHostname(input: string) {
   return hostname;
 }
 
-async function readCommandOutput(command: string, args: string[]) {
-  const { stdout } = await execFileAsync(command, args);
-  return stdout.trim();
-}
 
-function execFileAsync(command: string, args: string[]) {
-  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(command, args, (error, stdout = "", stderr = "") => {
-      if (error) {
-        const execError = error as Error & { stdout?: string; stderr?: string };
-        execError.stdout = stdout;
-        execError.stderr = stderr;
-        reject(execError);
-        return;
-      }
-
-      resolve({ stdout, stderr });
-    });
-  });
-}
 
 function resolveTimezoneFilePath() {
   return process.env.HOMEIO_TIMEZONE_FILE_PATH ?? "/etc/timezone";
@@ -79,18 +60,18 @@ function isIgnorableAvahiError(error: unknown) {
 
 async function readHostname() {
   try {
-    const hostname = await readCommandOutput("hostnamectl", ["--static"]);
+    const hostname = await host.getHostname();
     if (hostname.length > 0) return hostname;
   } catch {
     // fallback below
   }
 
-  return readCommandOutput("hostname", []);
+  return host.getHostnameLegacy();
 }
 
 async function readTimezone() {
   try {
-    const timezone = await readCommandOutput("timedatectl", ["show", "--property=Timezone", "--value"]);
+    const timezone = await host.getTimezone();
     if (timezone.length > 0) return timezone;
   } catch {
     // fallback below
@@ -162,11 +143,11 @@ export async function updateSystemPreferences(input: SystemPreferences) {
 
   if (hostname !== current.hostname) {
     try {
-      await execFileAsync("hostnamectl", ["set-hostname", hostname]);
+      await host.setHostname(hostname);
     } catch (error) {
       if (!isCommandUnavailable(error)) throw error;
       try {
-        await execFileAsync("hostname", [hostname]);
+        await host.setHostnameLegacy(hostname);
       } catch (fallbackError) {
         if (!isOperationNotPermitted(fallbackError)) throw fallbackError;
         // container without SYS_ADMIN — system hostname unchanged, hosts file still updated below
@@ -178,7 +159,7 @@ export async function updateSystemPreferences(input: SystemPreferences) {
 
   if (timezone !== current.timezone) {
     try {
-      await execFileAsync("timedatectl", ["set-timezone", timezone]);
+      await host.setTimezone(timezone);
     } catch (error) {
       if (!isCommandUnavailable(error)) throw error;
       try {

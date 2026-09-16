@@ -1,18 +1,16 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { access, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import * as systemd from "@/lib/server/platform/systemd";
+import * as tailscale from "@/lib/server/platform/tailscale";
 import type {
   TailscaleInstallResult,
   TailscaleStatusPublic,
 } from "@/lib/shared/contracts/tailscale";
 
-const execFileAsync = promisify(execFile);
 
 async function hasTunDevice() {
   try {
@@ -60,10 +58,7 @@ export async function getLocalTailscaleStatus(): Promise<TailscaleStatusPublic> 
   const tunAvailable = await hasTunDevice();
 
   try {
-    const { stdout } = await execFileAsync("tailscale", ["status", "--json"], {
-      timeout: 5000,
-      maxBuffer: 1024 * 1024,
-    });
+    const stdout = await tailscale.status();
     return toStatus(JSON.parse(stdout) as TailscaleStatusJson);
   } catch (error) {
     if (isMissingCommand(error)) {
@@ -120,13 +115,7 @@ async function runInstall(authKey?: string): Promise<TailscaleInstallResult> {
 
   if (!currentStatus.installed) {
     try {
-      const installResult = await execFileAsync("sh", [
-        "-c",
-        "curl -fsSL https://tailscale.com/install.sh | sh",
-      ], {
-        timeout: 120_000,
-        maxBuffer: 4 * 1024 * 1024,
-      });
+      const installResult = await tailscale.install();
       stdout += installResult.stdout;
       stderr += installResult.stderr;
     } catch (err) {
@@ -156,14 +145,7 @@ async function runInstall(authKey?: string): Promise<TailscaleInstallResult> {
   const tmpKeyFile = join(tmpdir(), `ts-key-${randomBytes(8).toString("hex")}`);
   await writeFile(tmpKeyFile, authKey, { mode: 0o600 });
   try {
-    const upResult = await execFileAsync("tailscale", [
-      "up",
-      `--auth-key=file:${tmpKeyFile}`,
-      "--accept-dns=true",
-    ], {
-      timeout: 120_000,
-      maxBuffer: 1024 * 1024,
-    });
+    const upResult = await tailscale.up(tmpKeyFile);
     stdout += upResult.stdout;
     stderr += upResult.stderr;
   } finally {
