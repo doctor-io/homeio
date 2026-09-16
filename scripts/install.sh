@@ -762,7 +762,6 @@ PG_MAX_CONNECTIONS=10
 
 # Authentication
 AUTH_SESSION_SECRET="${auth_session_secret}"
-AUTH_ALLOW_REGISTRATION=true
 AUTH_COOKIE_SECURE=false
 
 # System Metrics

@@ -30,10 +30,6 @@ const envSchema = z.object({
     .default(168),
   AUTH_PRIMARY_USERNAME: z.string().min(3).default("admin"),
   AUTH_PRIMARY_PASSWORD: z.string().optional(),
-  AUTH_ALLOW_REGISTRATION: z
-    .string()
-    .optional()
-    .transform((value) => value === "true"),
   AUTH_TOTP_ENCRYPTION_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LOG_FILE_PATH: z.string().default("logs/home-server.log"),

@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { serverEnv } from "@/lib/server/env";
 import {
   createRequestId,
   logServerAction,
@@ -31,11 +30,18 @@ export async function POST(request: Request) {
   const requestId = createRequestId();
 
   try {
+    // Homeio is single-user, and the database already knows whether that user
+    // exists — so nothing else gets a say. This used to be gated on an
+    // AUTH_ALLOW_REGISTRATION env var as well, which install.sh wrote as
+    // `true` and never turned off: a second source of truth for a fact the
+    // first one already held, and when they disagreed the flag won. Any
+    // script-installed server reachable from the internet would hand a full
+    // account to whoever asked for one, with no roles to limit it.
     const usersExist = await hasAnyUsers();
-    if (!serverEnv.AUTH_ALLOW_REGISTRATION && usersExist) {
+    if (usersExist) {
       return NextResponse.json(
         {
-          error: "Registration is disabled",
+          error: "Registration is closed: this server already has an account",
         },
         { status: 403 },
       );
