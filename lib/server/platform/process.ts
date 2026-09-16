@@ -244,7 +244,11 @@ export async function run(
         level: missing ? "warn" : "error",
         layer: "system",
         action: "platform.run",
-        status: "error",
+        // The rendered line takes its word from `status`, not `level`, so a
+        // missing binary logged with status "error" still reads ERROR however
+        // the level is set — which is how a test can assert a warning while
+        // the operator sees an error.
+        status: missing ? "info" : "error",
         meta: {
           binary,
           args: redact(args, options.loggableArgs),

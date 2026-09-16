@@ -146,7 +146,12 @@ describe("a binary that is not installed", () => {
       ([entry]) => (entry as { level?: string }).level === "warn",
     );
     expect(warnings).toHaveLength(1);
-    expect((warnings[0][0] as { meta?: { binary?: string } }).meta?.binary).toBe("lsblk");
+    const entry = warnings[0][0] as { meta?: { binary?: string }; status?: string };
+    expect(entry.meta?.binary).toBe("lsblk");
+    // The console line prints `status`, so leaving it "error" would render
+    // ERROR no matter what the level says — checked against the real container
+    // output, not just this field.
+    expect(entry.status).not.toBe("error");
   });
 
   it("still says it for a different binary", async () => {
