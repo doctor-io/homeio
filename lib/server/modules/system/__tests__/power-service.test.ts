@@ -86,6 +86,9 @@ describe("power-service", () => {
         "-lc",
         "sleep 2; systemctl reboot",
       ]),
+      // The platform wrapper always passes options — a timeout above all, so
+      // a command with no ceiling cannot hang a request.
+      expect.any(Object),
       expect.any(Function),
     );
   });
@@ -96,6 +99,9 @@ describe("power-service", () => {
     expect(execFileMock).toHaveBeenCalledWith(
       "systemd-run",
       expect.arrayContaining(["bash", "-lc", "sleep 2; systemctl poweroff"]),
+      // The platform wrapper always passes options — a timeout above all, so
+      // a command with no ceiling cannot hang a request.
+      expect.any(Object),
       expect.any(Function),
     );
   });
@@ -108,6 +114,9 @@ describe("power-service", () => {
     expect(execFileMock).toHaveBeenCalledWith(
       "which",
       ["npm"],
+      // The platform wrapper always passes options — a timeout above all, so
+      // a command with no ceiling cannot hang a request.
+      expect.any(Object),
       expect.any(Function),
     );
 

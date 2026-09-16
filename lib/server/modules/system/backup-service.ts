@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import { resolveStoreConfigDirectory } from "@/lib/server/modules/store/catalog-config";
 import { resolveDataRootDirectory, resolveStoreStacksRoot } from "@/lib/server/storage/data-root";
+import * as systemd from "@/lib/server/platform/systemd";
 import type {
   SystemBackupDayOfWeek,
   SystemBackupListResponse,
@@ -191,10 +192,6 @@ function resolveManagedRestoreDataRoot() {
   return resolveDataRootDirectory();
 }
 
-async function runSystemctl(...args: string[]) {
-  await execFileAsync("systemctl", args);
-}
-
 /**
  * Run a shell command in a dedicated transient systemd unit so it outlives
  * the home-server.service process group (which is killed when the service stops).
@@ -209,14 +206,10 @@ async function runSystemctl(...args: string[]) {
  */
 async function scheduleDetachedShellCommand(command: string, unitSuffix: string) {
   const unitName = `homeio-${unitSuffix}-${Date.now()}`;
-  await execFileAsync("systemd-run", [
-    `--unit=${unitName}`,
-    "--description=Homeio restore operation",
-    "--no-block",
-    "bash",
-    "-c",
-    command,
-  ]);
+  await systemd.runDetachedCommand(command, {
+    unit: unitName,
+    description: "Homeio restore operation",
+  });
 }
 
 function buildOnCalendar(settings: SystemBackupSettings) {
@@ -266,7 +259,7 @@ export async function getSystemBackupSettings(): Promise<SystemBackupSettings> {
   const stored = await readStoredBackupSettings();
 
   try {
-    const { stdout } = await execFileAsync("systemctl", ["is-enabled", "homeio-scheduled-backup.timer"]);
+    const stdout = await systemd.isEnabled("homeio-scheduled-backup.timer");
     return {
       ...stored,
       enabled: stdout.trim() === "enabled",
@@ -280,12 +273,12 @@ export async function getSystemBackupSettings(): Promise<SystemBackupSettings> {
 }
 
 export async function clearSystemBackupSchedule() {
-  await execFileAsync("systemctl", ["disable", "--now", "homeio-scheduled-backup.timer"]).catch(
+  await systemd.disable("homeio-scheduled-backup.timer", { now: true }).catch(
     () => undefined,
   );
   await rm(SYSTEMD_TIMER_PATH, { force: true }).catch(() => undefined);
   await rm(SYSTEMD_SERVICE_PATH, { force: true }).catch(() => undefined);
-  await runSystemctl("daemon-reload").catch(() => undefined);
+  await systemd.reload().catch(() => undefined);
 }
 
 export async function updateSystemBackupSettings(settings: SystemBackupSettings) {
@@ -309,8 +302,8 @@ export async function updateSystemBackupSettings(settings: SystemBackupSettings)
 
   await writeFile(SYSTEMD_SERVICE_PATH, buildScheduledBackupServiceFile(), "utf8");
   await writeFile(SYSTEMD_TIMER_PATH, buildScheduledBackupTimerFile(settings), "utf8");
-  await runSystemctl("daemon-reload");
-  await runSystemctl("enable", "--now", "homeio-scheduled-backup.timer");
+  await systemd.reload();
+  await systemd.enable("homeio-scheduled-backup.timer", { now: true });
 
   return settings;
 }

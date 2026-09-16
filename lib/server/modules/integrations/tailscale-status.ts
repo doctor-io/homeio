@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import * as systemd from "@/lib/server/platform/systemd";
 import type {
   TailscaleInstallResult,
   TailscaleStatusPublic,
@@ -149,8 +150,8 @@ async function runInstall(authKey?: string): Promise<TailscaleInstallResult> {
     };
   }
 
-  await execFileAsync("systemctl", ["reset-failed", "tailscaled"], { timeout: 10_000 });
-  await execFileAsync("systemctl", ["enable", "--now", "tailscaled"], { timeout: 30_000 });
+  await systemd.resetFailed("tailscaled");
+  await systemd.enable("tailscaled", { now: true });
 
   const tmpKeyFile = join(tmpdir(), `ts-key-${randomBytes(8).toString("hex")}`);
   await writeFile(tmpKeyFile, authKey, { mode: 0o600 });

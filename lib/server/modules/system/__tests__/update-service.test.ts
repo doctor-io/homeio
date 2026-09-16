@@ -119,7 +119,13 @@ describe("update-service", () => {
         "bash",
         "-lc",
         expect.stringContaining("scripts/update.sh"),
+        // 1.6.28: without HOME the transient unit has no GOCACHE and the Go
+        // upload server fails to build, leaving the update half-applied.
+        "--setenv",
+        "HOME=/root",
       ]),
+      // The platform wrapper always passes options — a timeout above all.
+      expect.any(Object),
       expect.any(Function),
     );
   });

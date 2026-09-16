@@ -3,6 +3,7 @@ import "server-only";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import * as systemd from "@/lib/server/platform/systemd";
 import {
   SYSTEM_SECURITY_BAN_DURATION_MAX,
   SYSTEM_SECURITY_BAN_DURATION_MIN,
@@ -218,12 +219,12 @@ async function applyFail2BanSettings(input: {
     await writeFail2BanOverrideFile(input);
 
     if (input.enabled) {
-      await execFileAsync("systemctl", ["enable", "--now", "fail2ban"]);
-      await execFileAsync("systemctl", ["restart", "fail2ban"]);
+      await systemd.enable("fail2ban", { now: true });
+      await systemd.restart("fail2ban");
       return;
     }
 
-    await execFileAsync("systemctl", ["disable", "--now", "fail2ban"]);
+    await systemd.disable("fail2ban", { now: true });
   } catch (error) {
     if (isToolUnavailable(error)) {
       throw new Error("Fail2Ban is not installed or unavailable on this host.");

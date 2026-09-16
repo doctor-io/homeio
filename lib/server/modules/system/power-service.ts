@@ -1,30 +1,28 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import { resolveStoreConfigDirectory } from "@/lib/server/modules/store/catalog-config";
+import * as systemd from "@/lib/server/platform/systemd";
+import { run } from "@/lib/server/platform/process";
 import {
   resolveDataRootDirectory,
   resolveStoreStacksRoot,
 } from "@/lib/server/storage/data-root";
 
-const execFileAsync = promisify(execFile);
 
 const FACTORY_RESET_LOG_PATH = "/var/log/homeio-factory-reset.log";
 
 // ── Systemd unit helpers ───────────────────────────────────────────────────────
 
-const SYSTEMD_RUN_BASE_ARGS = [
-  "--quiet",
-  "--no-block",
-  "--collect",
-  "--property=Type=exec",
-  "--property=KillMode=control-group",
-  "--property=TimeoutStopSec=30s",
-  "--property=SendSIGKILL=yes",
+const SYSTEMD_RUN_FLAGS = ["--quiet", "--collect"] as const;
+
+const SYSTEMD_RUN_PROPERTIES = [
+  "Type=exec",
+  "KillMode=control-group",
+  "TimeoutStopSec=30s",
+  "SendSIGKILL=yes",
 ] as const;
 
 /**
@@ -32,13 +30,11 @@ const SYSTEMD_RUN_BASE_ARGS = [
  * Used for simple one-liners like reboot and shutdown.
  */
 async function scheduleSystemCommand(command: string, unitName: string) {
-  await execFileAsync("systemd-run", [
-    ...SYSTEMD_RUN_BASE_ARGS,
-    `--unit=${unitName}`,
-    "bash",
-    "-lc",
-    command,
-  ]);
+  await systemd.runDetachedCommand(command, {
+    unit: unitName,
+    flags: SYSTEMD_RUN_FLAGS,
+    properties: SYSTEMD_RUN_PROPERTIES,
+  });
 }
 
 /**
@@ -51,29 +47,18 @@ async function scheduleSystemScript(
   unitName: string,
   env: Record<string, string>,
 ) {
-  const envArgs = Object.entries(env).flatMap(([key, value]) => [
-    "--setenv",
-    `${key}=${value}`,
-  ]);
-
-  await execFileAsync("systemd-run", [
-    ...SYSTEMD_RUN_BASE_ARGS,
-    `--unit=${unitName}`,
-    ...envArgs,
-    "bash",
-    scriptPath,
-  ]);
+  await systemd.runDetachedScript(scriptPath, {
+    unit: unitName,
+    env,
+    flags: SYSTEMD_RUN_FLAGS,
+    properties: SYSTEMD_RUN_PROPERTIES,
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function isSystemdAvailable(): Promise<boolean> {
-  try {
-    await execFileAsync("systemd-run", ["--version"]);
-    return true;
-  } catch {
-    return false;
-  }
+  return systemd.isAvailable();
 }
 
 export function scheduleSystemReboot() {
@@ -102,8 +87,11 @@ export async function scheduleFactoryReset() {
 
   // Resolve the npm binary at schedule time so the script never relies on PATH
   // inside the restricted systemd environment.
-  const npmBin = await execFileAsync("which", ["npm"])
-    .then((r) => r.stdout.trim())
+  // An empty answer means `which` found nothing, and it used to reach the
+  // fallback only because reading `.stdout` of an undefined result threw.
+  // Say it outright instead of depending on an exception.
+  const npmBin = await run("which", ["npm"])
+    .then((result) => result.stdout.trim() || "npm")
     .catch(() => "npm");
 
   return scheduleSystemScript(

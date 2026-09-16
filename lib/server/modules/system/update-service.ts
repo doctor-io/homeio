@@ -1,17 +1,16 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
+import * as systemd from "@/lib/server/platform/systemd";
+import { run } from "@/lib/server/platform/process";
 import type {
   SystemUpdateApplyAcceptedResponse,
   SystemUpdateStatus,
 } from "@/lib/shared/contracts/system";
 
-const execFileAsync = promisify(execFile);
 
 const DEFAULT_REPO_URL = process.env.HOMEIO_REPO_URL ?? "https://github.com/doctor-io/homeio.git";
 const DEFAULT_REPO_BRANCH = process.env.HOMEIO_REPO_BRANCH ?? "main";
@@ -172,7 +171,7 @@ export async function scheduleSystemUpdate(): Promise<SystemUpdateApplyAcceptedR
   }
 
   try {
-    await execFileAsync("which", ["systemd-run"]);
+    await run("which", ["systemd-run"]);
   } catch {
     throw new Error(
       "systemd-run is not available on this host. Automated in-app update requires systemd. Please update Homeio manually or via git pull.",
@@ -182,14 +181,11 @@ export async function scheduleSystemUpdate(): Promise<SystemUpdateApplyAcceptedR
   // Guard against concurrent updates. Two simultaneous update runs would race
   // on the same git working tree, npm install, and migration steps.
   try {
-    const { stdout } = await execFileAsync("systemctl", [
-      "list-units",
-      "--state=activating,active",
-      "--no-pager",
-      "--no-legend",
-      "homeio-self-update-*.service",
+    const running = await systemd.listUnits("homeio-self-update-*.service", [
+      "activating",
+      "active",
     ]);
-    if (stdout.trim().length > 0) {
+    if (running.length > 0) {
       throw new Error("A system update is already in progress. Wait for it to complete before starting another.");
     }
   } catch (error) {
@@ -222,21 +218,20 @@ export async function scheduleSystemUpdate(): Promise<SystemUpdateApplyAcceptedR
   // nor $HOME are defined"); without /usr/local/go on PATH the build can't find
   // the toolchain at all. Set both explicitly so update.sh runs the same way it
   // would in an interactive root shell.
-  await execFileAsync("systemd-run", [
-    "--quiet",
-    "--no-block",
-    `--unit=${unitName}`,
-    "--collect",
-    "--property=Type=exec",
-    "--property=KillMode=control-group",
-    "--property=TimeoutStopSec=30s",
-    "--property=SendSIGKILL=yes",
-    "--setenv=HOME=/root",
-    "--setenv=PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "bash",
-    "-lc",
-    command,
-  ]);
+  await systemd.runDetachedCommand(command, {
+    unit: unitName,
+    flags: ["--quiet", "--collect"],
+    properties: [
+      "Type=exec",
+      "KillMode=control-group",
+      "TimeoutStopSec=30s",
+      "SendSIGKILL=yes",
+    ],
+    env: {
+      HOME: "/root",
+      PATH: "/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    },
+  });
 
   return {
     action: "update",

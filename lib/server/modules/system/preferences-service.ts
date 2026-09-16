@@ -3,6 +3,7 @@ import "server-only";
 import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { SYSTEM_TIMEZONE_OPTIONS, type SystemPreferences } from "@/lib/shared/contracts/system";
+import * as systemd from "@/lib/server/platform/systemd";
 
 const ALLOWED_TIMEZONE_SET = new Set<string>(SYSTEM_TIMEZONE_OPTIONS);
 
@@ -136,7 +137,7 @@ async function syncHostsFile(hostname: string) {
 
 async function restartAvahiDaemon() {
   try {
-    await execFileAsync("systemctl", ["restart", "avahi-daemon"]);
+    await systemd.restart("avahi-daemon");
   } catch (error) {
     if (isIgnorableAvahiError(error)) {
       return;

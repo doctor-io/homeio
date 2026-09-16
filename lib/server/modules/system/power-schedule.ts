@@ -1,11 +1,9 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
 import path from "node:path";
+import * as systemd from "@/lib/server/platform/systemd";
 
-const execFileAsync = promisify(execFile);
 
 const SYSTEMD_TIMER_PATH = "/etc/systemd/system/homeio-scheduled-reboot.timer";
 const SYSTEMD_SERVICE_PATH = "/etc/systemd/system/homeio-scheduled-reboot.service";
@@ -88,10 +86,6 @@ function buildTimerFile(config: ScheduledRebootConfig) {
   return `[Unit]\nDescription=Homeio scheduled reboot timer\n\n[Timer]\nOnCalendar=${buildOnCalendar(config)}\nPersistent=true\nUnit=homeio-scheduled-reboot.service\n\n[Install]\nWantedBy=timers.target\n`;
 }
 
-async function runSystemctl(...args: string[]) {
-  await execFileAsync("systemctl", args);
-}
-
 async function readStoredConfig() {
   try {
     const raw = await readFile(CONFIG_PATH, "utf8");
@@ -109,10 +103,9 @@ export async function getScheduledRebootConfig(): Promise<ScheduledRebootConfig>
   const stored = await readStoredConfig();
 
   try {
-    const { stdout } = await execFileAsync("systemctl", ["is-enabled", "homeio-scheduled-reboot.timer"]);
     return {
       ...stored,
-      enabled: stdout.trim() === "enabled",
+      enabled: (await systemd.isEnabled("homeio-scheduled-reboot.timer")) === "enabled",
     };
   } catch {
     return {
@@ -138,17 +131,17 @@ export async function setScheduledRebootConfig(config: ScheduledRebootConfig) {
 
   await writeFile(SYSTEMD_SERVICE_PATH, buildServiceFile(), "utf8");
   await writeFile(SYSTEMD_TIMER_PATH, buildTimerFile(config), "utf8");
-  await runSystemctl("daemon-reload");
-  await runSystemctl("enable", "--now", "homeio-scheduled-reboot.timer");
+  await systemd.reload();
+  await systemd.enable("homeio-scheduled-reboot.timer", { now: true });
 }
 
 export async function clearScheduledRebootConfig() {
-  await execFileAsync("systemctl", ["disable", "--now", "homeio-scheduled-reboot.timer"]).catch(
-    () => undefined,
-  );
+  await systemd
+    .disable("homeio-scheduled-reboot.timer", { now: true })
+    .catch(() => undefined);
   await rm(SYSTEMD_TIMER_PATH, { force: true });
   await rm(SYSTEMD_SERVICE_PATH, { force: true });
-  await runSystemctl("daemon-reload").catch(() => undefined);
+  await systemd.reload().catch(() => undefined);
 }
 
 export async function deleteScheduledRebootArtifacts() {
