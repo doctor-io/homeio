@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as systemd from "@/lib/server/platform/systemd";
 import * as tailscale from "@/lib/server/platform/tailscale";
+import { isCommandMissing } from "@/lib/server/platform/process";
 import type {
   TailscaleInstallResult,
   TailscaleStatusPublic,
@@ -31,8 +32,9 @@ type TailscaleStatusJson = {
   };
 };
 
+/** Delegates to the platform, which owns the error type. */
 function isMissingCommand(error: unknown) {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+  return isCommandMissing(error);
 }
 
 async function toStatus(data: TailscaleStatusJson): Promise<TailscaleStatusPublic> {

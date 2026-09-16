@@ -8,8 +8,9 @@ services:
       - "12026:3000"
     environment:
       DATABASE_URL: postgresql://homeio:homeio@db:5432/homeio
-      # IMPORTANT: change this to a random string before exposing outside your LAN
-      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-change-me-to-a-random-32-char-secret}
+      # Leave unset and the entrypoint generates one on first start and keeps
+      # it in the stacks volume. Set it here to pin your own.
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       STORE_STACKS_ROOT: /stacks
       STORE_APP_DATA_ROOT: /DATA/AppData

@@ -20,6 +20,7 @@ import {
 } from "@/lib/server/modules/files/network-shares-repository";
 import { decryptSecret, encryptSecret } from "@/lib/server/modules/files/secrets";
 import * as sharing from "@/lib/server/platform/sharing";
+import { isCommandMissing } from "@/lib/server/platform/process";
 import type {
   CreateNetworkShareRequest,
   DiscoverServersResponse,
@@ -137,22 +138,9 @@ function mapCommandError(
   });
 }
 
+/** Delegates to the platform, which owns the error type. */
 function isCommandUnavailable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-
-  const err = error as {
-    code?: string;
-    message?: string;
-    stderr?: string;
-  };
-
-  if (err.code === "ENOENT") return true;
-
-  const combined = `${err.message ?? ""}\n${err.stderr ?? ""}`.toLowerCase();
-  return (
-    combined.includes("not found") ||
-    combined.includes("no such file or directory")
-  );
+  return isCommandMissing(error);
 }
 
 function errorText(error: unknown) {

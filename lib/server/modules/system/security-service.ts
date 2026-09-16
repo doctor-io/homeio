@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as systemd from "@/lib/server/platform/systemd";
 import * as host from "@/lib/server/platform/host";
+import { isCommandMissing } from "@/lib/server/platform/process";
 import {
   SYSTEM_SECURITY_BAN_DURATION_MAX,
   SYSTEM_SECURITY_BAN_DURATION_MIN,
@@ -62,17 +63,9 @@ function getExecFailureDetails(error: unknown) {
   };
 }
 
+/** Delegates to the platform, which owns the error type. */
 function isToolUnavailable(error: unknown) {
-  const { stdout, stderr, message } = getExecFailureDetails(error);
-  const haystack = `${message}\n${stdout}\n${stderr}`.toLowerCase();
-  return (
-    haystack.includes("enoent") ||
-    haystack.includes("not found") ||
-    haystack.includes("not-found") ||
-    haystack.includes("could not be found") ||
-    haystack.includes("no such file") ||
-    haystack.includes("unit fail2ban.service could not be found")
-  );
+  return isCommandMissing(error);
 }
 
 

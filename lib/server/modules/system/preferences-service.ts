@@ -4,6 +4,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { SYSTEM_TIMEZONE_OPTIONS, type SystemPreferences } from "@/lib/shared/contracts/system";
 import * as systemd from "@/lib/server/platform/systemd";
 import * as host from "@/lib/server/platform/host";
+import { ProcessError } from "@/lib/server/platform/process";
+import { isCommandMissing } from "@/lib/server/platform/process";
 
 const ALLOWED_TIMEZONE_SET = new Set<string>(SYSTEM_TIMEZONE_OPTIONS);
 
@@ -33,14 +35,14 @@ function resolveHostsFilePath() {
   return process.env.HOMEIO_HOSTS_FILE_PATH ?? "/etc/hosts";
 }
 
+/** Delegates to the platform, which owns the error type. */
 function isCommandUnavailable(error: unknown) {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return message.includes("enoent") || message.includes("no such file");
+  return isCommandMissing(error);
 }
 
 function isOperationNotPermitted(error: unknown) {
   if (!(error instanceof Error)) return false;
+  if (error instanceof ProcessError && error.code === "EPERM") return true;
   const message = error.message.toLowerCase();
   return message.includes("operation not permitted") || message.includes("eperm");
 }

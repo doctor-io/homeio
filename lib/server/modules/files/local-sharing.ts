@@ -5,6 +5,7 @@ import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { logServerAction } from "@/lib/server/logging/logger";
 import * as sharing from "@/lib/server/platform/sharing";
+import { isCommandMissing } from "@/lib/server/platform/process";
 import {
   deleteLocalShareFromDb,
   getLocalShareBySourcePathFromDb,
@@ -117,9 +118,9 @@ function errorText(error: unknown) {
   return `${maybe.message ?? ""}\n${stderr}`.toLowerCase();
 }
 
+/** Delegates to the platform, which owns the error type. */
 function isCommandUnavailableError(error: unknown) {
-  const maybe = error as NodeJS.ErrnoException;
-  return maybe?.code === "ENOENT" && maybe?.syscall === "spawn";
+  return isCommandMissing(error);
 }
 
 function isPermissionError(error: unknown) {

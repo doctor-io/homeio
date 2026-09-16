@@ -124,10 +124,19 @@ export class ProcessError extends Error {
     const timedOut = cause.killed === true || cause.signal === "SIGTERM" || cause.code === "ETIMEDOUT";
     const stderr = typeof cause.stderr === "string" ? cause.stderr.trim() : "";
 
+    // ENOENT from a spawn means the binary is not on this host. Node's own
+    // wording for that is "spawn wipefs ENOENT", which reads like an internal
+    // fault rather than a missing package — and the same string appears when
+    // the *working directory* is gone, which is how a missing app directory
+    // once sent someone hunting for a broken Docker install.
+    const notInstalled = cause.code === "ENOENT";
+
     super(
       timedOut
         ? `${binary} timed out`
-        : stderr || cause.message || `${binary} failed`,
+        : notInstalled
+          ? `${binary} is not available on this host`
+          : stderr || cause.message || `${binary} failed`,
     );
 
     this.name = "ProcessError";
@@ -220,6 +229,32 @@ export async function run(
 
     throw error;
   }
+}
+
+/**
+ * Whether a failure means "that command is not on this machine".
+ *
+ * Five modules were answering this by searching the error message for "enoent"
+ * or "not found", and every one of them broke the moment the message was made
+ * readable. The code is a field on {@link ProcessError} for exactly this: a
+ * caller deciding whether to degrade gracefully should not depend on how the
+ * sentence happens to be worded.
+ *
+ * The string fallbacks stay for errors that did not come through this layer —
+ * a stray `ENOENT` from `fs`, or a tool that reports a missing dependency of
+ * its own on stderr.
+ */
+export function isCommandMissing(error: unknown): boolean {
+  if (error instanceof ProcessError) return error.code === "ENOENT";
+  if (!(error instanceof Error)) return false;
+
+  const haystack = `${error.message} ${(error as { stderr?: string }).stderr ?? ""}`.toLowerCase();
+  return (
+    haystack.includes("enoent") ||
+    haystack.includes("no such file") ||
+    haystack.includes("not found") ||
+    haystack.includes("is not available on this host")
+  );
 }
 
 /**
