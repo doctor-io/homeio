@@ -1,14 +1,13 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { serverEnv } from "@/lib/server/env";
 import { resolveStoreConfigDirectory } from "@/lib/server/modules/store/catalog-config";
 import { resolveDataRootDirectory, resolveStoreStacksRoot } from "@/lib/server/storage/data-root";
 import * as systemd from "@/lib/server/platform/systemd";
+import * as backup from "@/lib/server/platform/backup";
 import type {
   SystemBackupDayOfWeek,
   SystemBackupListResponse,
@@ -16,7 +15,6 @@ import type {
   SystemBackupSummary,
 } from "@/lib/shared/contracts/system";
 
-const execFileAsync = promisify(execFile);
 
 const BACKUP_CONFIG_PATH = "/etc/homeio/backup-schedule.json";
 const SYSTEMD_TIMER_PATH = "/etc/systemd/system/homeio-scheduled-backup.timer";
@@ -438,9 +436,7 @@ export async function runSystemBackupNow(): Promise<SystemBackupSummary> {
   const storeConfigArchived = storeConfigOutsideDataRoot && storeConfigExists;
 
   try {
-    await execFileAsync("pg_dump", ["--file", dumpPath, serverEnv.DATABASE_URL], {
-      env: process.env,
-    });
+    await backup.dumpDatabase(serverEnv.DATABASE_URL, dumpPath);
 
     if (stacksRootOutsideDataRoot && stacksRootExists) {
       await cp(stacksRoot, path.join(workRoot, "stacks-root"), { recursive: true });
@@ -452,9 +448,7 @@ export async function runSystemBackupNow(): Promise<SystemBackupSummary> {
       tarArgs.push("-C", workRoot, "store-config");
     }
 
-    await execFileAsync("tar", tarArgs, {
-      env: process.env,
-    });
+    await backup.createArchive(tarArgs, { archivePath });
 
     const archiveStats = await stat(archivePath);
     const summary: SystemBackupSummary = {

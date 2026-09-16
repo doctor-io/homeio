@@ -52,10 +52,24 @@ export const ALLOWED_BINARIES = {
   hostname: "reading the hostname where hostnamectl is absent",
   which: "locating a binary before depending on it",
   pg_dump: "database backups",
-  psql: "database restores",
   bash: "restore and factory-reset scripts, which are shell by nature",
   sh: "vendor install scripts",
 } as const;
+
+/**
+ * What this list does not cover, said plainly.
+ *
+ * `bash` and `sh` are on it, and anything they are handed runs outside every
+ * guarantee above. The restore script alone reaches psql, tar, find and rm —
+ * none of which appear here, because Node never spawns them. The allowlist
+ * governs what this process starts, not what those processes go on to start.
+ *
+ * That is why the shell commands in backup-service are built in code, from
+ * values that never came off a request, and escaped with `shellEscape`. The
+ * boundary for them is the code that writes the string, not this file. Adding
+ * a shell command that interpolates user input would step around everything
+ * here without tripping a single test.
+ */
 
 export type AllowedBinary = keyof typeof ALLOWED_BINARIES;
 
