@@ -17,7 +17,19 @@ const { execFileMock, logMock } = vi.hoisted(() => ({
 
 vi.mock("node:child_process", () => ({
   execFile: (file: string, args: string[], _options: unknown, callback: unknown) => {
-    const outcome = execFileMock(file, args) as { exitCode: number; stdout?: string };
+    const outcome = execFileMock(file, args) as {
+      exitCode: number;
+      stdout?: string;
+      missing?: boolean;
+    };
+
+    if (outcome.missing) {
+      const absent = new Error(`spawn ${file} ENOENT`) as NodeJS.ErrnoException;
+      absent.code = "ENOENT";
+      (callback as (e: unknown, o: string, s: string) => void)(absent, "", "");
+      return;
+    }
+
     const stdout = outcome.stdout ?? "";
     const done = callback as (e: unknown, o: string, s: string) => void;
 
@@ -107,5 +119,47 @@ describe("systemctl queries", () => {
     execFileMock.mockReturnValue({ exitCode: 127, stdout: "" });
 
     expect(await isActive("whatever.service")).toBe("unknown");
+  });
+});
+
+describe("a binary that is not installed", () => {
+  beforeEach(() => {
+    execFileMock.mockReset();
+    logMock.mockReset();
+  });
+
+  // Found in the Docker image, not on the server that has lsblk: the disk list
+  // polls every five seconds and degrades to "no disks" when it is absent, so
+  // the image wrote an ERROR line every five seconds, forever, about a fact
+  // that could not change without a restart.
+  it("is said once, and as a warning rather than an error", async () => {
+    vi.resetModules();
+    const { run, isCommandMissing } = await import("@/lib/server/platform/process");
+    execFileMock.mockReturnValue({ exitCode: 0, missing: true });
+
+    for (let poll = 0; poll < 5; poll += 1) {
+      await expect(run("lsblk", ["--json"])).rejects.toSatisfy(isCommandMissing);
+    }
+
+    expect(errorLines()).toHaveLength(0);
+    const warnings = logMock.mock.calls.filter(
+      ([entry]) => (entry as { level?: string }).level === "warn",
+    );
+    expect(warnings).toHaveLength(1);
+    expect((warnings[0][0] as { meta?: { binary?: string } }).meta?.binary).toBe("lsblk");
+  });
+
+  it("still says it for a different binary", async () => {
+    vi.resetModules();
+    const { run } = await import("@/lib/server/platform/process");
+    execFileMock.mockReturnValue({ exitCode: 0, missing: true });
+
+    await expect(run("lsblk", [])).rejects.toThrow();
+    await expect(run("wipefs", [])).rejects.toThrow();
+
+    const warnings = logMock.mock.calls.filter(
+      ([entry]) => (entry as { level?: string }).level === "warn",
+    );
+    expect(warnings).toHaveLength(2);
   });
 });

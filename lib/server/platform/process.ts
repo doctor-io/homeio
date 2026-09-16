@@ -156,6 +156,13 @@ export class ProcessError extends Error {
   }
 }
 
+/**
+ * Binaries already reported absent, so the journal says so once rather than on
+ * every poll. Cleared only by a restart, which is also when the answer could
+ * have changed.
+ */
+const reportedMissing = new Set<AllowedBinary>();
+
 function redact(args: readonly string[], loggable?: readonly string[]) {
   if (!loggable) return args.map(() => "…");
   return args.map((arg) => (loggable.includes(arg) ? arg : "…"));
@@ -223,19 +230,30 @@ export async function run(
       };
     }
 
-    logServerAction({
-      level: "error",
-      layer: "system",
-      action: "platform.run",
-      status: "error",
-      meta: {
-        binary,
-        args: redact(args, options.loggableArgs),
-        timedOut: error.timedOut,
-        exitCode: error.exitCode,
-      },
-      error,
-    });
+    // A binary that is not installed is a fact about the host, not an event:
+    // it will be just as missing on the next poll. The disk list asks lsblk
+    // every five seconds and degrades to "no disks" when it is absent, which
+    // in the Docker image meant an ERROR line every five seconds forever. Say
+    // it once, at a level that matches what it is, and stay quiet after.
+    const missing = error.code === "ENOENT";
+    const alreadySaid = missing && reportedMissing.has(binary);
+    if (missing) reportedMissing.add(binary);
+
+    if (!alreadySaid) {
+      logServerAction({
+        level: missing ? "warn" : "error",
+        layer: "system",
+        action: "platform.run",
+        status: "error",
+        meta: {
+          binary,
+          args: redact(args, options.loggableArgs),
+          timedOut: error.timedOut,
+          exitCode: error.exitCode,
+        },
+        error,
+      });
+    }
 
     throw error;
   }
