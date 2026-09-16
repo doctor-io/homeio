@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.3] - 2026-09-16
+
+Also from [#37](https://github.com/doctor-io/homeio/issues/37), found because the reporter had created a second account on his own single-user server without meaning to.
+
+### Security
+
+- **A script-installed server reachable from the internet would create an account for anyone who asked.** Registration was gated on `usersExist && !AUTH_ALLOW_REGISTRATION` — an environment variable duplicating a fact the database already held — and `install.sh` wrote that variable as `true` and never turned it off. `.env.example` said `false`, which is why it went unnoticed; Docker installs defaulted closed and were never affected. There are no roles in Homeio, so a second account carries the same access as the first: terminal, files, Docker, disk operations, factory reset. The register *page* redirects away once an account exists, so the UI hid this; the API enforced nothing.
+
+  The variable is removed rather than corrected. The database decides: one account, and registration closes behind it.
+
+  **If you installed with `install.sh` and published your server**, check Settings → Users for accounts you did not create. Existing accounts keep working after this update — it only prevents new ones.
+
+---
+
 ## [1.9.2] - 2026-09-16
 
 Issue [#37](https://github.com/doctor-io/homeio/issues/37): locked out on the

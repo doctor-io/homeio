@@ -36,7 +36,11 @@ import { bootstrapDefaultCasaosCatalog } from "@/lib/server/modules/store/catalo
 import { ensureDataRootDirectories } from "@/lib/server/storage/data-root";
 
 describe("POST /api/auth/register", () => {
-  it("returns 403 when registration is disabled", async () => {
+  it("refuses a second account, whatever the environment says", async () => {
+    // The database is the only authority on this. There used to be an
+    // AUTH_ALLOW_REGISTRATION env var alongside it, which install.sh set to
+    // `true` and never unset — so a script-installed server kept handing out
+    // full accounts to anyone who could reach the endpoint.
     vi.mocked(hasAnyUsers).mockResolvedValueOnce(true);
 
     const request = new Request("http://localhost/api/auth/register", {
@@ -52,7 +56,7 @@ describe("POST /api/auth/register", () => {
     const json = (await response.json()) as { error: string };
 
     expect(response.status).toBe(403);
-    expect(json.error).toContain("disabled");
+    expect(json.error).toContain("already has an account");
     expect(registerUser).not.toHaveBeenCalled();
     expect(ensureDataRootDirectories).not.toHaveBeenCalled();
     expect(bootstrapDefaultCasaosCatalog).not.toHaveBeenCalled();
