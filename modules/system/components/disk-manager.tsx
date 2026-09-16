@@ -13,6 +13,7 @@ import {
   useDiskDeletePartition,
   useDiskWipe,
 } from "@/modules/system/hooks/useDisks";
+import { isElevationCancelled } from "@/modules/auth/elevation/elevation-error";
 import type { DiskDevice, DiskFilesystem, DiskPartition } from "@/lib/shared/contracts/disks";
 import { DISK_FILESYSTEMS } from "@/lib/shared/contracts/disks";
 import {
@@ -454,7 +455,11 @@ function DiskDetail({ disk }: { disk: DiskDevice }) {
         toast.success(`Wiped disk ${confirmState.disk}`);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Action failed");
+      // Closing the password prompt is an answer, not a fault. Reporting it as
+      // one tells the user something broke when they are the one who stopped it.
+      if (!isElevationCancelled(e)) {
+        toast.error(e instanceof Error ? e.message : "Action failed");
+      }
     } finally {
       setConfirmState(null);
       setPendingFormat(null);

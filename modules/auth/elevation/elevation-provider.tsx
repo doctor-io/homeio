@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { isElevationRequired } from "@/modules/auth/elevation/elevation-error";
+import {
+  ElevationCancelledError,
+  isElevationRequired,
+} from "@/modules/auth/elevation/elevation-error";
 
 /**
  * One password prompt, shared by everything that can be refused for want of one.
@@ -38,12 +41,7 @@ type PendingPrompt = {
   reject: (reason: unknown) => void;
 };
 
-export class ElevationCancelledError extends Error {
-  constructor() {
-    super("Cancelled");
-    this.name = "ElevationCancelledError";
-  }
-}
+export { ElevationCancelledError };
 
 async function requestElevation(password: string) {
   const response = await fetch("/api/v1/auth/elevate", {

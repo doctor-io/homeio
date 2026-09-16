@@ -19,6 +19,7 @@ import {
 } from "@/lib/shared/contracts/system";
 import { queryKeys } from "@/lib/shared/query-keys";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isElevationCancelled } from "@/modules/auth/elevation/elevation-error";
 import {
   applySystemUpdateRequest,
   checkSystemUpdatesRequest,
@@ -65,6 +66,19 @@ import { useNetworkShares } from "@/modules/files/hooks/useNetworkShares";
 import { useSystemMetrics } from "@/modules/system/hooks/useSystemMetrics";
 import { useWifiNetworks } from "@/modules/system/hooks/useWifiNetworks";
 import { useElevation } from "@/modules/auth/elevation/elevation-provider";
+
+/**
+ * The banner text for a failed action, or nothing when the user cancelled.
+ *
+ * These two actions ask for the password again, and closing that prompt leaves
+ * a rejected mutation behind. Rendering its message puts "Cancelled" in a red
+ * banner, which reads as a failure of the restore rather than as the user
+ * declining to start one.
+ */
+function messageUnlessCancelled(error: unknown): string | null {
+  if (isElevationCancelled(error)) return null;
+  return error instanceof Error ? error.message : null;
+}
 
 export function useSettingsBackend() {
   const { runElevated } = useElevation();
@@ -625,10 +639,7 @@ export function useSettingsBackend() {
       },
       restore: {
         isPending: restoreBackupMutation.isPending,
-        error:
-          restoreBackupMutation.error instanceof Error
-            ? restoreBackupMutation.error.message
-            : null,
+        error: messageUnlessCancelled(restoreBackupMutation.error),
       },
     };
   }, [
@@ -717,9 +728,7 @@ export function useSettingsBackend() {
         available: caps?.factoryReset ?? false,
         isPending: factoryResetMutation.isPending,
         error:
-          factoryResetMutation.error instanceof Error
-            ? factoryResetMutation.error.message
-            : null,
+          messageUnlessCancelled(factoryResetMutation.error),
       },
       scheduledReboot: {
         ...scheduledReboot,

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ElevationCancelledError,
   ElevationRequiredError,
+  isElevationCancelled,
   isElevationRequired,
   throwIfElevationRequired,
 } from "@/modules/auth/elevation/elevation-error";
@@ -69,5 +71,16 @@ describe("isElevationRequired", () => {
     // which is why this distinction is worth a test.
     expect(isElevationRequired(new Error("This action needs your password again"))).toBe(false);
     expect(isElevationRequired(null)).toBe(false);
+  });
+});
+
+describe("isElevationCancelled", () => {
+  it("recognises only its own error", () => {
+    expect(isElevationCancelled(new ElevationCancelledError())).toBe(true);
+    // Same wording, different thing. A server that answers "Cancelled" for its
+    // own reasons is a failure the user should still be told about.
+    expect(isElevationCancelled(new Error("Cancelled"))).toBe(false);
+    expect(isElevationCancelled(new ElevationRequiredError())).toBe(false);
+    expect(isElevationCancelled(undefined)).toBe(false);
   });
 });

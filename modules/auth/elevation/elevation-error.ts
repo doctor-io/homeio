@@ -42,3 +42,23 @@ export async function throwIfElevationRequired(
 export function isElevationRequired(error: unknown): error is ElevationRequiredError {
   return error instanceof ElevationRequiredError;
 }
+
+/**
+ * The user closed the password prompt.
+ *
+ * It has to reject — the action did not happen, and a caller that resolved here
+ * would report a wipe that never ran. But it is not a failure to report back:
+ * the user just said no, and answering that with a red "Cancelled" is telling
+ * them something went wrong when nothing did. Call sites check for this before
+ * they show anything.
+ */
+export class ElevationCancelledError extends Error {
+  constructor() {
+    super("Cancelled");
+    this.name = "ElevationCancelledError";
+  }
+}
+
+export function isElevationCancelled(error: unknown): error is ElevationCancelledError {
+  return error instanceof ElevationCancelledError;
+}
