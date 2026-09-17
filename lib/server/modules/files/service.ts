@@ -1581,8 +1581,17 @@ export async function unzipEntry(params: UnzipEntryParams): Promise<FileUnzipRes
 
 export async function uploadFiles(params: UploadFilesParams): Promise<FileUploadResponse> {
   const includeHidden = Boolean(params.includeHidden);
+  // Through mapFsError like every other entry point. Without it a refused
+  // destination — outside the root, a symlink, an absolute path — left
+  // `FilesPathError` to reach the route, which only knows `FileServiceError`
+  // and answered "Failed to upload files" with a 500. The same path on the
+  // listing route says `path_outside_root` with a 400: one tells the person
+  // what they did, the other tells them the server is broken, and sends them
+  // to retry or to open an issue about it.
   const destination = await assertDirectoryPath(params.destinationPath, includeHidden, {
     allowEmpty: true,
+  }).catch((error) => {
+    throw mapFsError(error, "Failed to upload files");
   });
 
   const uploaded: FileUploadResponse["uploaded"] = [];

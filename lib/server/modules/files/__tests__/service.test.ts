@@ -158,11 +158,13 @@ vi.mock("@/lib/server/modules/files/path-resolver", () => {
 import {
   createDirectoryEntry,
   createFileEntry,
+  FileServiceError,
   MAX_TEXT_READ_BYTES,
   listDirectory,
   pasteEntry,
   readFileForViewer,
   searchFiles,
+  uploadFiles,
   writeTextFile,
 } from "@/lib/server/modules/files/service";
 
@@ -422,5 +424,39 @@ describe("files service", () => {
       });
       expect(truncatedResult.truncated).toBe(true);
     });
+  });
+});
+
+describe("uploading to a destination that is refused (D-15)", () => {
+  beforeEach(async () => {
+    mockDataRoot = await mkdtemp(path.join(os.tmpdir(), "home-server-upload-"));
+  });
+
+  afterEach(async () => {
+    if (mockDataRoot) await rm(mockDataRoot, { recursive: true, force: true });
+  });
+
+  it("says what was wrong with the path, not that the server failed", async () => {
+    // The resolver throws FilesPathError; uploadFiles did not put it through
+    // mapFsError, so the route — which only knows FileServiceError — answered
+    // "Failed to upload files" with a 500. Measured against a running server:
+    // a traversal, a symlink and an absolute path all came back as 500s, while
+    // the same three on the listing route say path_outside_root, symlink_blocked
+    // and invalid_path.
+    // toMatchObject alone is not enough here: FilesPathError carries `code` and
+    // `statusCode` too, so the fields match with or without the conversion. The
+    // type is what the route dispatches on, so the type is what is asserted.
+    const error = await uploadFiles({ destinationPath: "../../..", files: [] }).catch(
+      (thrown) => thrown,
+    );
+
+    expect(error).toBeInstanceOf(FileServiceError);
+    expect(error).toMatchObject({ code: "path_outside_root", statusCode: 400 });
+  });
+
+  it("carries the error as the type every route in this module catches", async () => {
+    await expect(
+      uploadFiles({ destinationPath: "../../..", files: [] }),
+    ).rejects.toBeInstanceOf(FileServiceError);
   });
 });
