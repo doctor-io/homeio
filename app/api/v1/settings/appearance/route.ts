@@ -1,33 +1,16 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db/drizzle";
 import { settings } from "@/lib/server/db/schema";
-import {
-  DEFAULT_APPEARANCE_SETTINGS,
-  sanitizeAppearanceSettings,
-  type AppearanceSettings,
-} from "@/lib/desktop/appearance";
-import { eq } from "drizzle-orm";
+import { sanitizeAppearanceSettings } from "@/lib/desktop/appearance";
 import { requireApiSession } from "@/lib/server/modules/auth/api";
+import { readAppearanceSettings } from "@/lib/server/modules/settings/appearance-repository";
 
 export const runtime = "nodejs";
-
-async function getAppearance(): Promise<AppearanceSettings> {
-  const rows = await db.select().from(settings).where(eq(settings.id, "singleton")).limit(1);
-  if (rows.length === 0 || !rows[0].appearanceJson) {
-    return DEFAULT_APPEARANCE_SETTINGS;
-  }
-  return sanitizeAppearanceSettings(rows[0].appearanceJson);
-}
 
 export async function GET(request: Request) {
   const apiSession = await requireApiSession(request);
   if (apiSession.response) return apiSession.response;
-  try {
-    const appearance = await getAppearance();
-    return NextResponse.json({ data: appearance });
-  } catch {
-    return NextResponse.json({ data: DEFAULT_APPEARANCE_SETTINGS });
-  }
+  return NextResponse.json({ data: await readAppearanceSettings() });
 }
 
 export async function PUT(request: Request) {

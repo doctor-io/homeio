@@ -25,6 +25,12 @@ vi.mock("@/components/providers/realtime-bootstrap", () => ({
 vi.mock("@/modules/onboarding/components/setup-wizard", () => ({
   SetupWizard: () => null,
 }));
+// The setup page reads the wallpaper once it decides not to redirect. Stubbing
+// it keeps this suite off the database, which it otherwise reaches for through
+// the repository's own error handling.
+vi.mock("@/lib/server/modules/settings/appearance-repository", () => ({
+  readAppearanceSettings: async () => ({ wallpaper: "/images/1.jpg" }),
+}));
 
 import HomePage from "@/app/page";
 import SetupPage from "@/app/setup/page";

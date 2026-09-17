@@ -22,7 +22,10 @@ export function LockScreen({
   onUnlock,
   onLogout,
   username,
-  wallpaper = "/images/1.jpg",
+  // No default: the desktop passes the live appearance, and anything that does
+  // not should fall through to FullScreenShell's own read of the stored
+  // wallpaper rather than being pinned to the first one in the list.
+  wallpaper,
 }: LockScreenProps) {
   const displayUsername = username.replace(
     /\b([a-z])/gi,

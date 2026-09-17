@@ -88,6 +88,25 @@ npm run db:init
 
 `npm run db:reset` runs `scripts/db-reset.ts` and is destructive.
 
+## Migrations in the container
+
+The Docker entrypoint runs `dist-server/scripts/db-migrate.js` — the compiled
+`scripts/db-migrate.ts` — before starting the server. It applies the versioned
+SQL in `drizzle/` through the migrator that ships inside `drizzle-orm`.
+
+It used to run `drizzle-kit push`, which diffed `schema.ts` against the live
+database and applied whatever it found. That hid a class of mistake: a
+migration file that never made it into `drizzle/meta/_journal.json` still took
+effect, because push created the table from the schema regardless.
+`0004_task_executions.sql` sat outside the journal that way for months, and the
+switch to the migrator is what surfaced it.
+
+So: **a migration file is only real once it is in the journal.** `drizzle-kit
+generate` adds the entry for you; a hand-written SQL file needs the entry added
+by hand. To check for drift, apply the migrations to an empty database and then
+run `npx drizzle-kit push` against it — anything other than `No changes
+detected` means the migrations no longer reproduce the schema.
+
 ## Drizzle Patterns
 
 - Schema is centralized in `lib/server/db/schema.ts`.

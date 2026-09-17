@@ -66,6 +66,44 @@ jobs:
       - name: Build
         run: NODE_ENV=production npm run build
 
+  image-scan:
+    name: Scan Image (Trivy)
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # amd64 only, loaded into the local daemon. The point is to scan the image
+      # before the multi-arch build publishes it — scanning ghcr.io after the
+      # push would only tell us what we already shipped.
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: homeio:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ignore-unfixed: a CVE with no released patch cannot be acted on, and
+      # letting those block the pipeline would mean the gate is switched off the
+      # first time one appears. Everything with a fix available is a hard fail.
+      - name: Fail on HIGH or CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: homeio:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -140,7 +178,7 @@ jobs:
   docker:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: [verify, release]
+    needs: [verify, image-scan, release]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:

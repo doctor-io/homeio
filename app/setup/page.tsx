@@ -4,6 +4,7 @@ import { SetupWizard } from "@/modules/onboarding/components/setup-wizard";
 import { createRequestId, logServerAction } from "@/lib/server/logging/logger";
 import { getOnboardingState } from "@/lib/server/modules/onboarding/service";
 import { shouldEnterSetup } from "@/lib/shared/contracts/onboarding";
+import { readAppearanceSettings } from "@/lib/server/modules/settings/appearance-repository";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,14 @@ export default async function SetupPage() {
     redirect("/");
   }
 
+  // Signed out like /login and /register, so the wallpaper comes from here for
+  // the same reason. On a first run this is the default anyway; it matters when
+  // setup is re-entered on a server that already has an appearance saved.
+  const { wallpaper } = await readAppearanceSettings();
+
   return (
     <FullScreenShell
+      wallpaper={wallpaper}
       // No clock here, unlike /login and /register. It is absolutely positioned
       // and the wizard's steps vary a lot in height — 2FA enrolment is roughly
       // twice the time zone step — so on a laptop-height viewport the clock

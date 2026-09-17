@@ -1,0 +1,29 @@
+name: Security
+
+# The CI gate only runs when something is pushed. Most vulnerabilities in a
+# published image arrive the other way round: the image does not change, the
+# advisory database does. This job re-scans what users are actually pulling, so
+# a CVE disclosed weeks after a release still surfaces.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-published-image:
+    name: Scan Published Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scan ghcr.io/doctor-io/homeio:latest
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/doctor-io/homeio:latest
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"

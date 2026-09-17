@@ -15,7 +15,8 @@
   "include": [
     "server.ts",
     "lib/server/**/*.ts",
-    "lib/shared/**/*.ts"
+    "lib/shared/**/*.ts",
+    "scripts/db-migrate.ts"
   ],
   "exclude": [
     "node_modules",

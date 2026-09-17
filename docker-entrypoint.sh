@@ -71,12 +71,19 @@ else
   SERVER_ENTRY=server.js
 fi
 
+# Migrations are applied from the versioned SQL in drizzle/, not pushed from
+# the schema. `drizzle-kit push` needed drizzle-kit — a build tool, with its own
+# esbuild binaries — installed in the runtime image for the sake of one command
+# at start-up. The migrator ships inside drizzle-orm, which the app already
+# depends on, so the image no longer carries a dev toolchain it never uses.
 echo "Running database migrations..."
 
+MIGRATE_ENTRY=dist-server/scripts/db-migrate.js
+
 if [ "$(id -u)" = "0" ]; then
-  su-exec "$APP_USER" node_modules/.bin/drizzle-kit push --config drizzle.config.ts
+  su-exec "$APP_USER" node "$MIGRATE_ENTRY"
   exec su-exec "$APP_USER" node "$SERVER_ENTRY"
 fi
 
-node_modules/.bin/drizzle-kit push --config drizzle.config.ts
+node "$MIGRATE_ENTRY"
 exec node "$SERVER_ENTRY"

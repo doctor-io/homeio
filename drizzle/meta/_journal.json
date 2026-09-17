@@ -134,6 +134,13 @@
       "when": 1787645900000,
       "tag": "0019_user_tour_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0020_scheduled_task_executions",
+      "breakpoints": true
     }
   ]
 }
