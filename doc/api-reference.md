@@ -11,6 +11,51 @@ This reference is generated from the current `app/api/**/route.ts` tree and veri
 - Protected routes return `401` when session authentication fails.
 - `POST /api/auth/login` returns `429` with `{ "error": "Too many login attempts" }` after 5 failed attempts per 15 minutes for the same normalized username/client IP.
 
+## Token Authentication
+
+Two mechanisms, and they are not interchangeable.
+
+- **Session cookie.** `POST /api/auth/login` sets an httpOnly cookie and returns the user. Nothing is returned for a script to hold as a bearer credential. A cookie reaches every protected route.
+- **API token.** A stored credential, `homeio_` + secret, created at `POST /api/v1/auth/tokens`. The full value is returned once, at creation; only the prefix (`homeio_` + 8 chars) is stored in readable form afterwards. Verified with scrypt in `api-token-service.ts`.
+
+### Scopes
+
+From `API_TOKEN_SCOPES` in `lib/shared/contracts/api-tokens.ts`. Nothing is granted implicitly — a token holds exactly the scopes it was created with.
+
+| Scope | Grants |
+|---|---|
+| `read:metrics` | Read system metrics |
+| `read:apps` | See installed apps |
+| `write:apps` | Start, stop and install apps |
+| `read:files` | Read files |
+| `write:files` | Write and delete files |
+| `system:power` | Shut down and restart the server |
+
+### Default deny
+
+`requireApiSession()` accepts a bearer token **only** when the route passes a `scope` option. A route that says nothing keeps refusing tokens, so adding token auth to the codebase cannot quietly open an endpoint nobody reviewed.
+
+The practical consequence: holding a scope is not enough. `read:files` does not open `/api/v1/files`, because that route has not opted in. These are every route that accepts a token today — grep for `scope:` in `app/api/**` to check this list is still current:
+
+| Method | Path | Scope |
+|---|---|---|
+| `GET` | `/api/v1/apps` | `read:apps` |
+| `POST` | `/api/v1/apps/[appId]/start` | `write:apps` |
+| `POST` | `/api/v1/apps/[appId]/stop` | `write:apps` |
+| `POST` | `/api/v1/apps/[appId]/restart` | `write:apps` |
+| `GET` | `/api/v1/system/metrics` | `read:metrics` |
+| `GET` | `/api/v1/system/summary` | `read:metrics` |
+| `POST` | `/api/v1/system/power/shutdown` | `system:power` |
+| `POST` | `/api/v1/system/power/reboot` | `system:power` |
+
+`system:power` is deliberately separate from `write:apps`: shutting a server down is not "managing apps".
+
+### Token routes are session-only
+
+`/api/v1/auth/tokens` passes no `scope`, so a token can never mint another token or read the list of them. The omission is the mechanism, not an oversight — do not add a scope to those routes.
+
+Bad token attempts are rate limited per token prefix, answering `429` with `{ "error": "Too many token attempts", "code": "rate_limited" }`. The prefix is the credential's public half, so it is keyed the way a username is.
+
 ## Auth Routes
 
 | Method | Path | Auth | Request | Response |
