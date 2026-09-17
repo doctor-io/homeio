@@ -111,3 +111,79 @@ describe("detectComposeConflicts", () => {
     ).toEqual([]);
   });
 });
+
+describe("conflicts against what Docker actually holds (D-11, D-12)", () => {
+  const compose = (extra: string) =>
+    `services:\n  a:\n    image: alpine\n${extra}`;
+
+  it("catches a port held by a container Homeio did not deploy", () => {
+    // Measured before: accepted with 202, then died on "Error response from
+    // daemon: Conflict" several steps into the install. The database knows
+    // nothing about a container started by hand, so nothing could see it.
+    const conflicts = detectComposeConflicts({
+      composeContent: compose('    ports:\n      - "8795:80"\n'),
+      appId: "newcomer",
+      installedStacks: [],
+      usedHostPorts: [{ port: 8795, owner: "outsider" }],
+    });
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].code).toBe("port_in_use");
+    expect(conflicts[0].detail).toContain("outsider");
+  });
+
+  it("catches a container name already taken", () => {
+    // This branch could never fire: the install route supplied no
+    // usedContainerNames, so the set it tests against was always empty.
+    const conflicts = detectComposeConflicts({
+      composeContent: compose("    container_name: occupant-box\n"),
+      appId: "newcomer",
+      installedStacks: [],
+      usedContainerNames: ["occupant-box"],
+    });
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].code).toBe("container_name_taken");
+  });
+
+  it("catches a second port of an app the database only knows one port for", () => {
+    // portOwners was built from webUiPort alone, so an app publishing several
+    // ports protected exactly one of them.
+    const conflicts = detectComposeConflicts({
+      composeContent: compose('    ports:\n      - "9100:80"\n'),
+      appId: "newcomer",
+      installedStacks: [{ appId: "jellyfin", stackName: "jellyfin", webUiPort: 8096 }],
+      usedHostPorts: [
+        { port: 8096, owner: "jellyfin" },
+        { port: 9100, owner: "jellyfin" },
+      ],
+    });
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].detail).toContain("9100");
+  });
+
+  it("lets a free port through", () => {
+    // The control that matters: a check that refuses everything is not a check.
+    expect(
+      detectComposeConflicts({
+        composeContent: compose('    ports:\n      - "8888:80"\n'),
+        appId: "newcomer",
+        installedStacks: [],
+        usedContainerNames: ["occupant-box"],
+        usedHostPorts: [{ port: 8795, owner: "outsider" }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("behaves as before when Docker told us nothing", () => {
+    // Docker unreachable must not turn every install into a refusal.
+    expect(
+      detectComposeConflicts({
+        composeContent: compose('    ports:\n      - "8795:80"\n'),
+        appId: "newcomer",
+        installedStacks: [],
+      }),
+    ).toEqual([]);
+  });
+});

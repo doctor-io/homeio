@@ -80,7 +80,10 @@ export function detectComposeConflicts(input: {
   composeContent: string;
   appId: string;
   installedStacks: InstalledStackSummary[];
+  /** Container names Docker already holds. Empty means the check cannot fire. */
   usedContainerNames?: string[];
+  /** Host ports Docker already publishes, and who holds each one. */
+  usedHostPorts?: { port: number; owner: string }[];
 }): ComposeConflict[] {
   let parsed: unknown;
   try {
@@ -97,6 +100,16 @@ export function detectComposeConflicts(input: {
   const portOwners = new Map<number, string>();
   for (const stack of others) {
     if (stack.webUiPort !== null) portOwners.set(stack.webUiPort, stack.appId);
+  }
+
+  // What Docker reports, on top of what the database remembers. The database
+  // knows one port per app — its webUiPort — and knows nothing at all about a
+  // container someone started outside Homeio. Both gaps ended the same way: the
+  // install was accepted, then died several steps later on a raw daemon error,
+  // which is the failure this check exists to replace with a sentence naming
+  // the owner. Docker's answer wins, because it is the one that will refuse.
+  for (const taken of input.usedHostPorts ?? []) {
+    portOwners.set(taken.port, taken.owner);
   }
 
   const takenNames = new Set(
@@ -135,4 +148,41 @@ export function detectComposeConflicts(input: {
   }
 
   return conflicts;
+}
+
+/**
+ * What Docker currently holds: container names, and published host ports with
+ * the container holding each.
+ *
+ * Separate from `detectComposeConflicts` so that stays pure and testable; this
+ * is the impure half, and it is deliberately forgiving. Docker being
+ * unreachable returns nothing rather than throwing: the caller then checks
+ * against the database alone, which is what it did before, instead of refusing
+ * an install because the daemon was slow to answer.
+ */
+export async function collectDockerConflictSources(): Promise<{
+  usedContainerNames: string[];
+  usedHostPorts: { port: number; owner: string }[];
+}> {
+  const { listContainers } = await import("@/lib/server/modules/docker/stats");
+  const containers = await listContainers();
+
+  const usedContainerNames: string[] = [];
+  const usedHostPorts: { port: number; owner: string }[] = [];
+
+  for (const container of containers) {
+    const raw = container.Names?.[0]?.trim() ?? "";
+    const name = (raw.startsWith("/") ? raw.slice(1) : raw) || container.Id.slice(0, 12);
+    if (name) usedContainerNames.push(name);
+
+    // A stopped container still owns its name, but not its ports — Docker only
+    // reports a PublicPort while the binding is live, so this needs no filter.
+    for (const binding of container.Ports ?? []) {
+      if (typeof binding.PublicPort === "number") {
+        usedHostPorts.push({ port: binding.PublicPort, owner: name });
+      }
+    }
+  }
+
+  return { usedContainerNames, usedHostPorts };
 }

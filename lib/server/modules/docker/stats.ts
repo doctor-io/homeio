@@ -38,6 +38,17 @@ type DockerContainer = {
   Status: string;
   Image?: string;
   Labels?: Record<string, string>;
+  /**
+   * Published port bindings, as Docker reports them. Always came back in the
+   * response; only the type left them out, so nothing could read the one thing
+   * that says which host ports are actually taken.
+   */
+  Ports?: {
+    IP?: string;
+    PrivatePort: number;
+    PublicPort?: number;
+    Type?: string;
+  }[];
 };
 
 export type { DockerContainer };
