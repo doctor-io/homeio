@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/server/modules/auth/api";
 import { createRequestId, logServerAction } from "@/lib/server/logging/logger";
 import {
+  CloudflareSecretUnreadableError,
   clearCloudflareTunnelConfig,
   getCloudflareTunnelConfigPublic,
   saveCloudflareTunnelConfig,
@@ -23,6 +24,14 @@ export async function GET(request: Request) {
   try {
     return NextResponse.json({ data: await getCloudflareTunnelConfigPublic() });
   } catch (err) {
+    // A secret sealed with a key this process no longer holds is not a fault in
+    // the server, and calling it one sends the operator looking in the wrong
+    // place. It is recoverable, and the message says how.
+    if (err instanceof CloudflareSecretUnreadableError) {
+      logServerAction({ level: "warn", layer: "api", action: "settings.cloudflare-tunnel.get", status: "error", requestId, message: "Stored Cloudflare secret cannot be decrypted with the current key" });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+    }
+
     logServerAction({ level: "error", layer: "api", action: "settings.cloudflare-tunnel.get", status: "error", requestId, message: "Failed to read Cloudflare Tunnel config", error: err });
     return NextResponse.json({ error: "Failed to read config", code: "internal_error" }, { status: 500 });
   }

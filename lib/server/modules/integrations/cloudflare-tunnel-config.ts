@@ -29,6 +29,25 @@ function normalizeDomain(domain: string) {
     .replace(/\/+$/, "");
 }
 
+/**
+ * Raised when a stored Cloudflare secret cannot be opened with the key this
+ * process holds. Named, so the route can say what to do about it — enter the
+ * token again — rather than report an internal error about itself.
+ */
+export class CloudflareSecretUnreadableError extends Error {
+  readonly code = "secret_unreadable";
+
+  constructor(what: string, cause?: unknown) {
+    super(
+      `The stored Cloudflare ${what} cannot be read. It was encrypted with a ` +
+        `different AUTH_SESSION_SECRET than this server is running with — set a ` +
+        `fixed one, then enter the token again.`,
+    );
+    this.name = "CloudflareSecretUnreadableError";
+    this.cause = cause;
+  }
+}
+
 export async function getCloudflareTunnelConfig(): Promise<CloudflareTunnelConfig> {
   await ensureSettingsRow();
 
@@ -51,18 +70,37 @@ export async function getCloudflareTunnelConfig(): Promise<CloudflareTunnelConfi
   const hasToken = Boolean(row?.tokenCiphertext && row.tokenIv && row.tokenTag);
   const hasApiToken = Boolean(row?.apiCiphertext && row.apiIv && row.apiTag);
 
+  // Sealed with a key derived from AUTH_SESSION_SECRET, and that secret is not
+  // always the same one twice: the container entrypoint generates a fresh one
+  // on every boot when it cannot persist it, and warns about sessions. It is
+  // just as true of anything encrypted with it — except a lost session asks you
+  // to sign in again, while this threw "Unsupported state or unable to
+  // authenticate data" and the route answered "Failed to read config" with a
+  // 500. The integration stops working and nothing says the stored token simply
+  // cannot be opened any more.
+  const openSealed = (
+    what: string,
+    sealed: { ciphertext: string; iv: string; tag: string },
+  ) => {
+    try {
+      return decryptSecret(sealed);
+    } catch (error) {
+      throw new CloudflareSecretUnreadableError(what, error);
+    }
+  };
+
   return {
     enabled: Boolean(row?.enabled),
     domain: row?.domain ?? "",
     token: hasToken
-      ? decryptSecret({
+      ? openSealed("tunnel token", {
           ciphertext: row!.tokenCiphertext!,
           iv: row!.tokenIv!,
           tag: row!.tokenTag!,
         })
       : null,
     apiToken: hasApiToken
-      ? decryptSecret({
+      ? openSealed("API token", {
           ciphertext: row!.apiCiphertext!,
           iv: row!.apiIv!,
           tag: row!.apiTag!,
