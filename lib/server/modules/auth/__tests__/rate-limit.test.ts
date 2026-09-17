@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  _resetLoginRateLimitForTesting,
   _resetPartialAuthGuardsForTesting,
   _resetTotpReplayGuardForTesting,
   isPartialAuthTokenBlocked,
@@ -9,11 +10,17 @@ import {
   markPartialAuthTokenConsumed,
   markTotpCodeUsed,
   recordPartialAuthFailure,
+  clearLoginFailures,
+  getApiTokenRateLimitKey,
+  getLoginRateLimitKey,
+  isLoginRateLimited,
+  recordLoginFailure,
 } from "@/lib/server/modules/auth/rate-limit";
 
 afterEach(() => {
   _resetTotpReplayGuardForTesting();
   _resetPartialAuthGuardsForTesting();
+  _resetLoginRateLimitForTesting();
 });
 
 describe("totp replay guard", () => {
@@ -127,5 +134,85 @@ describe("partial-auth single-use guard", () => {
 
     const wellPastExpiry = TOKEN_EXP_SECONDS * 1000 + 60_000;
     expect(isPartialAuthTokenConsumed(TOKEN, wellPastExpiry)).toBe(false);
+  });
+});
+
+describe("per-identity lockout (D-6)", () => {
+  function requestFrom(ip: string) {
+    return new Request("https://homeio.test/api/v1/apps", {
+      headers: { "x-forwarded-for": ip },
+    });
+  }
+
+  it("does not lock a token because other tokens were guessed at", () => {
+    // The measurement that found this: a token never attacked answered 429
+    // after ten wrong guesses aimed at two other tokens. Every token shared one
+    // bucket, because the key "token:<prefix>:<ip>" was split on ":" to recover
+    // the identity and gave the literal "token".
+    const attacked = ["homeio_AAAAAAAA", "homeio_BBBBBBBB"];
+    for (const prefix of attacked) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        recordLoginFailure(getApiTokenRateLimitKey(requestFrom("10.0.0.9"), prefix));
+      }
+    }
+
+    const untouched = getApiTokenRateLimitKey(requestFrom("10.0.0.9"), "homeio_CCCCCCCC");
+    expect(isLoginRateLimited(untouched)).toBe(false);
+  });
+
+  it("still locks the token that was actually guessed at", () => {
+    const key = getApiTokenRateLimitKey(requestFrom("10.0.0.9"), "homeio_DDDDDDDD");
+    for (let attempt = 0; attempt < 5; attempt += 1) recordLoginFailure(key);
+
+    expect(isLoginRateLimited(key)).toBe(true);
+  });
+
+  it("does not let one token's success clear another token's failures", () => {
+    // The second consequence: any success emptied the shared bucket, so the
+    // distributed-attack protection was decorative for tokens.
+    //
+    // Spread over addresses so no single source bucket trips on its own. What
+    // holds the lockout here is the identity-level counter — the one another
+    // token used to be able to empty.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      recordLoginFailure(
+        getApiTokenRateLimitKey(requestFrom(`10.0.2.${attempt}`), "homeio_EEEEEEEE"),
+      );
+    }
+    const victim = getApiTokenRateLimitKey(requestFrom("10.0.3.1"), "homeio_EEEEEEEE");
+    expect(isLoginRateLimited(victim)).toBe(true);
+
+    clearLoginFailures(getApiTokenRateLimitKey(requestFrom("10.0.3.1"), "homeio_FFFFFFFF"));
+
+    expect(isLoginRateLimited(victim)).toBe(true);
+  });
+
+  it("keeps two prefixes that differ only in case apart", () => {
+    // Tokens are base64url, so case identifies. A username is lowercased; a
+    // prefix must not be, or two tokens become one bucket. Spread over
+    // addresses again, so it is the identity that is being measured.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      recordLoginFailure(
+        getApiTokenRateLimitKey(requestFrom(`10.0.4.${attempt}`), "homeio_ABCDEFGH"),
+      );
+    }
+
+    expect(
+      isLoginRateLimited(getApiTokenRateLimitKey(requestFrom("10.0.5.1"), "homeio_ABCDEFGH")),
+    ).toBe(true);
+    expect(
+      isLoginRateLimited(getApiTokenRateLimitKey(requestFrom("10.0.5.1"), "homeio_abcdefgh")),
+    ).toBe(false);
+  });
+
+  it("locks a user across source addresses once the identity-level count trips", () => {
+    // The protection that was meant to exist: ten failures spread over many
+    // addresses, each under the per-source limit of five.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      recordLoginFailure(getLoginRateLimitKey(requestFrom(`10.0.0.${attempt}`), "ahmed"));
+    }
+
+    expect(isLoginRateLimited(getLoginRateLimitKey(requestFrom("10.0.1.1"), "ahmed"))).toBe(true);
+    expect(isLoginRateLimited(getLoginRateLimitKey(requestFrom("10.0.1.1"), "someone-else"))).toBe(false);
   });
 });

@@ -12,7 +12,7 @@ import {
 } from "@/lib/server/modules/auth/api-token-service";
 import {
   clearLoginFailures,
-  getLoginRateLimitKey,
+  getApiTokenRateLimitKey,
   isLoginRateLimited,
   recordLoginFailure,
 } from "@/lib/server/modules/auth/rate-limit";
@@ -100,7 +100,7 @@ function tooManyAttempts() {
  * could actually succeed.
  */
 function tokenRateLimitKey(request: Request, prefix: string) {
-  return getLoginRateLimitKey(request, `token:${prefix}`);
+  return getApiTokenRateLimitKey(request, prefix);
 }
 
 /**

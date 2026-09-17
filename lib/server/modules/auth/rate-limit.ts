@@ -40,30 +40,75 @@ function getClientIp(request: Request) {
   return sanitizeIp(request.headers.get("x-real-ip"));
 }
 
-export function getLoginRateLimitKey(request: Request, username: string) {
-  return `${normalizeUsername(username)}:${getClientIp(request)}`;
+/**
+ * Who an attempt is aimed at, and where it came from.
+ *
+ * Kept as two fields rather than one `identity:ip` string because the string
+ * used to be split back apart to recover the identity — and `split(":")[0]` is
+ * only the identity when the identity itself contains no colon. It does for an
+ * API token, whose key reads `token:<prefix>:<ip>`, so every token in the
+ * install shared the single bucket named "token": ten wrong guesses spread
+ * across two tokens locked out a third that had never been touched, and the
+ * account-level protection was decorative for tokens, since any one token
+ * succeeding emptied the bucket for all of them. Nothing is parsed out of a
+ * concatenation now; the identity arrives whole and stays whole.
+ */
+export type LoginRateLimitKey = {
+  identity: string;
+  ip: string;
+};
+
+/**
+ * A separator that cannot occur in an identity or an address, so no two
+ * different pairs can name the same bucket. Joined, never split apart again —
+ * this is a map key, not a record to be read back.
+ */
+const BUCKET_SEPARATOR = "\u0000";
+
+function sourceBucketOf(key: LoginRateLimitKey) {
+  return `${key.identity}${BUCKET_SEPARATOR}${key.ip}`;
 }
 
-export function isLoginRateLimited(key: string, now = Date.now()) {
-  const record = loginAttempts.get(key);
+export function getLoginRateLimitKey(
+  request: Request,
+  username: string,
+): LoginRateLimitKey {
+  return { identity: normalizeUsername(username), ip: getClientIp(request) };
+}
+
+/**
+ * The same, for an API token.
+ *
+ * The prefix is not lowercased the way a username is: tokens are base64url, so
+ * case distinguishes them, and folding it would put two different tokens in one
+ * bucket — the bug this whole shape exists to prevent, one level down.
+ */
+export function getApiTokenRateLimitKey(
+  request: Request,
+  prefix: string,
+): LoginRateLimitKey {
+  return { identity: `token:${prefix}`, ip: getClientIp(request) };
+}
+
+export function isLoginRateLimited(key: LoginRateLimitKey, now = Date.now()) {
+  const bucket = sourceBucketOf(key);
+  const record = loginAttempts.get(bucket);
   if (record) {
     if (record.resetAt <= now) {
-      loginAttempts.delete(key);
+      loginAttempts.delete(bucket);
     } else if (record.failures >= LOGIN_RATE_LIMIT_MAX_FAILURES) {
       return true;
     }
   }
 
-  // Account-level lockout: guard against distributed/spoofed attacks on a single user
-  const username = key.split(":")[0];
-  if (username) {
-    const userRecord = userAttempts.get(username);
-    if (userRecord) {
-      if (userRecord.resetAt <= now) {
-        userAttempts.delete(username);
-      } else if (userRecord.failures >= USER_RATE_LIMIT_MAX_FAILURES) {
-        return true;
-      }
+  // Identity-level lockout: guard against distributed/spoofed attacks on one
+  // account or one token, where each source stays under the per-source limit.
+  const userRecord = userAttempts.get(key.identity);
+  if (userRecord) {
+    if (userRecord.resetAt <= now) {
+      userAttempts.delete(key.identity);
+    } else if (userRecord.failures >= USER_RATE_LIMIT_MAX_FAILURES) {
+      return true;
     }
   }
 
@@ -76,10 +121,11 @@ export function isLoginRateLimited(key: string, now = Date.now()) {
  * lets a security notification fire once, when the lockout threshold is
  * reached, instead of once per attempt.
  */
-export function recordLoginFailure(key: string, now = Date.now()) {
-  const existing = loginAttempts.get(key);
+export function recordLoginFailure(key: LoginRateLimitKey, now = Date.now()) {
+  const bucket = sourceBucketOf(key);
+  const existing = loginAttempts.get(bucket);
   if (!existing || existing.resetAt <= now) {
-    loginAttempts.set(key, {
+    loginAttempts.set(bucket, {
       failures: 1,
       resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS,
     });
@@ -87,32 +133,26 @@ export function recordLoginFailure(key: string, now = Date.now()) {
     existing.failures += 1;
   }
 
-  // Account-level counter, so a spread of source addresses still trips a lockout.
-  const username = key.split(":")[0];
-  if (username) {
-    const existingUser = userAttempts.get(username);
-    if (!existingUser || existingUser.resetAt <= now) {
-      userAttempts.set(username, {
-        failures: 1,
-        resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS,
-      });
-    } else {
-      existingUser.failures += 1;
-    }
+  // Identity-level counter, so a spread of source addresses still trips a lockout.
+  const existingUser = userAttempts.get(key.identity);
+  if (!existingUser || existingUser.resetAt <= now) {
+    userAttempts.set(key.identity, {
+      failures: 1,
+      resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS,
+    });
+  } else {
+    existingUser.failures += 1;
   }
 
-  return loginAttempts.get(key)?.failures ?? 1;
+  return loginAttempts.get(bucket)?.failures ?? 1;
 }
 
 /** The failure count at which sign-in is refused, and worth telling someone about. */
 export const LOGIN_FAILURE_ALERT_THRESHOLD = LOGIN_RATE_LIMIT_MAX_FAILURES;
 
-export function clearLoginFailures(key: string) {
-  loginAttempts.delete(key);
-  const username = key.split(":")[0];
-  if (username) {
-    userAttempts.delete(username);
-  }
+export function clearLoginFailures(key: LoginRateLimitKey) {
+  loginAttempts.delete(sourceBucketOf(key));
+  userAttempts.delete(key.identity);
 }
 
 export function _resetLoginRateLimitForTesting() {

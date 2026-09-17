@@ -13,6 +13,7 @@ import { AuthError, loginUser } from "@/lib/server/modules/auth/service";
 import {
   clearLoginFailures,
   getLoginRateLimitKey,
+  type LoginRateLimitKey,
   isLoginRateLimited,
   LOGIN_FAILURE_ALERT_THRESHOLD,
   recordLoginFailure,
@@ -29,7 +30,7 @@ const loginSchema = z.object({
 
 export async function POST(request: Request) {
   const requestId = createRequestId();
-  let rateLimitKey: string | null = null;
+  let rateLimitKey: LoginRateLimitKey | null = null;
 
   try {
     const body = await request.json();
@@ -98,13 +99,13 @@ export async function POST(request: Request) {
 
       // Once, when the lockout threshold is reached — not once per attempt.
       // A wrong password is a typo; five in fifteen minutes is someone trying.
-      // The key is "username:ip", which is exactly what the operator needs to
-      // recognise whether it was them.
+      // Who and from where is exactly what the operator needs to recognise
+      // whether it was them; both are read off the key rather than parsed back
+      // out of it, which is what the key's shape is for.
       if (failures === LOGIN_FAILURE_ALERT_THRESHOLD) {
-        const [attemptedUsername, clientIp] = rateLimitKey.split(":");
         void createNotification({
           title: SECURITY_NOTIFICATION_TITLE,
-          body: `${failures} failed attempts for "${attemptedUsername}" from ${clientIp}. Sign-in is now blocked for 15 minutes.`,
+          body: `${failures} failed attempts for "${rateLimitKey.identity}" from ${rateLimitKey.ip}. Sign-in is now blocked for 15 minutes.`,
           kind: "error",
         }).catch(() => undefined);
       }
