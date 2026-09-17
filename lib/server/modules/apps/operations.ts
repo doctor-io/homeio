@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   cleanupComposeDataOnUninstall,
@@ -16,6 +16,7 @@ import {
   sanitizeStackName,
 } from "@/lib/server/modules/docker/compose-runner";
 import { invalidateInstalledAppsCache } from "@/lib/server/modules/apps/service";
+import { listContainers } from "@/lib/server/modules/docker/stats";
 import { findStoreCatalogTemplateByAppId } from "@/lib/server/modules/store/catalog";
 import {
   findCustomStoreTemplateByAppId,
@@ -971,6 +972,29 @@ async function runUpdateOperation(
   });
 }
 
+/**
+ * The containers Docker still holds for a stack, by name.
+ *
+ * Read from Docker rather than from Homeio's own record, because the point is
+ * to find out what survived the record being wrong.
+ */
+async function containersForStack(stackName: string): Promise<string[]> {
+  try {
+    const containers = await listContainers();
+    return containers
+      .filter((entry) => entry.Labels?.["com.docker.compose.project"] === stackName)
+      .map((entry) => {
+        const first = entry.Names?.[0]?.trim() ?? "";
+        const stripped = first.startsWith("/") ? first.slice(1) : first;
+        return stripped || entry.Id.slice(0, 12);
+      });
+  } catch {
+    // Docker unreachable says nothing about what exists. Report survivors so
+    // the caller refuses rather than deleting a record it cannot vouch for.
+    return ["unknown (Docker did not answer)"];
+  }
+}
+
 async function runUninstallOperation(operationId: string, params: OperationParams) {
   const stack = await findInstalledStackByAppId(params.appId);
 
@@ -996,6 +1020,47 @@ async function runUninstallOperation(operationId: string, params: OperationParam
       progressPercent: 90,
       step: "noop",
       message: "Application already uninstalled",
+    });
+    await deleteInstalledStackByAppId(params.appId);
+    return;
+  }
+
+  // The record can outlive the files. Restoring a database ahead of the stack
+  // directories it describes does exactly that, and so does removing a folder
+  // by hand. `docker compose down` cannot run without its file, so the
+  // uninstall failed; and the delete route refuses to remove a definition
+  // whose stack is still "installed". The app could then be neither
+  // uninstalled nor forgotten, and nothing offered a way out.
+  //
+  // Nothing on disk and nothing in Docker means there is nothing left to undo:
+  // the record is all that stands, so removing it *is* the uninstall. The
+  // other case — containers still up — keeps failing, because dropping the
+  // record there would leave them running with nothing in Homeio naming them,
+  // which is the very state the guard above refuses to create.
+  const composeFileExists = await stat(stack.composePath)
+    .then((entry) => entry.isFile())
+    .catch(() => false);
+
+  if (!composeFileExists) {
+    const survivors = await containersForStack(stack.stackName);
+
+    if (survivors.length > 0) {
+      throw new Error(
+        `The files for "${params.appId}" are missing, but ${survivors.length} of its ` +
+          `containers are still running (${survivors.join(", ")}). Remove them with ` +
+          `Docker directly, then uninstall again.`,
+      );
+    }
+
+    await patchOperationAndEmit({
+      operationId,
+      appId: params.appId,
+      action: params.action,
+      status: "running",
+      eventType: "operation.step",
+      progressPercent: 90,
+      step: "record-only",
+      message: "No files and no containers left; removing Homeio's record",
     });
     await deleteInstalledStackByAppId(params.appId);
     return;

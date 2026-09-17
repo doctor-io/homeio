@@ -47,6 +47,17 @@ function isPrivateAddress(address: string): boolean {
   // Mapped IPv4 (::ffff:127.0.0.1) is judged on the address it wraps.
   const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
   if (mapped) return isPrivateAddress(mapped[1]);
+  // The same address in the form `URL` hands us. Parsing `https://[::ffff:127.0.0.1]`
+  // normalises the tail to hex — `::ffff:7f00:1` — which the dotted pattern above
+  // does not match. Reading only that pattern would call the loopback public.
+  const mappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHex) {
+    const high = Number.parseInt(mappedHex[1], 16);
+    const low = Number.parseInt(mappedHex[2], 16);
+    return isPrivateAddress(
+      `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`,
+    );
+  }
   return (
     normalized.startsWith("fc") || // unique local
     normalized.startsWith("fd") ||
@@ -57,9 +68,25 @@ function isPrivateAddress(address: string): boolean {
   );
 }
 
-async function assertPublicHost(hostname: string, allowPrivateHosts: boolean) {
+/**
+ * `URL.hostname` keeps the brackets around an IPv6 literal — `"[::1]"`, not
+ * `"::1"` — so `isIP` answers 0 for every one of them. Without this, no IPv6
+ * address was ever judged by `isPrivateAddress`: the bracketed string fell
+ * through to DNS, which cannot resolve it, and the refusal came from
+ * `dns_failed` rather than from the check. That refused the dangerous ones by
+ * accident and the legitimate ones for good, since an IPv6-only host could
+ * never be imported from either.
+ */
+function unbracket(hostname: string) {
+  return hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+}
+
+async function assertPublicHost(rawHostname: string, allowPrivateHosts: boolean) {
   if (allowPrivateHosts) return;
 
+  const hostname = unbracket(rawHostname);
   const literal = isIP(hostname);
   if (literal) {
     if (isPrivateAddress(hostname)) {

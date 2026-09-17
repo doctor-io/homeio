@@ -169,3 +169,53 @@ describe("fetchComposeFromUrl", () => {
     });
   });
 });
+
+describe("IPv6 hosts (D-7)", () => {
+  /** The refusal must come from the check, not from DNS failing to parse brackets. */
+  async function refusalFor(url: string) {
+    mockFetch(response(COMPOSE));
+    try {
+      await fetchComposeFromUrl(url);
+      return "accepted";
+    } catch (error) {
+      return error instanceof ComposeImportError ? error.code : "other";
+    }
+  }
+
+  it.each([
+    ["https://[::1]/compose.yml", "loopback"],
+    ["https://[::ffff:127.0.0.1]/compose.yml", "mapped loopback"],
+    ["https://[::ffff:169.254.169.254]/compose.yml", "mapped cloud metadata"],
+    ["https://[::ffff:192.168.1.43]/compose.yml", "mapped LAN"],
+    ["https://[fd00::1]/compose.yml", "unique local"],
+    ["https://[fe80::1]/compose.yml", "link-local"],
+  ])("refuses %s as private, by the check and not by DNS", async (url) => {
+    // `URL.hostname` keeps the brackets, so isIP said 0 and every one of these
+    // reached DNS instead of isPrivateAddress. They were refused — as
+    // `dns_failed`, which is a refusal by accident.
+    await expect(refusalFor(url)).resolves.toBe("private_host");
+  });
+
+  it("reads a mapped address in the hex form URL produces, not only the dotted one", async () => {
+    // new URL("https://[::ffff:127.0.0.1]") normalises the tail to ::ffff:7f00:1.
+    // Matching only /^::ffff:(\d+\.\d+\.\d+\.\d+)$/ calls that public.
+    expect(new URL("https://[::ffff:127.0.0.1]/x").hostname).toBe("[::ffff:7f00:1]");
+    await expect(refusalFor("https://[::ffff:127.0.0.1]/x")).resolves.toBe("private_host");
+  });
+
+  it("still imports from a public IPv6 host", async () => {
+    // The other half of the defect: no IPv6 literal could be imported at all,
+    // because a bracketed string never resolves.
+    mockFetch(response(COMPOSE));
+    await expect(
+      fetchComposeFromUrl("https://[2606:4700:4700::1111]/compose.yml"),
+    ).resolves.toMatchObject({ content: COMPOSE });
+  });
+
+  it("still imports from a public mapped IPv4", async () => {
+    mockFetch(response(COMPOSE));
+    await expect(
+      fetchComposeFromUrl("https://[::ffff:8.8.8.8]/compose.yml"),
+    ).resolves.toMatchObject({ content: COMPOSE });
+  });
+});

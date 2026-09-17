@@ -37,6 +37,10 @@ vi.mock("@/lib/server/modules/apps/service", () => ({
   invalidateInstalledAppsCache: vi.fn(),
 }));
 
+vi.mock("@/lib/server/modules/docker/stats", () => ({
+  listContainers: vi.fn(async () => []),
+}));
+
 vi.mock("@/lib/server/modules/apps/stacks-repository", () => ({
   createStoreOperation: vi.fn(),
   deleteInstalledStackByAppId: vi.fn(),
@@ -66,6 +70,7 @@ import {
 } from "@/lib/server/modules/docker/compose-runner";
 import { findCustomStoreTemplateByAppId } from "@/lib/server/modules/store/custom-apps";
 import { invalidateInstalledAppsCache } from "@/lib/server/modules/apps/service";
+import { listContainers } from "@/lib/server/modules/docker/stats";
 import {
   createStoreOperation,
   deleteInstalledStackByAppId,
@@ -592,11 +597,15 @@ describe("store operations", () => {
   });
 
   it("hard-deletes stack record on uninstall and removes data when requested", async () => {
+    const { composePath: twoFactorComposePath } = await writeCatalogComposeFile(
+      "store-uninstall-",
+      "services:\n  app:\n    image: 2fauth\n",
+    );
     vi.mocked(findInstalledStackByAppId).mockResolvedValue({
       appId: "2fauth",
       templateName: "2fauth",
       stackName: "big-bear-2fauth",
-      composePath: "/tmp/store/stacks/2fauth/docker-compose.yml",
+      composePath: twoFactorComposePath,
       status: "installed",
       webUiPort: 8000,
       env: {},
@@ -629,13 +638,13 @@ describe("store operations", () => {
     await done;
 
     expect(runComposeDown).toHaveBeenCalledWith({
-      composePath: "/tmp/store/stacks/2fauth/docker-compose.yml",
-      envPath: "/tmp/store/stacks/2fauth/.env",
+      composePath: twoFactorComposePath,
+      envPath: twoFactorComposePath.replace("docker-compose.yml", ".env"),
       stackName: "big-bear-2fauth",
       removeVolumes: true,
     });
     expect(cleanupComposeDataOnUninstall).toHaveBeenCalledWith({
-      composePath: "/tmp/store/stacks/2fauth/docker-compose.yml",
+      composePath: twoFactorComposePath,
       removeVolumes: true,
     });
     expect(deleteInstalledStackByAppId).toHaveBeenCalledWith("2fauth");
@@ -646,11 +655,15 @@ describe("store operations", () => {
   });
 
   it("always cleans up installed stack files during uninstall even when data deletion is disabled", async () => {
+    const { composePath: pingvinComposePath } = await writeCatalogComposeFile(
+      "store-uninstall-keep-data-",
+      "services:\n  app:\n    image: pingvin\n",
+    );
     vi.mocked(findInstalledStackByAppId).mockResolvedValue({
       appId: "pingvin-share",
       templateName: "pingvin-share",
       stackName: "pingvin-share",
-      composePath: "/var/lib/home-server/Apps/pingvin-share/docker-compose.yml",
+      composePath: pingvinComposePath,
       status: "installed",
       webUiPort: 3410,
       env: {},
@@ -683,13 +696,13 @@ describe("store operations", () => {
     await done;
 
     expect(runComposeDown).toHaveBeenCalledWith({
-      composePath: "/var/lib/home-server/Apps/pingvin-share/docker-compose.yml",
-      envPath: "/var/lib/home-server/Apps/pingvin-share/.env",
+      composePath: pingvinComposePath,
+      envPath: pingvinComposePath.replace("docker-compose.yml", ".env"),
       stackName: "pingvin-share",
       removeVolumes: false,
     });
     expect(cleanupComposeDataOnUninstall).toHaveBeenCalledWith({
-      composePath: "/var/lib/home-server/Apps/pingvin-share/docker-compose.yml",
+      composePath: pingvinComposePath,
       removeVolumes: false,
     });
     expect(deleteInstalledStackByAppId).toHaveBeenCalledWith("pingvin-share");
@@ -1545,5 +1558,108 @@ describe("store operations", () => {
     await new Promise((resolve) => setTimeout(resolve, 1_200));
 
     expect(getLatestStoreOperationEvent(operationId)).toBeNull();
+  });
+});
+
+describe("uninstalling an app whose files are gone (D-8)", () => {
+  const MISSING = "/nonexistent/stacks/ghost/docker-compose.yml";
+
+  function ghostStack() {
+    vi.mocked(findInstalledStackByAppId).mockResolvedValue({
+      appId: "ghost",
+      templateName: "ghost",
+      stackName: "ghost",
+      composePath: MISSING,
+      status: "installed",
+      webUiPort: 8080,
+      env: {},
+      installedAt: "2026-03-07T00:00:00.000Z",
+      updatedAt: "2026-03-07T00:00:00.000Z",
+    });
+    vi.mocked(createStoreOperation).mockResolvedValue(undefined);
+  }
+
+  function settled() {
+    let done = false;
+    // `errorMessage`, not `message` — the field the operation record actually
+    // carries, and the one the UI renders. Asserting the wrong one is how a
+    // probe reports "no message" about a message that is there.
+    return new Promise<{ status?: string; errorMessage?: string | null }>((resolve) => {
+      vi.mocked(updateStoreOperation).mockImplementation(async (_id, patch) => {
+        if (!done && (patch.status === "success" || patch.status === "error")) {
+          done = true;
+          resolve(patch as { status?: string; errorMessage?: string | null });
+        }
+      });
+    });
+  }
+
+  it("removes the record when nothing is left on disk or in Docker", async () => {
+    // Before this, `docker compose down` could not run without its file, so the
+    // uninstall errored — and the delete route refuses a definition whose stack
+    // still reads "installed". The app could be neither uninstalled nor
+    // forgotten. A database restored ahead of its stack directories lands here.
+    ghostStack();
+    vi.mocked(listContainers).mockResolvedValue([]);
+    const outcome = settled();
+
+    await startStoreOperation({ appId: "ghost", action: "uninstall" });
+
+    expect((await outcome).status).toBe("success");
+    expect(deleteInstalledStackByAppId).toHaveBeenCalledWith("ghost");
+    expect(runComposeDown).not.toHaveBeenCalled();
+  });
+
+  it("still refuses when the containers are up, and names them", async () => {
+    // Dropping the record here would leave containers running with nothing in
+    // Homeio naming them — the state the "no record of" guard exists to avoid.
+    ghostStack();
+    vi.mocked(listContainers).mockResolvedValue([
+      {
+        Id: "abc123def456",
+        Names: ["/ghost-web-1"],
+        State: "running",
+        Status: "Up 2 days",
+        Labels: { "com.docker.compose.project": "ghost" },
+      },
+    ]);
+    const outcome = settled();
+
+    await startStoreOperation({ appId: "ghost", action: "uninstall" });
+
+    const patch = await outcome;
+    expect(patch.status).toBe("error");
+    expect(patch.errorMessage).toMatch(/ghost-web-1/);
+    expect(deleteInstalledStackByAppId).not.toHaveBeenCalled();
+  });
+
+  it("refuses rather than guessing when Docker does not answer", async () => {
+    ghostStack();
+    vi.mocked(listContainers).mockRejectedValue(new Error("docker socket gone"));
+    const outcome = settled();
+
+    await startStoreOperation({ appId: "ghost", action: "uninstall" });
+
+    expect((await outcome).status).toBe("error");
+    expect(deleteInstalledStackByAppId).not.toHaveBeenCalled();
+  });
+
+  it("ignores containers belonging to another stack", async () => {
+    ghostStack();
+    vi.mocked(listContainers).mockResolvedValue([
+      {
+        Id: "other",
+        Names: ["/jellyfin-1"],
+        State: "running",
+        Status: "Up 1 day",
+        Labels: { "com.docker.compose.project": "jellyfin" },
+      },
+    ]);
+    const outcome = settled();
+
+    await startStoreOperation({ appId: "ghost", action: "uninstall" });
+
+    expect((await outcome).status).toBe("success");
+    expect(deleteInstalledStackByAppId).toHaveBeenCalledWith("ghost");
   });
 });
