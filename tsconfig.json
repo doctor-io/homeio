@@ -43,6 +43,7 @@
   // about production code; tsconfig.server.json already draws the same line.
   "exclude": [
     "node_modules",
+    "apps",
     "**/__tests__/**",
     "**/*.test.ts",
     "**/*.test.tsx"

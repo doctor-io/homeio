@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A layer-list rather than a bitmap: one file covers every density and
+  orientation, and the launcher opens on the app's own dark background instead
+  of the white flash a missing splash produces.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@mipmap/ic_launcher"
+            android:width="96dp"
+            android:height="96dp" />
+    </item>
+</layer-list>

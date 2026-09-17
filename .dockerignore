@@ -12,5 +12,6 @@ screenshots
 .playwright-test
 .claude
 .codex
+apps
 *.md
 !README.md

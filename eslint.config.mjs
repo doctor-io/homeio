@@ -38,5 +38,8 @@ export default defineConfig([
     "coverage/**",
     "node_modules/**",
     "next-env.d.ts",
+    // apps/mobile is its own project, with its own lint setup and its own
+    // dependencies. Linting it from here reports on rules it never adopted.
+    "apps/**",
   ]),
 ]);

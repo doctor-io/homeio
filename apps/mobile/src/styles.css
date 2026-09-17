@@ -1,0 +1,612 @@
+/*
+ * Launcher styles matching the Homeio web app's login page (app/globals.css):
+ * dark shell background with an orange glow, glassy black/18 surfaces with
+ * white/8 borders, and the #ff6000 primary action.
+ */
+
+:root {
+  --background: oklch(0.13 0.015 250);
+  --foreground: oklch(0.97 0.005 250);
+  --muted-foreground: oklch(0.65 0.02 250);
+  --primary: #ff6000;
+  --status-red: oklch(0.65 0.22 25);
+  --radius: 0.875rem;
+  --radius-panel: calc(var(--radius) + 0.9rem);
+  --radius-control: calc(var(--radius) + 0.125rem);
+  --radius-hero: calc(var(--radius) + 0.725rem);
+  --radius-icon: calc(var(--radius) - 0.1rem);
+  --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.22);
+  --shadow-control: 0 10px 20px rgba(0, 0, 0, 0.18);
+  --shadow-surface: 0 16px 36px rgba(0, 0, 0, 0.2);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The login shell's layered wallpaper glow: faint white light up top, the
+   signature orange bloom at the bottom, and a vignette. */
+.screen {
+  position: relative;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: calc(env(safe-area-inset-top) + 40px) 24px
+    calc(env(safe-area-inset-bottom) + 40px);
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.045) 0%, transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(255, 96, 0, 0.16) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(4, 10, 18, 0.26) 0%, rgba(4, 10, 18, 0.14) 38%, rgba(18, 12, 8, 0.3) 100%),
+    radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.12) 48%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+.panel {
+  /* Anchors the settings gear in the corner. */
+  position: relative;
+  width: 100%;
+  max-width: 26rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Hero icon tile + "HOME SERVER" pill, as on /login */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.hero-surface {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-hero);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(40px);
+}
+
+.hero-surface img {
+  width: 3.4rem;
+  height: 3.4rem;
+}
+
+.hero-pill {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+  backdrop-filter: blur(40px);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--foreground) 54%, transparent);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.48rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
+}
+
+.subtitle {
+  margin: 0.25rem 0 1.25rem;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--muted-foreground) 78%, transparent);
+}
+
+/* Error capsule (system-error-capsule) */
+.error-wrap[hidden] {
+  display: none;
+}
+
+.error-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.error {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid color-mix(in oklab, var(--status-red) 18%, transparent);
+  background: rgba(0, 0, 0, 0.26);
+  border-radius: 999px;
+  box-shadow: var(--shadow-surface);
+  backdrop-filter: blur(24px);
+  text-align: left;
+}
+
+.error::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--status-red);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.45);
+}
+
+.error span {
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: color-mix(in oklab, var(--status-red) 92%, transparent);
+}
+
+/* Saved servers — glassy soft-surface rows */
+.servers {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Each row is a fixed frame: the delete button sits underneath, and the card
+   slides over it. Nothing is destroyed by the swipe itself. */
+.server-row {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--radius-panel);
+  /* Clip the swipe: a card sliding left must disappear at the row's edge
+     rather than sailing out over the panel behind it. */
+  overflow: hidden;
+}
+
+.server-row.dragging {
+  z-index: 2;
+  transition: none;
+  /* The lift shadow belongs outside the row it is lifting off. */
+  overflow: visible;
+}
+
+.server-row.dragging .server-card {
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.75);
+  transform: scale(1.02);
+}
+
+.server-row:not(.dragging) {
+  transition: transform 180ms ease;
+}
+
+.server-delete {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 4.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-panel);
+  background: color-mix(in oklab, var(--status-red, #e5484d) 22%, transparent);
+  color: var(--status-red, #e5484d);
+  cursor: pointer;
+}
+
+.server-delete:active {
+  background: color-mix(in oklab, var(--status-red, #e5484d) 34%, transparent);
+}
+
+.server-delete svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.server-card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 15, 0.92);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(40px);
+  touch-action: pan-y;
+}
+
+.server-card::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 1rem;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.server-grip {
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem 0 0.625rem;
+  color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+  /* The one place a vertical drag must not scroll the page. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.server-grip svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.server-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 0.5rem 0.875rem 0.375rem;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.server-main:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.server-main:disabled {
+  opacity: 0.6;
+}
+
+.server-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.server-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.server-meta {
+  font-size: 12px;
+  color: color-mix(in oklab, var(--muted-foreground) 78%, transparent);
+  word-break: break-all;
+}
+
+/* Reachability, decided by a probe that runs after the list is already on
+   screen: grey while it is out, then green or red. */
+.server-dot {
+  align-self: center;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 200ms ease;
+}
+
+.server-dot.checking {
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.server-dot.online {
+  background: var(--status-green, #46a758);
+  animation: none;
+}
+
+.server-dot.offline {
+  background: var(--status-red, #e5484d);
+  animation: none;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* Add-server form — soft surface with icon-tile input rows, like the
+   username/password rows on /login */
+.add-form {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(40px);
+}
+
+.add-form::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 1rem;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: var(--radius-control);
+  transition: background-color 120ms ease;
+}
+
+.field:focus-within {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.field-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-icon);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.field-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.field input {
+  height: 2.5rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0 0.25rem;
+  color: var(--foreground);
+  font-size: 15px;
+}
+
+.field input:focus {
+  outline: none;
+}
+
+.field input::placeholder {
+  color: color-mix(in oklab, var(--muted-foreground) 52%, transparent);
+}
+
+/* Primary action — rounded-full, Homeio orange */
+.submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--primary);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: var(--shadow-control);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.submit:active {
+  filter: brightness(1.1);
+}
+
+.submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submit svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* The app lock row: a settings control, so it sits below the primary action
+   rather than competing with it. */
+.lock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lock-row:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lock-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.lock-label {
+  font-size: 13px;
+}
+
+.lock-meta {
+  font-size: 11px;
+  color: color-mix(in oklab, var(--muted-foreground) 85%, transparent);
+}
+
+.switch {
+  flex: none;
+  width: 2.5rem;
+  height: 1.5rem;
+  padding: 0.1875rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 160ms ease;
+}
+
+.switch .knob {
+  display: block;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+.switch.on {
+  background: var(--primary, #e2601a);
+}
+
+.switch.on .knob {
+  transform: translateX(1rem);
+}
+
+.hint {
+  margin: 1rem 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: color-mix(in oklab, var(--muted-foreground) 78%, transparent);
+}
+
+.hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+}
+
+/* Settings live behind a gear rather than under the connect form: they are
+   device settings, consulted rarely, and the form is what people came for. */
+.gear {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+  cursor: pointer;
+}
+
+.gear:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gear svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.sheet {
+  position: fixed;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+  border-top-left-radius: 1.75rem;
+  border-top-right-radius: 1.75rem;
+  background: #14171b;
+  animation: sheet-up 200ms ease;
+}
+
+.sheet .lock-row {
+  margin-top: 0;
+}
+
+.sheet-grabber {
+  align-self: center;
+  width: 2.5rem;
+  height: 4px;
+  margin-bottom: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.ghost-button {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ghost-button:active {
+  background: rgba(255, 255, 255, 0.06);
+}

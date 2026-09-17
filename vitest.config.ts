@@ -7,7 +7,10 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./test/setup.ts"],
     include: ["**/*.test.ts", "**/*.test.tsx"],
-    exclude: ["node_modules", ".next"],
+    // apps/** holds separate projects with their own runners and their own
+    // dependencies — apps/mobile's tests need Vite and Capacitor, which this
+    // workspace does not install. Without this they are collected and fail.
+    exclude: ["node_modules", ".next", "apps"],
     restoreMocks: true,
     clearMocks: true,
     coverage: {
