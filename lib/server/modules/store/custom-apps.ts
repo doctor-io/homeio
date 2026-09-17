@@ -163,8 +163,68 @@ function readOptionValue(tokens: string[], index: number) {
   return tokens[index + 1];
 }
 
+/**
+ * Flags a compose file has no use for, so dropping them costs nothing and
+ * saying so would be noise. Everything else dropped is reported.
+ */
+const NOISE_FLAGS = new Set([
+  "-d",
+  "--detach",
+  "--rm",
+  "-i",
+  "-t",
+  "-it",
+  "--interactive",
+  "--tty",
+]);
+
+/**
+ * Flags that take no value.
+ *
+ * Needed because the parser's fallback assumes an unknown `--flag` followed by
+ * a word is a flag and its argument — which is right for `--cap-add SYS_ADMIN`
+ * and wrong for `--privileged alpine`, where the word is the image. Written
+ * that way, a valid command was refused with "image is required" about an image
+ * that was plainly there. Ordering hid it: `--privileged --network host alpine`
+ * parsed, because the next token began with a dash.
+ *
+ * Not exhaustive — Docker has more — but a flag missing from here fails the
+ * same way it always did, and every one people actually paste is present.
+ */
+const VALUELESS_FLAGS = new Set([
+  ...NOISE_FLAGS,
+  "--privileged",
+  "--init",
+  "--read-only",
+  "--no-healthcheck",
+  "--oom-kill-disable",
+  "--publish-all",
+  "-P",
+  "--disable-content-trust",
+  "--sig-proxy",
+  "--quiet",
+  "-q",
+]);
+
+/**
+ * Turns a `docker run` line into a compose document.
+ *
+ * Only --name, -p/--publish, -e/--env and -v/--volume are translated. Every
+ * other flag used to be skipped in silence, which made the conversion quietly
+ * lie: a command carrying `--privileged --network host --cap-add SYS_ADMIN`
+ * produced a container with none of the three, measured, and nothing said so.
+ * The app then does not work and the reason is invisible, because the compose
+ * on screen looks like a faithful translation of what was pasted.
+ *
+ * Nothing is invented to close that gap. What was dropped is written at the top
+ * of the file the user can open and edit, so the omission is stated where they
+ * will go looking. Translating `--privileged` instead would mean a pasted line
+ * can ask for the host kernel — a decision to take deliberately, not a side
+ * effect of the converter getting cleverer.
+ */
 export function convertDockerRunToCompose(command: string, fallbackServiceName: string) {
   const tokens = splitShellCommand(command.trim());
+  const dropped: string[] = [];
   let index = 0;
 
   if (tokens[index] === "docker") {
@@ -263,15 +323,25 @@ export function convertDockerRunToCompose(command: string, fallbackServiceName: 
     }
 
     if (token.includes("=")) {
+      dropped.push(token.split("=")[0]);
       index += 1;
       continue;
     }
 
-    if (token.startsWith("--") && index + 1 < tokens.length && !tokens[index + 1].startsWith("-")) {
+    if (
+      !VALUELESS_FLAGS.has(token) &&
+      token.startsWith("--") &&
+      index + 1 < tokens.length &&
+      !tokens[index + 1].startsWith("-")
+    ) {
+      dropped.push(`${token} ${tokens[index + 1]}`);
       index += 2;
       continue;
     }
 
+    // Bare switches: -d, --rm, --privileged. The first two change nothing a
+    // compose file expresses; the rest do, and used to vanish without a word.
+    if (!NOISE_FLAGS.has(token)) dropped.push(token);
     index += 1;
   }
 
@@ -318,6 +388,23 @@ export function convertDockerRunToCompose(command: string, fallbackServiceName: 
 
   if (commandArgs.length > 0) {
     lines.push(`    command: ${quoteYaml(commandArgs.join(" "))}`);
+  }
+
+  if (dropped.length > 0) {
+    // A key, not a comment. The install path parses this document and dumps it
+    // again to attach `x-casaos`, and js-yaml does not carry comments across —
+    // a notice written as `#` reached the unit test and never the file. `x-`
+    // extensions are explicitly allowed by the validator and survive the round
+    // trip, so this is still there when the user opens the compose.
+    lines.push(
+      "x-homeio:",
+      "  dockerRunNotCarriedOver:",
+      ...[...new Set(dropped)].map((flag) => `    - ${quoteYaml(flag)}`),
+      "  note: >-",
+      "    Converted from a docker run command. Homeio translates --name,",
+      "    -p/--publish, -e/--env and -v/--volume only; the flags above were",
+      "    dropped. Add them here by hand if the app needs them.",
+    );
   }
 
   return lines.join("\n");
