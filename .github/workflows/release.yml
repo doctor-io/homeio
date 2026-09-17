@@ -5,12 +5,20 @@ on:
     branches:
       - main
       - develop
+      - v2.0
   # Validate work before it lands, not after. Without this, the first time a
   # branch meets lint/test/build is the push to main — too late to be useful.
+  #
+  # v2.0 is listed because that is where the work actually lands: feature
+  # branches open their pull request against it, not against main, so without
+  # it every one of them merged without CI ever running. Only `verify` and
+  # `image-scan` follow — `release` and `docker` test the ref themselves and
+  # stay on main, so nothing is tagged or published from here.
   pull_request:
     branches:
       - main
       - develop
+      - v2.0
   workflow_dispatch:
 
 permissions:
