@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   accumulateRestart,
+  createDeliberateStopTracker,
   isCrash,
   parseContainerEvent,
   stateForEvent,
@@ -131,5 +132,72 @@ describe("accumulateRestart", () => {
 
     expect(result.window).toEqual({ count: 1, startedAt: muchLater });
     expect(result.budgetSpent).toBe(false);
+  });
+});
+
+describe("a deliberate stop is not a crash (D-16)", () => {
+  function event(action: string, id: string, exitCode: number | null, at = new Date("2026-09-17T12:00:00Z")) {
+    return {
+      action,
+      containerId: id,
+      containerName: "app-1",
+      project: "app",
+      exitCode,
+      wasDeliberate: action === "kill",
+      at,
+    };
+  }
+
+  it("marks a die that follows a stop", () => {
+    // Measured from Docker's own stream on a plain `docker stop`: kill
+    // signal=15, kill signal=9, stop, then die with no signal and exitCode 137.
+    // Read alone that die is a crash, so auto-heal put the app straight back up.
+    const mark = createDeliberateStopTracker();
+
+    mark(event("stop", "abc", null));
+    const died = mark(event("die", "abc", 137));
+
+    expect(died.wasDeliberate).toBe(true);
+    expect(isCrash(died)).toBe(false);
+  });
+
+  it("still calls a real crash a crash", () => {
+    // The control: nothing stopped this one, it just exited non-zero.
+    const mark = createDeliberateStopTracker();
+
+    const died = mark(event("die", "def", 1));
+
+    expect(died.wasDeliberate).toBe(false);
+    expect(isCrash(died)).toBe(true);
+  });
+
+  it("does not carry a stop over to a later, unrelated death", () => {
+    const mark = createDeliberateStopTracker();
+
+    mark(event("stop", "abc", null));
+    mark(event("die", "abc", 137));
+    const crashedLater = mark(event("die", "abc", 137));
+
+    expect(isCrash(crashedLater)).toBe(true);
+  });
+
+  it("forgets a stop that never produced a death", () => {
+    // Otherwise a container stopped once would be exempt for the life of the
+    // process, and a crash days later would be read as deliberate.
+    const mark = createDeliberateStopTracker(60_000);
+
+    mark(event("stop", "abc", null, new Date("2026-09-17T12:00:00Z")));
+    const muchLater = mark(event("die", "abc", 137, new Date("2026-09-17T12:05:00Z")));
+
+    expect(isCrash(muchLater)).toBe(true);
+  });
+
+  it("keeps stops apart per container", () => {
+    const mark = createDeliberateStopTracker();
+
+    mark(event("stop", "abc", null));
+    const other = mark(event("die", "zzz", 137));
+
+    expect(isCrash(other)).toBe(true);
   });
 });

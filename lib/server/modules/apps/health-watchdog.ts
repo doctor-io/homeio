@@ -55,10 +55,56 @@ export function parseContainerEvent(line: string): ContainerEvent | null {
     containerName: attributes.name ?? null,
     project: attributes["com.docker.compose.project"] ?? null,
     exitCode: Number.isFinite(exitCode) ? exitCode : null,
-    // Docker marks a deliberate `docker stop` on the die event via this signal
-    // attribute; an operator's stop must never look like a crash.
+    // A `kill` action is deliberate by itself, and the signal attribute is kept
+    // for where it does appear — but it settles nothing on a `die`, because
+    // Docker puts none there. Measured on a plain `docker stop`: the stream
+    // carries `kill signal=15`, `kill signal=9`, `stop`, then `die` with no
+    // signal and exitCode 137. Deliberateness on a `die` is decided by
+    // `createDeliberateStopTracker`, which reads the events that came before.
     wasDeliberate: raw.Action === "kill" || attributes.signal === "15",
     at: raw.time ? new Date(raw.time * 1000) : new Date(),
+  };
+}
+
+/**
+ * Ties a `die` back to the `stop` or `kill` that caused it.
+ *
+ * `isCrash` judges a single event, and that event carries nothing saying whether
+ * a human asked for this. A container exiting 0 on SIGTERM looks deliberate by
+ * luck, through its exit code; one that ignores SIGTERM is escalated to SIGKILL
+ * and dies with 137, which read alone is indistinguishable from a crash. That
+ * is most containers — anything with a shell as PID 1. With auto-heal on,
+ * stopping such an app put it straight back up.
+ *
+ * Docker does say so, just in an earlier event. This remembers which containers
+ * were told to stop, and marks their `die` accordingly.
+ *
+ * The window is there because a container may take its whole grace period to go
+ * down, and because nothing else would ever clear an entry.
+ */
+const DELIBERATE_STOP_WINDOW_MS = 120_000;
+
+export function createDeliberateStopTracker(windowMs = DELIBERATE_STOP_WINDOW_MS) {
+  const stopped = new Map<string, number>();
+
+  return function markDeliberateStops(event: ContainerEvent): ContainerEvent {
+    const now = event.at.getTime();
+
+    for (const [id, at] of stopped) {
+      if (now - at > windowMs) stopped.delete(id);
+    }
+
+    if (event.action === "stop" || event.action === "kill") {
+      if (event.containerId) stopped.set(event.containerId, now);
+      return event;
+    }
+
+    if (event.action === "die" && event.containerId && stopped.has(event.containerId)) {
+      stopped.delete(event.containerId);
+      return { ...event, wasDeliberate: true };
+    }
+
+    return event;
   };
 }
 
@@ -131,6 +177,11 @@ export function startHealthWatchdog(options: {
     return { stop: () => {} };
   }
 
+  // One tracker per subscription: it holds only what this stream has seen, and
+  // goes away with it. A reconnect starts empty, which is the safe direction —
+  // an unmatched `die` is read as a crash, as it was before.
+  const markDeliberateStops = createDeliberateStopTracker();
+
   let stopped = false;
   let retryDelayMs = 1_000;
   let reconnectTimer: NodeJS.Timeout | null = null;
@@ -165,8 +216,8 @@ export function startHealthWatchdog(options: {
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            const event = parseContainerEvent(line);
-            if (event) options.onEvent(event);
+            const parsed = parseContainerEvent(line);
+            if (parsed) options.onEvent(markDeliberateStops(parsed));
           }
         });
 
