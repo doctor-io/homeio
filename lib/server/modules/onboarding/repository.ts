@@ -3,6 +3,7 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/server/db/drizzle";
 import { settings } from "@/lib/server/db/schema";
+import { ONBOARDING_LAST_STEP } from "@/lib/shared/contracts/onboarding";
 
 export type OnboardingRow = {
   onboardingState: string | null;
@@ -88,10 +89,15 @@ export async function saveOnboardingProgress(input: {
 export async function markOnboardingComplete(): Promise<void> {
   await ensureSettingsRow();
 
+  // The last step, read from the constant rather than written out. It said 5
+  // while the wizard has six, so finishing at step 6 wrote the progress
+  // *backwards* to 5 — and would have gone on saying 5 the day a seventh step
+  // was added. Nothing routes on this today, since the gate reads the status;
+  // it is the stored answer to "how far did they get" that was wrong.
   await db.execute(sql`
     UPDATE settings
     SET onboarding_state = 'complete',
-        onboarding_step = ${5},
+        onboarding_step = ${ONBOARDING_LAST_STEP},
         onboarding_completed_at = NOW(),
         updated_at = NOW()
     WHERE id = 'singleton'

@@ -7,6 +7,7 @@ vi.mock("@/lib/server/db/drizzle", () => ({
   },
 }));
 
+import { ONBOARDING_LAST_STEP } from "@/lib/shared/contracts/onboarding";
 import { db } from "@/lib/server/db/drizzle";
 import {
   findOnboardingRow,
@@ -117,5 +118,24 @@ describe("onboarding repository", () => {
     const update = executedStatements().find((text) => text.includes("onboarding_completed_at"));
     expect(update).toContain("onboarding_state = 'complete'");
     expect(update).toContain("onboarding_completed_at = NOW()");
+  });
+});
+
+describe("completing the wizard records the last step (D-14)", () => {
+  it("writes ONBOARDING_LAST_STEP, not a number typed out beside it", async () => {
+    // It wrote 5 while the wizard has six steps, so finishing at step 6 moved
+    // the stored progress backwards. Measured: database at 6, complete called,
+    // database at 5.
+    vi.mocked(db.execute).mockResolvedValue(undefined as never);
+
+    await markOnboardingComplete();
+
+    const statement = vi.mocked(db.execute).mock.calls.at(-1)?.[0] as {
+      queryChunks?: unknown[];
+    };
+    const values = JSON.stringify(statement);
+
+    expect(values).toContain(String(ONBOARDING_LAST_STEP));
+    expect(ONBOARDING_LAST_STEP).toBe(6);
   });
 });
