@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRequireApiSession, mockFetchCompose, mockFindTemplate } = vi.hoisted(() => ({
+const { mockRequireApiSession, mockFetchCompose, mockFindTemplate, mockBackfill } = vi.hoisted(() => ({
   mockRequireApiSession: vi.fn(),
   mockFetchCompose: vi.fn(),
   mockFindTemplate: vi.fn(),
+  mockBackfill: vi.fn(),
 }));
 
 vi.mock("@/lib/server/modules/auth/api", async () => {
@@ -32,6 +33,7 @@ vi.mock("@/lib/server/modules/store/custom-apps", async () => {
   const { createHash } = await import("node:crypto");
   return {
     findCustomStoreTemplateByAppId: mockFindTemplate,
+    backfillCustomStoreChecksum: mockBackfill,
     checksumSource: (value: string) => createHash("sha256").update(value).digest("hex"),
   };
 });
@@ -160,5 +162,72 @@ describe("POST /api/v1/store/custom-apps/[appId]/check-import", () => {
 
     expect(response.status).toBe(400);
     expect(json.code).toBe("private_host");
+  });
+});
+
+describe("a row imported before checksums existed", () => {
+  const SOURCE = "services:\n  web:\n    image: nginx\n";
+
+  function templateWithoutChecksum() {
+    mockFindTemplate.mockResolvedValue({
+      appId: "custom-thing",
+      sourceUrl: "https://example.com/compose.yml",
+      sourceRef: null,
+      lastImportedAt: null,
+      sourceChecksum: null,
+      sourceText: SOURCE,
+    });
+  }
+
+  it("proves the match against the stored text instead of claiming a change", async () => {
+    // It answered "changed" on every read and wrote nothing back, so the app
+    // claimed an update for as long as it existed and nothing could clear it.
+    templateWithoutChecksum();
+    mockFetchCompose.mockResolvedValue({ url: "https://example.com/compose.yml", content: SOURCE, bytes: SOURCE.length });
+
+    const { request, context } = req();
+    const body = await (await POST(request, context)).json();
+
+    expect(body.data.changed).toBe(false);
+  });
+
+  it("records the checksum so the next read is an ordinary one", async () => {
+    templateWithoutChecksum();
+    mockFetchCompose.mockResolvedValue({ url: "https://example.com/compose.yml", content: SOURCE, bytes: SOURCE.length });
+
+    const { request, context } = req();
+    await POST(request, context);
+
+    expect(mockBackfill).toHaveBeenCalledWith("custom-thing", expect.any(String));
+  });
+
+  it("still reports a real upstream change", async () => {
+    // The control: back-filling must not blind the thing it is meant to unblock.
+    templateWithoutChecksum();
+    const moved = `${SOURCE}    restart: always\n`;
+    mockFetchCompose.mockResolvedValue({ url: "https://example.com/compose.yml", content: moved, bytes: moved.length });
+
+    const { request, context } = req();
+    const body = await (await POST(request, context)).json();
+
+    expect(body.data.changed).toBe(true);
+  });
+
+  it("keeps saying changed when there is nothing at all to compare", async () => {
+    mockFindTemplate.mockResolvedValue({
+      appId: "custom-thing",
+      sourceUrl: "https://example.com/compose.yml",
+      sourceRef: null,
+      lastImportedAt: null,
+      sourceChecksum: null,
+      sourceText: null,
+    });
+    mockFetchCompose.mockResolvedValue({ url: "https://example.com/compose.yml", content: SOURCE, bytes: SOURCE.length });
+
+    const { request, context } = req();
+    const body = await (await POST(request, context)).json();
+
+    expect(body.data.changed).toBe(true);
+    expect(mockBackfill).not.toHaveBeenCalled();
   });
 });

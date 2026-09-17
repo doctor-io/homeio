@@ -6,6 +6,7 @@ import {
   fetchComposeFromUrl,
 } from "@/lib/server/modules/store/compose-import";
 import {
+  backfillCustomStoreChecksum,
   checksumSource,
   findCustomStoreTemplateByAppId,
 } from "@/lib/server/modules/store/custom-apps";
@@ -45,17 +46,34 @@ export async function POST(request: Request, context: Context) {
     const fetched = await fetchComposeFromUrl(template.sourceUrl);
     const upstreamChecksum = checksumSource(fetched.content);
 
+    // A row imported before C1 carries no checksum. Comparing against it
+    // answered "changed" on every read, and nothing ever wrote one back, so the
+    // state could not resolve: the app claimed an update was waiting for as
+    // long as it existed, and nothing the user did could clear it. A badge that
+    // is always lit is one people stop reading, including the day it is right.
+    //
+    // The match is provable after all — the text that was imported is stored
+    // beside the checksum. Fall back to it, and record what it hashes to so the
+    // next read has a checksum like any other row.
+    const currentChecksum =
+      template.sourceChecksum ??
+      (template.sourceText ? checksumSource(template.sourceText) : null);
+
+    if (!template.sourceChecksum && currentChecksum) {
+      await backfillCustomStoreChecksum(appId, currentChecksum);
+    }
+
     return NextResponse.json({
       data: {
         appId,
         sourceUrl: template.sourceUrl,
         sourceRef: template.sourceRef,
         lastImportedAt: template.lastImportedAt,
-        currentChecksum: template.sourceChecksum,
+        currentChecksum,
         upstreamChecksum,
-        // A missing stored checksum means the row predates C1; report it as
-        // changed rather than claiming a match we cannot prove.
-        changed: template.sourceChecksum !== upstreamChecksum,
+        // Still "changed" when there is nothing at all to compare against,
+        // which is the case the original note was right about.
+        changed: currentChecksum !== upstreamChecksum,
         upstreamContent: fetched.content,
       },
     });

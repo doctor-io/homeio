@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import yaml from "js-yaml";
 import { db } from "@/lib/server/db/drizzle";
 import { customStoreApps } from "@/lib/server/db/schema";
@@ -753,4 +753,24 @@ export async function deleteCustomStoreTemplate(appId: string) {
       return mapRow(rows[0]);
     },
   );
+}
+
+/**
+ * Writes the checksum of an import that never had one.
+ *
+ * Rows created before C1 carry `sourceChecksum: null`, and the upstream check
+ * compared against that — so it answered "changed" on every read and never
+ * wrote anything back. The row could not stop claiming an update. Recording
+ * what the stored source hashes to turns it into an ordinary row.
+ *
+ * Deliberately narrow: it only fills a null, never overwrites a real checksum,
+ * so it cannot quietly mark a genuine upstream change as already seen.
+ */
+export async function backfillCustomStoreChecksum(appId: string, checksum: string) {
+  if (!(await hasCustomStoreAppsTable())) return;
+
+  await db
+    .update(customStoreApps)
+    .set({ sourceChecksum: checksum })
+    .where(and(eq(customStoreApps.appId, appId), isNull(customStoreApps.sourceChecksum)));
 }
