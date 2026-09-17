@@ -8,6 +8,7 @@ import {
   writePersistedPowerActionState,
 } from "@/lib/desktop/reboot-state";
 import { StatusScreen } from "@/modules/shell/components/status-screen";
+import { UpdateLogPane } from "@/modules/shell/components/update-log-pane";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -183,6 +184,12 @@ export function UpdateRecoveryScreen({
           </button>
         ) : null
       }
+      // Issue #41: the wait used to be a spinner and a sentence, with no way to
+      // tell a slow npm install from a stuck one. The updater's output was
+      // already on disk the whole time; it was simply never shown. Not on the
+      // failed screen — there the message is the point, and the log ends
+      // wherever it stopped, which only muddies it.
+      details={<UpdateLogPane enabled={phase !== "failed"} />}
     />
   );
 }

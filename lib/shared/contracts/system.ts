@@ -162,6 +162,26 @@ export type SystemUpdateApplyAcceptedResponse = {
   accepted: true;
 };
 
+export type SystemUpdateLog = {
+  /** Lines written since `offset`, oldest first. */
+  lines: string[];
+  /**
+   * Byte position to ask from next time. The caller holds it, not the server:
+   * the update restarts Homeio, so anything the server remembered about this
+   * read would be gone by the time the caller comes back for more.
+   */
+  nextOffset: number;
+  /** Whether a homeio-self-update unit is still activating or active. */
+  running: boolean;
+  /**
+   * False when there is no log to read — in a container, where the in-app
+   * updater is disabled outright, or before the first update has ever run.
+   */
+  available: boolean;
+  /** Why there is nothing to show, when `available` is false. */
+  unavailableReason: string | null;
+};
+
 export type SystemSecuritySettings = {
   firewallEnabled: boolean;
   firewallIncomingPolicy: SystemSecurityPolicy;

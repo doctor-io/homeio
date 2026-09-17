@@ -8,6 +8,8 @@ type StatusScreenProps = {
   title: string;
   body: string;
   action?: ReactNode;
+  /** Shown under the action: detail a waiting person may want, not a control. */
+  details?: ReactNode;
   failed?: boolean;
 };
 
@@ -15,13 +17,14 @@ export function StatusScreen({
   title,
   body,
   action,
+  details,
   failed = false,
 }: StatusScreenProps) {
   return (
     <FullScreenShell
       showClock={false}
       center={
-        <div className="w-full max-w-md text-center">
+        <div className={details ? "w-full max-w-xl text-center" : "w-full max-w-md text-center"}>
           <div className="mx-auto mb-5 flex w-fit flex-col items-center">
             <div
               className={`system-hero-surface flex size-24 items-center justify-center ${
@@ -48,6 +51,7 @@ export function StatusScreen({
             {body}
           </p>
           {action}
+          {details}
         </div>
       }
     />
