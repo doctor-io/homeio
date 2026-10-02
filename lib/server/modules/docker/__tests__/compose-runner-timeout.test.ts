@@ -70,4 +70,25 @@ describe("runComposeCommand timeout handling", () => {
       }),
     ).rejects.toThrow(/pull access denied/);
   });
+
+  it("includes stdout when stderr is only a harmless compose-provider notice", async () => {
+    execFileMock.mockImplementationOnce((callback: ExecCallback) => {
+      const noise = "Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.";
+      const realFailure = "no configuration file provided: not found";
+      const error: NodeJS.ErrnoException & { stdout?: string; stderr?: string } =
+        Object.assign(new Error("Command failed"), {
+          stdout: realFailure,
+          stderr: noise,
+        });
+      callback(error, realFailure, noise);
+    });
+
+    await expect(
+      runComposePull({
+        composePath: "/tmp/x/docker-compose.yml",
+        envPath: "/tmp/x/.env",
+        stackName: "demo",
+      }),
+    ).rejects.toThrow(/no configuration file provided/);
+  });
 });

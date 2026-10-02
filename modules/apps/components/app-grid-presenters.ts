@@ -358,7 +358,7 @@ export function buildUnmanagedAppItems(
       status: "unmanaged" as const,
       condition: container.condition,
       category: "Containers",
-      webUiPort: null,
+      webUiPort: container.webUiPort,
       webUiUrl: null,
       containerName: container.name,
       updateAvailable: false,

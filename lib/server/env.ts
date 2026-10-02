@@ -85,6 +85,11 @@ const envSchema = z.object({
   FILES_NETWORK_MOUNT_UID: z.coerce.number().int().min(0).optional(),
   FILES_NETWORK_MOUNT_GID: z.coerce.number().int().min(0).optional(),
   DOCKER_SOCKET_PATH: z.string().default("/var/run/docker.sock"),
+  // Rootless Podman containers (e.g. quadlets under a user's own systemd
+  // session) live in a separate container store from the rootful socket
+  // above and are otherwise invisible to Homeio. Point this at that user's
+  // socket (e.g. /run/user/<uid>/podman/podman.sock) to surface them too.
+  PODMAN_ROOTLESS_SOCKET_PATH: z.string().optional(),
   DOCKER_COMPOSE_TIMEOUT_MS: z.coerce
     .number()
     .int()

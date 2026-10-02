@@ -1080,6 +1080,7 @@ async function runComposeCommand(input: ComposeCommandInput) {
           killed?: boolean;
           signal?: string;
           code?: string | number;
+          stdout?: string;
           stderr?: string;
         };
         const timedOut =
@@ -1098,6 +1099,10 @@ async function runComposeCommand(input: ComposeCommandInput) {
           typeof errorObject.stderr === "string"
             ? errorObject.stderr.trim()
             : "";
+        const stdout =
+          typeof errorObject.stdout === "string"
+            ? errorObject.stdout.trim()
+            : "";
 
         // Detect hardware device requirements not present on this host
         // (e.g. Raspberry Pi GPU /dev/vcsm in some CasaOS templates).
@@ -1112,10 +1117,22 @@ async function runComposeCommand(input: ComposeCommandInput) {
           );
         }
 
-        // For all other failures, surface Docker's stderr so the user sees
+        // For all other failures, surface Docker's output so the user sees
         // the real reason instead of a generic "Command failed" message.
+        // Some compose providers (e.g. podman's external-provider delegation)
+        // print only a harmless notice to stderr while the actual failure
+        // reason lands on stdout -- include both when present rather than
+        // silently dropping stdout.
+        if (stderr && stdout && stderr !== stdout) {
+          throw new Error(`${stderr}\n${stdout}`);
+        }
+
         if (stderr) {
           throw new Error(stderr);
+        }
+
+        if (stdout) {
+          throw new Error(stdout);
         }
 
         throw err;
@@ -1341,7 +1358,21 @@ export async function getComposeRuntimeInfo(input: {
       primaryContainerName,
       condition,
     };
-  } catch {
+  } catch (error) {
+    // Silently swallowing this previously meant a compose-ps failure for any
+    // reason (timeout, socket hiccup, a compose provider whose `ps --format
+    // json` output the parser above doesn't recognize) showed up as
+    // "unknown" in the UI with zero trace anywhere -- log it so that's
+    // diagnosable instead of a dead end.
+    logServerAction({
+      level: "warn",
+      layer: "service",
+      action: "docker.compose.runtime-info",
+      status: "error",
+      message: `Failed to read compose runtime status for stack "${input.stackName}"`,
+      error,
+    });
+
     return {
       status: "unknown",
       lifecycleStatus: "unknown",

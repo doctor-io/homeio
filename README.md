@@ -80,6 +80,13 @@ curl -fsSL https://raw.githubusercontent.com/doctor-io/homeio/main/scripts/insta
 
 The app listens on `127.0.0.1:12026` and is exposed on `:80` via Nginx.
 
+Podman is supported as an alternative to Docker — pass `HOMEIO_CONTAINER_RUNTIME=podman`, or leave it unset to auto-detect (Podman is used automatically when it's already installed and Docker isn't):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/doctor-io/homeio/main/scripts/install.sh -o install.sh
+sudo HOMEIO_CONTAINER_RUNTIME=podman bash install.sh
+```
+
 **Update:**
 
 ```bash

@@ -197,6 +197,7 @@ describe("AppGrid context menu", () => {
           state: "running",
           status: "Up 3 days",
           composeProject: null,
+          webUiPort: null,
         },
       ],
       isLoading: false,
@@ -207,6 +208,39 @@ describe("AppGrid context menu", () => {
 
     expect(screen.getByRole("button", { name: "Open Plex" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open uilab-casa" })).toBeTruthy();
+  });
+
+  it("opens the dashboard for an unmanaged container using its detected web UI port", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    useUnmanagedContainersMock.mockReturnValue({
+      data: [
+        {
+          id: "quadlet123",
+          name: "my-quadlet-app",
+          image: "ghcr.io/example/app:latest",
+          state: "running",
+          status: "Up 2 hours",
+          composeProject: null,
+          webUiPort: 8080,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<AppGrid animationsEnabled={false} />);
+
+    openContextMenuFor("my-quadlet-app");
+    fireEvent.click(screen.getByRole("button", { name: "Open Dashboard" }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        "http://localhost:8080",
+        "_blank",
+        "noopener,noreferrer",
+      );
+    });
   });
 
   it("routes open dashboard through callback when provided", async () => {

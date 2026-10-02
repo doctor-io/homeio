@@ -37,8 +37,10 @@ HOMEIO_HOSTNAME="${HOMEIO_HOSTNAME:-}"
 HOMEIO_ALLOW_OTHER_NODE="${HOMEIO_ALLOW_OTHER_NODE:-false}"
 HOMEIO_VERBOSE="${HOMEIO_VERBOSE:-false}"
 HOMEIO_DRY_RUN="${HOMEIO_DRY_RUN:-false}"
+HOMEIO_CONTAINER_RUNTIME="${HOMEIO_CONTAINER_RUNTIME:-}"   # empty = auto-detect; otherwise "docker" or "podman"
 
 EFFECTIVE_DB_USER=""
+EFFECTIVE_CONTAINER_RUNTIME=""
 
 print_status() { echo -e "${GREEN}[+]${NC} $1"; }
 print_error() { echo -e "${RED}[!]${NC} $1" >&2; }
@@ -107,6 +109,8 @@ validate_identifiers() {
 	[[ "${db_name}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || { print_error "Invalid HOMEIO_DB_NAME: ${db_name}"; exit 1; }
 	[[ "${HOMEIO_VERBOSE}" == "true" || "${HOMEIO_VERBOSE}" == "false" ]] || { print_error "Invalid HOMEIO_VERBOSE: ${HOMEIO_VERBOSE} (expected true|false)"; exit 1; }
 	[[ "${HOMEIO_DRY_RUN}" == "true" || "${HOMEIO_DRY_RUN}" == "false" ]] || { print_error "Invalid HOMEIO_DRY_RUN: ${HOMEIO_DRY_RUN} (expected true|false)"; exit 1; }
+	[[ -z "${HOMEIO_CONTAINER_RUNTIME}" || "${HOMEIO_CONTAINER_RUNTIME}" == "docker" || "${HOMEIO_CONTAINER_RUNTIME}" == "podman" ]] \
+		|| { print_error "Invalid HOMEIO_CONTAINER_RUNTIME: ${HOMEIO_CONTAINER_RUNTIME} (expected docker|podman)"; exit 1; }
 	if [[ "${admin_username}" != "auto" ]]; then
 		[[ "${admin_username}" =~ ^[a-zA-Z0-9._-]{3,64}$ ]] || { print_error "Invalid HOMEIO_ADMIN_USERNAME: ${admin_username}"; exit 1; }
 	fi
@@ -129,6 +133,18 @@ detect_arch() {
 
 ensure_apt() {
 	command_exists apt-get || { print_error "This installer supports Debian/Ubuntu/Raspberry Pi OS only (apt-get required)."; exit 1; }
+}
+
+resolve_container_runtime() {
+	if [[ -n "${HOMEIO_CONTAINER_RUNTIME}" ]]; then
+		EFFECTIVE_CONTAINER_RUNTIME="${HOMEIO_CONTAINER_RUNTIME}"
+	elif command_exists podman && ! command_exists docker; then
+		EFFECTIVE_CONTAINER_RUNTIME="podman"
+	else
+		EFFECTIVE_CONTAINER_RUNTIME="docker"
+	fi
+
+	print_status "Container runtime: ${EFFECTIVE_CONTAINER_RUNTIME}"
 }
 
 normalize_hostname() {
@@ -474,6 +490,49 @@ install_docker() {
 	fi
 }
 
+install_podman() {
+
+	if command_exists podman; then
+		print_status "Podman already installed."
+	else
+		print_status "Installing Podman..."
+
+		local podman_log
+		podman_log=$(mktemp)
+
+		if [[ "${HOMEIO_VERBOSE}" == "true" ]]; then
+			apt-get update && apt-get install -y podman podman-docker podman-compose 2>&1 | tee "${podman_log}"
+		else
+			{ apt-get update && apt-get install -y podman podman-docker podman-compose; } >"${podman_log}" 2>&1
+		fi
+		local podman_exit=$?
+
+		if [[ ${podman_exit} -ne 0 ]]; then
+			print_error "Podman installation failed (exit ${podman_exit})."
+			print_error "Last output:"
+			tail -20 "${podman_log}" >&2
+			rm -f "${podman_log}"
+			exit 1
+		fi
+		rm -f "${podman_log}"
+	fi
+
+	# Rootful compat-API socket at /run/podman/podman.sock, matching the
+	# root-run homeio service -- no rootless socket-permission juggling needed.
+	if ! systemctl enable --now podman.socket >/dev/null 2>&1; then
+		print_error "Podman installed but podman.socket failed to start. Run: systemctl status podman.socket"
+		exit 1
+	fi
+}
+
+install_container_runtime() {
+	if [[ "${EFFECTIVE_CONTAINER_RUNTIME}" == "podman" ]]; then
+		install_podman
+	else
+		install_docker
+	fi
+}
+
 install_node() {
 	local arch
 	arch="$(detect_arch)"
@@ -605,7 +664,8 @@ EOF
 
 	systemctl daemon-reload
 	systemctl enable "${UPLOAD_SERVICE_NAME}.service"
-	systemctl start "${UPLOAD_SERVICE_NAME}.service"
+	# `restart`, not `start` -- see the same note in install_systemd_service().
+	systemctl restart "${UPLOAD_SERVICE_NAME}.service"
 
 	sleep 1
 
@@ -748,6 +808,12 @@ create_env_file() {
 	local db_name="${HOMEIO_DB_NAME:-home_server}"
 	local database_url="postgresql://${db_user}:${db_password}@127.0.0.1:5432/${db_name}"
 
+	# Podman's Docker-compat API socket; Docker keeps env.ts's own default.
+	local docker_socket_line=""
+	if [[ "${EFFECTIVE_CONTAINER_RUNTIME}" == "podman" ]]; then
+		docker_socket_line="DOCKER_SOCKET_PATH=/run/podman/podman.sock"
+	fi
+
 	cat > "${ENV_FILE}" <<EOF
 # Home Server Configuration
 # Generated on $(date)
@@ -785,6 +851,7 @@ DBUS_HELPER_SOCKET_PATH=/run/home-server/dbus-helper.sock
 # Docker/App Stacks
 STORE_STACKS_ROOT=/var/lib/home-server/stacks
 STORE_APP_DATA_ROOT=/DATA/AppData
+${docker_socket_line}
 EOF
 
 	# Store for downstream steps
@@ -901,10 +968,13 @@ install_systemd_service() {
 	local unit_file="/etc/systemd/system/${SERVICE_NAME}.service"
 	print_status "Installing systemd unit ${SERVICE_NAME}.service..."
 
+	local runtime_unit="docker.service"
+	[[ "${EFFECTIVE_CONTAINER_RUNTIME}" == "podman" ]] && runtime_unit="podman.socket"
+
 	cat >"${unit_file}" <<EOF
 [Unit]
 Description=${APP_NAME}
-After=network-online.target postgresql.service docker.service
+After=network-online.target postgresql.service ${runtime_unit}
 Wants=network-online.target postgresql.service
 
 [Service]
@@ -927,7 +997,11 @@ EOF
 
 	systemctl daemon-reload
 	systemctl enable "${SERVICE_NAME}.service"
-	systemctl start "${SERVICE_NAME}.service"
+	# `restart`, not `start`: a re-run of this installer (e.g. re-syncing an
+	# existing checkout) rebuilds the app on disk but `start` is a no-op on an
+	# already-active unit, leaving the old process serving the new build's
+	# static assets under a stale in-memory manifest.
+	systemctl restart "${SERVICE_NAME}.service"
 
 	# Wait a moment for service to start
 	sleep 2
@@ -1224,6 +1298,9 @@ EOF
 
 	systemctl daemon-reload
 	systemctl enable --now "${DBUS_SERVICE_NAME}.service"
+	# `enable --now` only starts it if not already active -- restart so a
+	# re-run of this installer actually picks up a changed dbus-helper build.
+	systemctl restart "${DBUS_SERVICE_NAME}.service"
 }
 
 print_summary() {
@@ -1309,7 +1386,12 @@ redirect_to_update_if_installed() {
 	echo ""
 
 	resolve_repo_ref
-	local update_url="https://raw.githubusercontent.com/doctor-io/homeio/${REPO_BRANCH}/scripts/update.sh"
+	# Derive the raw.githubusercontent.com path from REPO_URL (which honors
+	# HOMEIO_REPO_URL) instead of hardcoding the upstream repo -- otherwise
+	# installing from a fork always redirects back to upstream's update.sh.
+	local repo_path
+	repo_path="$(echo "${REPO_URL}" | sed -E 's#^https://github\.com/##; s#\.git$##')"
+	local update_url="https://raw.githubusercontent.com/${repo_path}/${REPO_BRANCH}/scripts/update.sh"
 	local tmp_update
 	tmp_update="$(mktemp /tmp/homeio-update-XXXXXX.sh)"
 
@@ -1321,8 +1403,8 @@ redirect_to_update_if_installed() {
 	fi
 
 	chmod +x "${tmp_update}"
-	# Pass REPO_BRANCH so update.sh installs the same release or branch as this installer.
-	HOMEIO_REPO_BRANCH="${REPO_BRANCH}" exec bash "${tmp_update}"
+	# Pass REPO_URL/REPO_BRANCH so update.sh stays on the same fork/branch as this installer.
+	HOMEIO_REPO_URL="${REPO_URL}" HOMEIO_REPO_BRANCH="${REPO_BRANCH}" exec bash "${tmp_update}"
 }
 
 main() {
@@ -1330,11 +1412,12 @@ main() {
 	redirect_to_update_if_installed
 	run_step "Checking apt availability..." ensure_apt
 	run_step "Validating installer configuration..." validate_identifiers
+	resolve_container_runtime
 	run_step "Configuring hostname..." configure_hostname
 	run_step "Installing base packages..." install_packages
 	run_step "Installing extras packages..." install_extras
 	run_step "Ensuring security dependencies..." ensure_security_dependencies
-	run_step "Installing Docker..." install_docker
+	run_step "Installing container runtime..." install_container_runtime
 	run_step "Installing Node.js..." install_node
 	run_step "Installing Go..." install_go
 	run_step "Installing yq (optional)..." install_yq

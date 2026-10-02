@@ -55,4 +55,6 @@ export type UnmanagedContainer = {
   /** What the container is doing, read from state and status line. */
   condition: AppConditionSummary;
   composeProject: string | null;
+  /** Best-guess web UI port, picked from the container's published TCP ports. */
+  webUiPort: number | null;
 };

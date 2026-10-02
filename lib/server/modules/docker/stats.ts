@@ -34,6 +34,13 @@ export type DockerStatsResult = {
   daemonAvailable: boolean;
 };
 
+type DockerContainerPort = {
+  IP?: string;
+  PrivatePort: number;
+  PublicPort?: number;
+  Type: string;
+};
+
 type DockerContainer = {
   Id: string;
   Names: string[];
@@ -41,9 +48,10 @@ type DockerContainer = {
   Status: string;
   Image?: string;
   Labels?: Record<string, string>;
+  Ports?: DockerContainerPort[];
 };
 
-export type { DockerContainer };
+export type { DockerContainer, DockerContainerPort };
 
 type DockerStatsResponse = {
   cpu_stats: {
@@ -80,13 +88,19 @@ type DockerStatsResponse = {
 };
 
 /**
- * Make HTTP request to Docker socket
+ * Make HTTP request to a Docker-compatible socket. Defaults to the
+ * configured DOCKER_SOCKET_PATH, but callers can target a different socket
+ * (e.g. a rootless Podman user's socket) via `socketPath`.
  */
-function dockerRequest<T>(path: string, method = "GET"): Promise<T> {
+function dockerRequest<T>(
+  path: string,
+  method = "GET",
+  socketPath: string = serverEnv.DOCKER_SOCKET_PATH,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        socketPath: serverEnv.DOCKER_SOCKET_PATH,
+        socketPath,
         path,
         method,
         headers: {
@@ -206,26 +220,50 @@ function getBlockStats(stats: DockerStatsResponse): {
   return { read: totalRead, write: totalWrite };
 }
 
+async function listContainersFromSocket(
+  socketPath: string,
+): Promise<DockerContainer[]> {
+  return dockerRequest<DockerContainer[]>("/containers/json?all=true", "GET", socketPath);
+}
+
 /**
- * List all containers (catches errors, returns empty array on failure).
+ * List all containers across the configured Docker/Podman socket(s) (catches
+ * errors per-socket, returns whatever succeeded).
  */
 export async function listContainers(): Promise<DockerContainer[]> {
-  try {
-    const containers = await dockerRequest<DockerContainer[]>(
-      "/containers/json?all=true",
-    );
-    return containers;
-  } catch (error) {
+  const primary = await listContainersFromSocket(serverEnv.DOCKER_SOCKET_PATH).catch(
+    (error) => {
+      logServerAction({
+        level: "error",
+        layer: "service",
+        action: "docker.list-containers",
+        status: "error",
+        message: "Failed to list Docker containers",
+        error,
+      });
+      return [];
+    },
+  );
+
+  if (!serverEnv.PODMAN_ROOTLESS_SOCKET_PATH) {
+    return primary;
+  }
+
+  const rootless = await listContainersFromSocket(
+    serverEnv.PODMAN_ROOTLESS_SOCKET_PATH,
+  ).catch((error) => {
     logServerAction({
       level: "error",
       layer: "service",
       action: "docker.list-containers",
       status: "error",
-      message: "Failed to list Docker containers",
+      message: "Failed to list containers from the rootless Podman socket",
       error,
     });
     return [];
-  }
+  });
+
+  return [...primary, ...rootless];
 }
 
 /**

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { listContainers } from "@/lib/server/modules/docker/stats";
+import { listContainers, type DockerContainerPort } from "@/lib/server/modules/docker/stats";
 import { listInstalledStacksFromDb } from "@/lib/server/modules/apps/stacks-repository";
 import { logServerAction } from "@/lib/server/logging/logger";
 import { homeioComponentOf } from "@/lib/server/modules/integrations/cloudflared-connectors";
@@ -23,6 +23,8 @@ export type UnmanagedContainer = {
   /** What the container is doing, read from state and status line. */
   condition: AppConditionSummary;
   composeProject: string | null;
+  /** Best-guess web UI port, picked from the container's published TCP ports. */
+  webUiPort: number | null;
 };
 
 function toContainerName(names: string[] | undefined, id: string) {
@@ -30,6 +32,25 @@ function toContainerName(names: string[] | undefined, id: string) {
   // Docker prefixes container names with a slash.
   const stripped = first.startsWith("/") ? first.slice(1) : first;
   return stripped.length > 0 ? stripped : id.slice(0, 12);
+}
+
+/**
+ * Homeio doesn't know which published port (if any) serves a web UI for a
+ * container it didn't install itself, so this is a best-effort guess: the
+ * lowest-numbered published TCP port. Wrong for e.g. a container that only
+ * exposes a database port, but there's no better signal available for an
+ * unmanaged container.
+ */
+export function pickWebUiPort(ports: DockerContainerPort[] | undefined): number | null {
+  if (!ports) return null;
+
+  const tcpPublicPorts = ports
+    .filter((port) => port.Type === "tcp" && typeof port.PublicPort === "number")
+    .map((port) => port.PublicPort as number);
+
+  if (tcpPublicPorts.length === 0) return null;
+
+  return Math.min(...tcpPublicPorts);
 }
 
 /**
@@ -75,6 +96,7 @@ export async function listUnmanagedContainers(): Promise<UnmanagedContainer[]> {
         { state: container.State ?? "unknown", ...parseDockerStatusLine(container.Status ?? "") },
       ]),
       composeProject: container.Labels?.[COMPOSE_PROJECT_LABEL] ?? null,
+      webUiPort: pickWebUiPort(container.Ports),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
