@@ -15,6 +15,10 @@ A self-hosted server manager with a desktop-style UI. Alternative to CasaOS, Umb
   </a>
 </p>
 
+<p align="center">
+  <a href="https://www.opensourcealternatives.to"><img src="https://www.opensourcealternatives.to/badge-osa.svg" alt="Listed on Open Source Alternatives"></a>
+</p>
+
 ## Screenshots
 
 | Desktop | App Store |
