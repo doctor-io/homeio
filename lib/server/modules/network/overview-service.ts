@@ -33,6 +33,28 @@ function bytesPerSecondToMbps(value: unknown) {
   return perSecond === null ? null : (perSecond * 8) / 1_000_000;
 }
 
+// Tunnels and VPN interfaces (tailscale0, wg0) report operstate "unknown" in
+// sysfs even while they carry traffic, so an interface that holds an address
+// counts as up; an addressless one has nothing to go on and stays unknown.
+function upState(operstate: unknown, hasUsableAddress: boolean): boolean | null {
+  if (operstate === "up") return true;
+  if (operstate === "down") return false;
+  return hasUsableAddress ? true : null;
+}
+
+// Every IPv6 interface carries a link-local address, so it says nothing about
+// whether the interface is usable.
+const LINK_LOCAL_IPV6 = /^fe80:/i;
+
+// Virtual interfaces have no hardware address; systeminformation fills the
+// field with zeros, which reads as a broken NIC when shown.
+const ZERO_MAC = /^(?:00[:-]){5}00$/;
+
+function macOrNull(value: unknown) {
+  const mac = textOrNull(value);
+  return mac !== null && !ZERO_MAC.test(mac) ? mac : null;
+}
+
 function kindOf(name: string, type: unknown): NetworkInterfaceKind {
   if (VPN_INTERFACE.test(name)) return "vpn";
   if (type === "wireless") return "wireless";
@@ -77,15 +99,18 @@ async function collect(): Promise<NetworkOverview> {
     .filter((iface) => iface.iface && !iface.internal && !PLUMBING_INTERFACE.test(iface.iface))
     .map((iface) => {
       const traffic = statsByName.get(iface.iface);
+      const ip4 = textOrNull(iface.ip4);
+      const ip6 = textOrNull(iface.ip6);
+      const hasUsableAddress = ip4 !== null || (ip6 !== null && !LINK_LOCAL_IPV6.test(ip6));
       return {
         iface: iface.iface,
         kind: kindOf(iface.iface, iface.type),
-        up: iface.operstate === "up" ? true : iface.operstate === "down" ? false : null,
+        up: upState(iface.operstate, hasUsableAddress),
         isDefault: Boolean(iface.default),
-        ip4: textOrNull(iface.ip4),
+        ip4,
         ip4Subnet: textOrNull(iface.ip4subnet),
-        ip6: textOrNull(iface.ip6),
-        mac: textOrNull(iface.mac),
+        ip6,
+        mac: macOrNull(iface.mac),
         speedMbps: typeof iface.speed === "number" && iface.speed > 0 ? iface.speed : null,
         duplex: textOrNull(iface.duplex),
         dhcp: Boolean(iface.dhcp),

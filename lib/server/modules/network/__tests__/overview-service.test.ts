@@ -81,6 +81,41 @@ describe("network overview", () => {
     expect(overview.dnsServers).toEqual(["1.1.1.1", "9.9.9.9"]);
   });
 
+  it("counts a tunnel with an address as up and hides its all-zero hardware address", async () => {
+    siMock.networkInterfaces.mockResolvedValue([
+      iface("eth0", { default: true, ip4: "192.168.1.128" }),
+      // tailscale0: sysfs reports operstate "unknown" and no hardware address.
+      iface("tailscale0", {
+        type: "virtual",
+        operstate: "unknown",
+        ip4: "100.90.80.70",
+        ip4subnet: "255.255.255.255",
+        ip6: "fd7a:115c:a1e0::d130:2449",
+        mac: "00:00:00:00:00:00",
+      }),
+      // A tunnel with only a link-local IPv6 address says nothing about its state.
+      iface("wg0", { type: "virtual", operstate: "unknown", ip6: "fe80::a1" }),
+    ]);
+    siMock.networkStats.mockResolvedValue([]);
+    siMock.networkGatewayDefault.mockResolvedValue("192.168.1.1");
+    readFileMock.mockResolvedValue("nameserver 1.1.1.1\n");
+
+    const overview = await getNetworkOverview();
+
+    expect(overview.interfaces.find((entry) => entry.iface === "tailscale0")).toMatchObject({
+      kind: "vpn",
+      up: true,
+      ip4: "100.90.80.70",
+      ip4Subnet: "255.255.255.255",
+      mac: null,
+    });
+    expect(overview.interfaces.find((entry) => entry.iface === "wg0")).toMatchObject({
+      up: null,
+      mac: null,
+    });
+    expect(overview.interfaces.find((entry) => entry.iface === "eth0")).toMatchObject({ up: true });
+  });
+
   it("falls back to /etc/resolv.conf and reports no gateway as null", async () => {
     siMock.networkInterfaces.mockResolvedValue([iface("en0", { default: true })]);
     siMock.networkStats.mockResolvedValue([]);
