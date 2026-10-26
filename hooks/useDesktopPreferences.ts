@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_DESKTOP_PREFERENCES,
   DESKTOP_LANGUAGE_OPTIONS,
+  DESKTOP_TIME_FORMAT_OPTIONS,
   readDesktopPreferences,
   writeDesktopPreferences,
   type DesktopNotificationPreferences,
+  type DesktopTimeFormat,
 } from "@/lib/desktop/preferences";
 
 export function useDesktopPreferences() {
@@ -33,15 +35,30 @@ export function useDesktopPreferences() {
     [preferences.language],
   );
 
+  const timeFormatLabel = useMemo(
+    () =>
+      DESKTOP_TIME_FORMAT_OPTIONS.find((option) => option.value === preferences.timeFormat)?.label ??
+      DESKTOP_TIME_FORMAT_OPTIONS[0].label,
+    [preferences.timeFormat],
+  );
+
   return {
     preferences,
     isHydrated,
     languageLabel,
     languageOptions: DESKTOP_LANGUAGE_OPTIONS,
+    timeFormatLabel,
+    timeFormatOptions: DESKTOP_TIME_FORMAT_OPTIONS,
     setLanguage(language: (typeof DESKTOP_LANGUAGE_OPTIONS)[number]["code"]) {
       setPreferences((current) => ({
         ...current,
         language,
+      }));
+    },
+    setTimeFormat(timeFormat: DesktopTimeFormat) {
+      setPreferences((current) => ({
+        ...current,
+        timeFormat,
       }));
     },
     setAutoCheckUpdates(autoCheckUpdates: boolean) {

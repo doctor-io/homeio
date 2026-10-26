@@ -230,6 +230,22 @@ describe("StatusBar", () => {
       actionError: null,
     });
     mockUseDesktopPreferences.mockReturnValue({
+      preferences: {
+        language: "en-US",
+        timeFormat: "12h",
+        autoCheckUpdates: true,
+        notifications: {
+          systemAlertsEnabled: true,
+          updateNotificationsEnabled: true,
+          backupReportsEnabled: true,
+          securityEventsEnabled: false,
+          cpuAlertThresholdPercent: 85,
+          memoryAlertThresholdPercent: 85,
+          diskAlertThresholdPercent: 90,
+          temperatureAlertThresholdCelsius: 80,
+        },
+      },
+      isHydrated: true,
       notificationPreferences: {
         systemAlertsEnabled: true,
         updateNotificationsEnabled: true,

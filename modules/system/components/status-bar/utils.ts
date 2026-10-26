@@ -1,17 +1,23 @@
-export function formatTime(date: Date) {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+import {
+  formatClockDate,
+  formatClockTime,
+} from "@/lib/desktop/clock-format";
+import type {
+  DesktopLanguageCode,
+  DesktopTimeFormat,
+} from "@/lib/desktop/preferences";
+
+export type StatusBarClockOptions = {
+  locale: DesktopLanguageCode;
+  timeFormat: DesktopTimeFormat;
+};
+
+export function formatTime(date: Date, options: StatusBarClockOptions) {
+  return formatClockTime(date, options);
 }
 
-export function formatDate(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+export function formatDate(date: Date, locale: DesktopLanguageCode) {
+  return formatClockDate(date, locale);
 }
 
 export function formatTemperature(value: number | null | undefined) {

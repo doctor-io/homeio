@@ -21,9 +21,12 @@ type GeneralSectionProps = {
   capabilities: SettingsBackend["capabilities"]["general"];
   languageValue: string;
   languageOptions: string[];
+  timeFormatValue: string;
+  timeFormatOptions: string[];
   onHostnameChange: (value: string) => void;
   onTimezoneChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
+  onTimeFormatChange: (value: string) => void;
 };
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -89,9 +92,12 @@ export function GeneralSection({
   capabilities,
   languageValue,
   languageOptions,
+  timeFormatValue,
+  timeFormatOptions,
   onHostnameChange,
   onTimezoneChange,
   onLanguageChange,
+  onTimeFormatChange,
 }: GeneralSectionProps) {
   return (
     <div className="flex flex-col gap-1">
@@ -185,6 +191,23 @@ export function GeneralSection({
           >
             {languageOptions.map((lang) => (
               <option key={lang} value={lang}>{lang}</option>
+            ))}
+          </select>
+        </PreferenceRow>
+
+        <PreferenceRow
+          label="Time format"
+          description="Status bar and lock screen clock."
+          disabled={capabilities.language.disabled}
+        >
+          <select
+            value={timeFormatValue}
+            onChange={(e) => onTimeFormatChange(e.target.value)}
+            disabled={capabilities.language.disabled}
+            className="h-8 w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
+          >
+            {timeFormatOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </PreferenceRow>
