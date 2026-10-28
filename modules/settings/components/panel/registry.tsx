@@ -5,6 +5,7 @@ import {
   CalendarClock as CalendarClockRegular,
   Database     as DatabaseRegular,
   HardDrive    as HardDriveRegular,
+  Info         as InfoRegular,
   Paintbrush   as PaintBrushRegular,
   Plug         as PlugRegular,
   Users        as PeopleRegular,
@@ -15,6 +16,7 @@ import {
   Wrench       as WrenchRegular,
 } from "@/components/icons/platform-icons";
 import {
+  AboutSection,
   AdvancedSection,
   AppearanceSection,
   BackupSection,
@@ -58,6 +60,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   // Danger zone
   { id: "power",            label: "Power",            icon: PowerRegular        },
   { id: "advanced",         label: "Advanced",         icon: WrenchRegular       },
+  // Project
+  { id: "about",            label: "About",            icon: InfoRegular         },
 ];
 
 type SettingsRegistryContext = {
@@ -287,6 +291,12 @@ export function buildSettingsSectionDefinitions(
     {
       ...SETTINGS_SECTIONS[13], // Advanced
       render: () => <AdvancedSection />,
+    },
+
+    // ── Project ──────────────────────────────────────────────────────────
+    {
+      ...SETTINGS_SECTIONS[14], // About
+      render: () => <AboutSection version={context.settingsBackend.updates.currentVersion} />,
     },
   ];
 }

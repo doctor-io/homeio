@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Weather without the browser's location (#70).** Settings → General has a **Weather location**: search a city, or take this browser's position once. It is saved on the server, so every device shows the same weather without asking for permission, also over Tailscale or a plain LAN address where browsers refuse geolocation. With no location set, each browser uses its own as before. The weather popover now says why there is no weather: no location yet, or the weather service could not be reached.
 - **24-hour clock (#75, thanks @zahornyak).** Settings → General → **Time format** switches the status bar and lock screen clocks between 12-hour and 24-hour. The default follows the language, and the clocks change at once, without a reload.
 - **Europe/Kyiv time zone (#74, thanks @zahornyak).**
+- **Settings → About.** A new page at the bottom of Settings with the installed version and its release notes, the GitHub stars, the Discord, the number of active Homeio servers from homeio.app/stats, and links to sponsor the project. The stars and the server count are fetched by the browser only while the page is open.
+- **Discord.** Homeio now has a community server: [discord.gg/KFzTbRbex3](https://discord.gg/KFzTbRbex3), for help, app configs and ideas.
 
 ### Fixed
 

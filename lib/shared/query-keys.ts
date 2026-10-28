@@ -52,4 +52,6 @@ export const queryKeys = {
   disks: ["system", "disks"] as const,
   serverInfo: ["system", "info"] as const,
   telemetrySettings: ["settings", "telemetry"] as const,
+  githubStars: ["about", "github-stars"] as const,
+  publicStats: ["about", "public-stats"] as const,
 };
