@@ -9,7 +9,7 @@ export function formatClockTime(
   options: { locale: DesktopLanguageCode; timeFormat: DesktopTimeFormat },
 ) {
   return date.toLocaleTimeString(options.locale, {
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     hour12: hour12FromTimeFormat(options.timeFormat),
   });
