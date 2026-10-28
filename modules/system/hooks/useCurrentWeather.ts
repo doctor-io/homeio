@@ -135,10 +135,10 @@ async function fetchCurrentWeather(
 }
 
 export function useCurrentWeather() {
-  const { location } = useUserLocation();
+  const { location, loading } = useUserLocation();
   const coords = location;
 
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.currentWeather(
       coords?.latitude ?? null,
       coords?.longitude ?? null,
@@ -151,4 +151,7 @@ export function useCurrentWeather() {
     staleTime: 300_000,
     refetchInterval: 600_000,
   });
+
+  // Lets the UI tell "still locating" from "no location at all".
+  return { ...query, hasLocation: Boolean(coords), locationPending: loading };
 }

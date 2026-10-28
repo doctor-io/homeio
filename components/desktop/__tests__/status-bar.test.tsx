@@ -419,6 +419,20 @@ describe("StatusBar", () => {
     expect(screen.getByText("SONY")).toBeTruthy();
   });
 
+  it.each([
+    [{ isError: false, hasLocation: false, locationPending: true }, null],
+    [{ isError: false, hasLocation: false, locationPending: false }, "No weather yet"],
+    [{ isError: true, hasLocation: true, locationPending: false }, "Weather unavailable"],
+  ])("tells why there is no weather (%o)", (state, title) => {
+    mockUseCurrentWeather.mockReturnValue({ data: undefined, ...state });
+    renderStatusBar({ onOpenSettings: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: "Weather" }));
+    for (const text of ["No weather yet", "Weather unavailable"]) {
+      expect(screen.queryByText(text) !== null).toBe(text === title);
+    }
+  });
+
   it("opens a date picker when date is clicked", () => {
     renderStatusBar();
 

@@ -61,7 +61,12 @@ export function StatusBar({
     clearNotifications,
   } = useStatusBarData();
   const { preferences, isHydrated: preferencesHydrated } = useDesktopPreferences();
-  const { data: weather } = useCurrentWeather();
+  const { data: weather, isError: weatherFailed, hasLocation, locationPending } = useCurrentWeather();
+  const weatherProblem = weatherFailed
+    ? "failed"
+    : !hasLocation && !locationPending
+      ? "no-location"
+      : undefined;
   useNetworkEventsSse(true);
   const weatherText = formatTemperature(weather?.current.temperatureC);
 
@@ -135,6 +140,7 @@ export function StatusBar({
               <WeatherPopover
                 weather={weather}
                 onClose={closePopovers}
+                problem={weatherProblem}
                 onSetLocation={onOpenSettings ? () => { closePopovers(); onOpenSettings(); } : undefined}
               />
             )}
