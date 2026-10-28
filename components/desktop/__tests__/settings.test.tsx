@@ -49,6 +49,7 @@ const appearance: AppearanceSettings = {
   dockPosition: "bottom",
   fontSize: "default",
   animationsEnabled: true,
+  weatherLocation: null,
 };
 
 function createBackendMock() {

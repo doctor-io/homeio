@@ -132,6 +132,8 @@ export function buildSettingsSectionDefinitions(
           languageOptions={context.desktopPreferences.languageOptions.map((o) => o.label)}
           onHostnameChange={context.generalController.setHostname}
           onTimezoneChange={context.generalController.setTimezone}
+          weatherLocation={context.appearance.weatherLocation}
+          onWeatherLocationChange={(weatherLocation) => context.onAppearanceChange({ weatherLocation })}
           onLanguageChange={(value) => {
             const next = context.desktopPreferences.languageOptions.find((o) => o.label === value);
             if (!next) return;

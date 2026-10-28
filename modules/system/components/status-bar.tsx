@@ -43,6 +43,7 @@ export function StatusBar({
   onLogout: _onLogout,
   isLogoutPending: _isLogoutPending = false,
   onOpenNotifications,
+  onOpenSettings,
 }: StatusBarProps) {
   const {
     metrics,
@@ -131,7 +132,11 @@ export function StatusBar({
               </span>
             </button>
             {activePopover === "weather" && (
-              <WeatherPopover weather={weather} onClose={closePopovers} />
+              <WeatherPopover
+                weather={weather}
+                onClose={closePopovers}
+                onSetLocation={onOpenSettings ? () => { closePopovers(); onOpenSettings(); } : undefined}
+              />
             )}
           </div>
 

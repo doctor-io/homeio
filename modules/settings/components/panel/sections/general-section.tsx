@@ -10,6 +10,8 @@ import {
   SETTINGS_PANEL_INSET,
 } from "@/modules/settings/components/panel/surface";
 import type { SettingsBackend } from "@/modules/settings/components/panel/types";
+import { WeatherLocationRow } from "@/modules/settings/components/panel/sections/weather-location-row";
+import type { WeatherLocation } from "@/lib/desktop/appearance";
 import { cn } from "@/lib/utils";
 
 type GeneralSectionProps = {
@@ -27,6 +29,8 @@ type GeneralSectionProps = {
   onTimezoneChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
   onTimeFormatChange: (value: string) => void;
+  weatherLocation: WeatherLocation | null;
+  onWeatherLocationChange: (value: WeatherLocation | null) => void;
 };
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -98,6 +102,8 @@ export function GeneralSection({
   onTimezoneChange,
   onLanguageChange,
   onTimeFormatChange,
+  weatherLocation,
+  onWeatherLocationChange,
 }: GeneralSectionProps) {
   return (
     <div className="flex flex-col gap-1">
@@ -177,6 +183,8 @@ export function GeneralSection({
             ))}
           </select>
         </PreferenceRow>
+
+        <WeatherLocationRow value={weatherLocation} onChange={onWeatherLocationChange} />
 
         <PreferenceRow
           label="Language"
