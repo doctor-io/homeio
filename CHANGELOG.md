@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.1] - 2026-10-28
+
+### Added
+
+- **Weather without the browser's location (#70).** Settings → General has a **Weather location**: search a city, or take this browser's position once. It is saved on the server, so every device shows the same weather without asking for permission, also over Tailscale or a plain LAN address where browsers refuse geolocation. With no location set, each browser uses its own as before. The weather popover now says why there is no weather: no location yet, or the weather service could not be reached.
+- **24-hour clock (#75, thanks @zahornyak).** Settings → General → **Time format** switches the status bar and lock screen clocks between 12-hour and 24-hour. The default follows the language, and the clocks change at once, without a reload.
+- **Europe/Kyiv time zone (#74, thanks @zahornyak).**
+
+### Fixed
+
+- **Network readouts (#66, #69, thanks @ikhsanddy).** On a server wired to the network with an idle Wi-Fi radio, the status bar reported `wlan0` as offline with zero rates; it now reports the wired link. VPN tunnels such as `tailscale0` or `wg0` with an address now show as **Up** instead of **Unknown**, without a fake all-zero MAC.
+
+### Security
+
+- **Dependency updates:** `next` 16.4.3 (unauthenticated remote code execution in `use cache`, denial of service with Server Actions; the SVG image-optimizer issue did not apply, Homeio does not use the optimizer), `ip-address`, and in the development tools `vite` 8.3.3 (#72), `esbuild` 0.25 and `vitest` 4.1.12.
+
+### Changed
+
+- **Contributors:** the verify job now runs on pull requests (#68), and `PROJECT_AUDIT.md` is marked as a 1.6.1 snapshot (#67), thanks @ikhsanddy.
+
+---
+
 ## [1.10.3] - 2026-10-14
 
 ### Fixed
