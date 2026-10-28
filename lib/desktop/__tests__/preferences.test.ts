@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DESKTOP_NOTIFICATION_PREFERENCES,
   DESKTOP_PREFERENCES_STORAGE_KEY,
+  defaultTimeFormatForLanguage,
   readDesktopPreferences,
   writeDesktopPreferences,
 } from "@/lib/desktop/preferences";
@@ -25,6 +26,22 @@ describe("desktop preferences", () => {
     );
   });
 
+  it("defaults time format from language when storage is missing timeFormat", () => {
+    const storage = {
+      getItem(key: string) {
+        if (key !== DESKTOP_PREFERENCES_STORAGE_KEY) return null;
+        return JSON.stringify({
+          language: "de-DE",
+          autoCheckUpdates: true,
+        });
+      },
+    } as Storage;
+
+    expect(readDesktopPreferences(storage).timeFormat).toBe(
+      defaultTimeFormatForLanguage("de-DE"),
+    );
+  });
+
   it("writes notification preferences", () => {
     let storedValue = "";
     const storage = {
@@ -38,6 +55,7 @@ describe("desktop preferences", () => {
 
     writeDesktopPreferences(storage, {
       language: "en-US",
+      timeFormat: "24h",
       autoCheckUpdates: true,
       notifications: {
         systemAlertsEnabled: false,

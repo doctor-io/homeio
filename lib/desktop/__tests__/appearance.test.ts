@@ -34,4 +34,20 @@ describe("sanitizeAppearanceSettings", () => {
       }).radius,
     ).toBe(DEFAULT_APPEARANCE_SETTINGS.radius);
   });
+
+  it("keeps a valid weather location and drops invalid ones", () => {
+    expect(
+      sanitizeAppearanceSettings({
+        weatherLocation: { latitude: 36.75, longitude: 3.06, city: " Algiers ", country: "DZ" },
+      }).weatherLocation,
+    ).toEqual({ latitude: 36.75, longitude: 3.06, city: "Algiers", country: "DZ" });
+
+    expect(sanitizeAppearanceSettings({}).weatherLocation).toBeNull();
+    expect(
+      sanitizeAppearanceSettings({ weatherLocation: { latitude: 91, longitude: 0 } }).weatherLocation,
+    ).toBeNull();
+    expect(
+      sanitizeAppearanceSettings({ weatherLocation: { latitude: "36", longitude: 3 } }).weatherLocation,
+    ).toBeNull();
+  });
 });

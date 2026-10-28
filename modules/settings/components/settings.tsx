@@ -28,6 +28,7 @@ const SIDEBAR_GROUPS: { label: string; ids: SettingsSectionId[] }[] = [
   { label: "Automation",     ids: ["scheduled-tasks", "backup"] },
   { label: "Access",         ids: ["users", "security", "notifications"] },
   { label: "Danger Zone",    ids: ["power", "advanced"] },
+  { label: "Project",        ids: ["about"] },
 ];
 
 export function SettingsPanel({

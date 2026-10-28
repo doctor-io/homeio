@@ -230,6 +230,22 @@ describe("StatusBar", () => {
       actionError: null,
     });
     mockUseDesktopPreferences.mockReturnValue({
+      preferences: {
+        language: "en-US",
+        timeFormat: "12h",
+        autoCheckUpdates: true,
+        notifications: {
+          systemAlertsEnabled: true,
+          updateNotificationsEnabled: true,
+          backupReportsEnabled: true,
+          securityEventsEnabled: false,
+          cpuAlertThresholdPercent: 85,
+          memoryAlertThresholdPercent: 85,
+          diskAlertThresholdPercent: 90,
+          temperatureAlertThresholdCelsius: 80,
+        },
+      },
+      isHydrated: true,
       notificationPreferences: {
         systemAlertsEnabled: true,
         updateNotificationsEnabled: true,
@@ -401,6 +417,20 @@ describe("StatusBar", () => {
     expect(screen.getByText("Design / Max")).toBeTruthy();
     expect(screen.getByText("Manufacturer")).toBeTruthy();
     expect(screen.getByText("SONY")).toBeTruthy();
+  });
+
+  it.each([
+    [{ isError: false, hasLocation: false, locationPending: true }, null],
+    [{ isError: false, hasLocation: false, locationPending: false }, "No weather yet"],
+    [{ isError: true, hasLocation: true, locationPending: false }, "Weather unavailable"],
+  ])("tells why there is no weather (%o)", (state, title) => {
+    mockUseCurrentWeather.mockReturnValue({ data: undefined, ...state });
+    renderStatusBar({ onOpenSettings: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: "Weather" }));
+    for (const text of ["No weather yet", "Weather unavailable"]) {
+      expect(screen.queryByText(text) !== null).toBe(text === title);
+    }
   });
 
   it("opens a date picker when date is clicked", () => {

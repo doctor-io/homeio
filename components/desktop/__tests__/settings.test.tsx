@@ -49,6 +49,7 @@ const appearance: AppearanceSettings = {
   dockPosition: "bottom",
   fontSize: "default",
   animationsEnabled: true,
+  weatherLocation: null,
 };
 
 function createBackendMock() {
@@ -315,6 +316,7 @@ describe("SettingsPanel", () => {
     mockUseDesktopPreferences.mockReturnValue({
       preferences: {
         language: "en-US",
+        timeFormat: "12h",
         autoCheckUpdates: true,
         notifications: {
           systemAlertsEnabled: true,
@@ -334,6 +336,12 @@ describe("SettingsPanel", () => {
         { code: "fr-FR", label: "Francais" },
       ],
       setLanguage: vi.fn(),
+      timeFormatLabel: "12-hour (AM/PM)",
+      timeFormatOptions: [
+        { value: "12h", label: "12-hour (AM/PM)" },
+        { value: "24h", label: "24-hour" },
+      ],
+      setTimeFormat: vi.fn(),
       setAutoCheckUpdates: vi.fn(),
       notificationPreferences: {
         systemAlertsEnabled: true,
@@ -431,6 +439,7 @@ describe("SettingsPanel", () => {
     mockUseDesktopPreferences.mockReturnValue({
       preferences: {
         language: "en-US",
+        timeFormat: "12h",
         autoCheckUpdates: true,
         notifications: {
           systemAlertsEnabled: true,
@@ -450,6 +459,12 @@ describe("SettingsPanel", () => {
         { code: "fr-FR", label: "Francais" },
       ],
       setLanguage: vi.fn(),
+      timeFormatLabel: "12-hour (AM/PM)",
+      timeFormatOptions: [
+        { value: "12h", label: "12-hour (AM/PM)" },
+        { value: "24h", label: "24-hour" },
+      ],
+      setTimeFormat: vi.fn(),
       setAutoCheckUpdates,
       notificationPreferences: {
         systemAlertsEnabled: true,
@@ -662,6 +677,7 @@ describe("SettingsPanel", () => {
     mockUseDesktopPreferences.mockReturnValue({
       preferences: {
         language: "en-US",
+        timeFormat: "12h",
         autoCheckUpdates: true,
         notifications: {
           systemAlertsEnabled: true,
@@ -681,6 +697,12 @@ describe("SettingsPanel", () => {
         { code: "fr-FR", label: "Francais" },
       ],
       setLanguage,
+      timeFormatLabel: "12-hour (AM/PM)",
+      timeFormatOptions: [
+        { value: "12h", label: "12-hour (AM/PM)" },
+        { value: "24h", label: "24-hour" },
+      ],
+      setTimeFormat: vi.fn(),
       setAutoCheckUpdates: vi.fn(),
       notificationPreferences: {
         systemAlertsEnabled: true,
@@ -736,6 +758,7 @@ describe("SettingsPanel", () => {
     mockUseDesktopPreferences.mockReturnValue({
       preferences: {
         language: "en-US",
+        timeFormat: "12h",
         autoCheckUpdates: true,
         notifications: {
           systemAlertsEnabled: true,
@@ -755,6 +778,12 @@ describe("SettingsPanel", () => {
         { code: "fr-FR", label: "Francais" },
       ],
       setLanguage: vi.fn(),
+      timeFormatLabel: "12-hour (AM/PM)",
+      timeFormatOptions: [
+        { value: "12h", label: "12-hour (AM/PM)" },
+        { value: "24h", label: "24-hour" },
+      ],
+      setTimeFormat: vi.fn(),
       setAutoCheckUpdates: vi.fn(),
       notificationPreferences: {
         systemAlertsEnabled: true,

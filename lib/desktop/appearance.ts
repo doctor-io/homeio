@@ -21,6 +21,13 @@ export type RadiusPreset = {
   description: string
 }
 
+export type WeatherLocation = {
+  latitude: number
+  longitude: number
+  city?: string
+  country?: string
+}
+
 export type AppearanceSettings = {
   theme: DesktopTheme
   accentColor: string
@@ -31,6 +38,8 @@ export type AppearanceSettings = {
   fontSize: DesktopFontSize
   animationsEnabled: boolean
   dockPosition: DockPosition
+  /** Server-wide weather location; null falls back to the browser's geolocation. */
+  weatherLocation: WeatherLocation | null
 }
 
 export const APPEARANCE_CHANGED_EVENT = "desktop.appearance.changed"
@@ -76,6 +85,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   fontSize: "default",
   animationsEnabled: true,
   dockPosition: "bottom",
+  weatherLocation: null,
 }
 
 const desktopThemes: DesktopTheme[] = ["dark", "light", "system"]
@@ -114,6 +124,26 @@ function sanitizeRadius(value: unknown) {
   )
 }
 
+function sanitizePlaceName(value: unknown) {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim().slice(0, 100)
+  return trimmed || undefined
+}
+
+export function sanitizeWeatherLocation(input: unknown): WeatherLocation | null {
+  if (!input || typeof input !== "object") return null
+  const value = input as Record<string, unknown>
+  const { latitude, longitude } = value
+  if (typeof latitude !== "number" || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null
+  if (typeof longitude !== "number" || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null
+  return {
+    latitude,
+    longitude,
+    city: sanitizePlaceName(value.city),
+    country: sanitizePlaceName(value.country),
+  }
+}
+
 export function sanitizeAppearanceSettings(input: unknown): AppearanceSettings {
   const value = (input ?? {}) as Partial<AppearanceSettings>
   const sanitizedTheme =
@@ -148,6 +178,7 @@ export function sanitizeAppearanceSettings(input: unknown): AppearanceSettings {
     dockPosition: isDockPosition(value.dockPosition)
       ? value.dockPosition
       : DEFAULT_APPEARANCE_SETTINGS.dockPosition,
+    weatherLocation: sanitizeWeatherLocation(value.weatherLocation),
   }
 }
 

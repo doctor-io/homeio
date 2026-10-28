@@ -11,8 +11,16 @@ export const DESKTOP_LANGUAGE_OPTIONS = [
 
 export type DesktopLanguageCode = (typeof DESKTOP_LANGUAGE_OPTIONS)[number]["code"];
 
+export const DESKTOP_TIME_FORMAT_OPTIONS = [
+  { value: "12h", label: "12-hour (AM/PM)" },
+  { value: "24h", label: "24-hour" },
+] as const;
+
+export type DesktopTimeFormat = (typeof DESKTOP_TIME_FORMAT_OPTIONS)[number]["value"];
+
 export type DesktopPreferences = {
   language: DesktopLanguageCode;
+  timeFormat: DesktopTimeFormat;
   autoCheckUpdates: boolean;
   notifications: DesktopNotificationPreferences;
 };
@@ -41,9 +49,18 @@ export const DEFAULT_DESKTOP_NOTIFICATION_PREFERENCES: DesktopNotificationPrefer
 
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences = {
   language: "en-US",
+  timeFormat: "12h",
   autoCheckUpdates: true,
   notifications: DEFAULT_DESKTOP_NOTIFICATION_PREFERENCES,
 };
+
+export function defaultTimeFormatForLanguage(language: DesktopLanguageCode): DesktopTimeFormat {
+  return language === "en-US" ? "12h" : "24h";
+}
+
+export function isDesktopTimeFormat(value: string): value is DesktopTimeFormat {
+  return DESKTOP_TIME_FORMAT_OPTIONS.some((option) => option.value === value);
+}
 
 function parseThreshold(
   value: unknown,
@@ -126,8 +143,14 @@ export function readDesktopPreferences(storage: Storage | undefined) {
       return DEFAULT_DESKTOP_PREFERENCES;
     }
 
+    const timeFormat =
+      parsed.timeFormat && isDesktopTimeFormat(parsed.timeFormat)
+        ? parsed.timeFormat
+        : defaultTimeFormatForLanguage(parsed.language);
+
     return {
       language: parsed.language,
+      timeFormat,
       autoCheckUpdates:
         typeof parsed.autoCheckUpdates === "boolean"
           ? parsed.autoCheckUpdates

@@ -718,6 +718,7 @@ function DesktopShellInner() {
           onLogout={handleLogout}
           isLogoutPending={isLogoutPending}
           onOpenNotifications={() => openWindow("notifications")}
+          onOpenSettings={() => openWindow("settings")}
         />
 
         {/* Main Desktop Area */}

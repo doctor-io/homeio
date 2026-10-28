@@ -28,6 +28,7 @@ export const queryKeys = {
   trashEntries: (filePath: string) => ["files", "trash", "entries", filePath] as const,
   filesSearch: (query: string, basePath: string, includeHidden: boolean) =>
     ["files", "search", query, basePath, includeHidden] as const,
+  weatherLocation: ["weather", "location"] as const,
   currentWeather: (latitude: number | null, longitude: number | null) =>
     ["weather", "current", latitude, longitude] as const,
   dockerInfo: ["docker", "info"] as const,
@@ -51,4 +52,6 @@ export const queryKeys = {
   disks: ["system", "disks"] as const,
   serverInfo: ["system", "info"] as const,
   telemetrySettings: ["settings", "telemetry"] as const,
+  githubStars: ["about", "github-stars"] as const,
+  publicStats: ["about", "public-stats"] as const,
 };

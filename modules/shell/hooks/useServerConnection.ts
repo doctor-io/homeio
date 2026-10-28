@@ -171,7 +171,7 @@ export function useServerConnection(enabled: boolean) {
     return true;
   }, [queryClient, reset, updatePhase]);
 
-  const probe = useCallback(async () => {
+  const probe = useCallback(async function run() {
     if (inFlightRef.current) return;
     clearTimer();
     if (!enabledRef.current || phaseRef.current === "restored") return;
@@ -207,7 +207,7 @@ export function useServerConnection(enabled: boolean) {
 
     const delay =
       now - firstFailureAtRef.current < FAST_RETRY_WINDOW_MS ? FAST_RETRY_MS : SLOW_RETRY_MS;
-    timerRef.current = setTimeout(() => void probe(), delay);
+    timerRef.current = setTimeout(() => void run(), delay);
   }, [clearTimer, queryClient, recover, reset, updatePhase]);
 
   const startProbing = useCallback(() => {
