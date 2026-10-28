@@ -137,6 +137,13 @@ export function buildSettingsSectionDefinitions(
             if (!next) return;
             context.desktopPreferences.setLanguage(next.code);
           }}
+          timeFormatValue={context.desktopPreferences.timeFormatLabel}
+          timeFormatOptions={context.desktopPreferences.timeFormatOptions.map((o) => o.label)}
+          onTimeFormatChange={(value) => {
+            const next = context.desktopPreferences.timeFormatOptions.find((o) => o.label === value);
+            if (!next) return;
+            context.desktopPreferences.setTimeFormat(next.value);
+          }}
         />
       ),
       save: context.generalController.saveState
