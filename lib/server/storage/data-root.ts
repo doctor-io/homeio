@@ -1,6 +1,7 @@
 import "server-only";
 
 import { serverEnv } from "@/lib/server/env";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -22,8 +23,32 @@ function resolveConfiguredPath(inputPath: string) {
     : path.resolve(process.cwd(), inputPath);
 }
 
+/**
+ * The Docker install keeps stacks in their own volume at /stacks, whose parent
+ * is "/": the data root is then the folder holding STORE_APP_DATA_ROOT (the
+ * mounted /DATA), not the filesystem root.
+ */
+function stacksSitAtFilesystemRoot() {
+  return path.dirname(resolveConfiguredPath(serverEnv.STORE_STACKS_ROOT)) === "/";
+}
+
 function resolvePrimaryDataRoot() {
-  return path.dirname(resolveConfiguredPath(serverEnv.STORE_STACKS_ROOT));
+  const stacksParent = path.dirname(resolveConfiguredPath(serverEnv.STORE_STACKS_ROOT));
+  if (stacksParent !== "/") return stacksParent;
+  const appDataParent = path.dirname(resolveConfiguredPath(serverEnv.STORE_APP_DATA_ROOT));
+  return appDataParent === "/" ? stacksParent : appDataParent;
+}
+
+/**
+ * Where an installed app keeps its data. A Docker install up to 1.11.1 fell
+ * back to DATA under the working directory (/app/DATA) for every app; an app
+ * installed then has no folder in the mounted data root, and keeps its data
+ * where Docker has it.
+ */
+export function resolveInstalledAppDataRoot(appId: string) {
+  const current = resolveStoreAppDataRoot();
+  if (!stacksSitAtFilesystemRoot() || existsSync(path.join(current, appId))) return current;
+  return path.resolve(process.cwd(), "DATA", "AppData");
 }
 
 export function resolveStoreStacksRoot() {
@@ -77,6 +102,8 @@ export async function ensureDataRootDirectories() {
   let dataRoot = primaryDataRoot;
 
   try {
+    // Running as root, mkdir would happily fill "/" itself.
+    if (primaryDataRoot === "/") throw new Error("the filesystem root is not a data root");
     await Promise.all(
       DATA_SUBDIRECTORIES.map((name) =>
         mkdir(path.join(primaryDataRoot, name), { recursive: true }),

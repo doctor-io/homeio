@@ -30,39 +30,36 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # docker-cli / docker-cli-compose: the app shells out to `docker compose` to
-# install and run every app. su-exec: the entrypoint starts as root to line the
-# app user up with the Docker socket group, then drops back down. lsblk: the
-# Monitor's Disks tab lists the host's disks with it (read-only in Docker).
-RUN apk add --no-cache git unzip docker-cli docker-cli-compose su-exec lsblk && \
-    addgroup --system --gid 1001 homeio && \
-    adduser --system --uid 1001 homeio && \
-    mkdir -p /DATA && \
-    chown homeio:homeio /app /DATA
+# install and run every app. lsblk: the Monitor's Disks tab lists the host's
+# disks with it (read-only in Docker).
+RUN apk add --no-cache git unzip docker-cli docker-cli-compose lsblk && \
+    mkdir -p /DATA
 
 # Next.js standalone output
-COPY --from=builder --chown=homeio:homeio /app/.next/standalone ./
-COPY --from=builder --chown=homeio:homeio /app/.next/static ./.next/static
-COPY --from=builder --chown=homeio:homeio /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 # Server-side compiled output
-COPY --from=builder --chown=homeio:homeio /app/dist-server ./dist-server
+COPY --from=builder /app/dist-server ./dist-server
 
 # dbus-helper sidecar
-COPY --from=builder --chown=homeio:homeio /app/services/dbus-helper ./services/dbus-helper
+COPY --from=builder /app/services/dbus-helper ./services/dbus-helper
 
 # node_modules needed for drizzle-kit push at runtime (migrations)
-COPY --from=deps --chown=homeio:homeio /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 
 # Drizzle config + schema for migrations
-COPY --from=builder --chown=homeio:homeio /app/drizzle.config.ts ./drizzle.config.ts
-COPY --from=builder --chown=homeio:homeio /app/lib/server/db/schema.ts ./lib/server/db/schema.ts
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/lib/server/db/schema.ts ./lib/server/db/schema.ts
 
 # Entrypoint
-COPY --chown=homeio:homeio docker-entrypoint.sh ./docker-entrypoint.sh
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 
-# Deliberately root: the entrypoint needs it to join the socket's group, and it
-# drops to the homeio user before starting the app.
+# Deliberately root, as the systemd unit of a bare-metal install: Homeio hands
+# each app's data folder to the user that app runs as (chown), which only root
+# may do. A process holding the Docker socket is root on the host anyway.
 
 EXPOSE 3000
 
