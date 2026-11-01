@@ -998,6 +998,8 @@ export async function materializeInlineStackFiles(input: {
   env: Record<string, string>;
   webUiPort: number | null;
   storageMappingStrategy?: ComposeStorageMappingStrategy;
+  /** The app's own data folder; the default one when not given. */
+  appDataRoot?: string;
 }) {
   let composeContent = input.composeContent;
   if (input.webUiPort !== null) {
@@ -1006,7 +1008,7 @@ export async function materializeInlineStackFiles(input: {
 
   await ensureDataRootDirectories();
   const stacksRoot = resolveStoreStacksRoot();
-  const appDataRoot = resolveStoreAppDataRoot();
+  const appDataRoot = input.appDataRoot ?? resolveStoreAppDataRoot();
   const normalized = normalizeComposeStorageBindings(composeContent, stacksRoot, appDataRoot, {
     appId: input.appId,
     strategy: input.storageMappingStrategy,

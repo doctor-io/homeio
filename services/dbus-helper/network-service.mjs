@@ -199,12 +199,13 @@ function createNetworkService({ log }) {
 
   async function getNetworkStatus() {
     const wifiDevices = await getWifiDevices();
+    // Only an activated Wi-Fi device is a connection. Falling back to any
+    // Wi-Fi device reported a radio that is up but not associated as if it
+    // were the live connection, which hid the Ethernet link that actually
+    // carries the traffic and zeroed the rates the desktop shows (#66).
     const connectedWifi =
-      wifiDevices.find((device) => device.state === DEVICE_STATE_ACTIVATED) ??
-      wifiDevices[0] ??
-      null;
+      wifiDevices.find((device) => device.state === DEVICE_STATE_ACTIVATED) ?? null;
 
-    // Wi-Fi device present — report its status
     if (connectedWifi) {
       const activeAccessPointPath = await getProperty(
         connectedWifi.props,

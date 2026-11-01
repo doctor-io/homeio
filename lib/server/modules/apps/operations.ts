@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveInstalledAppDataRoot } from "@/lib/server/storage/data-root";
 import {
   cleanupComposeDataOnUninstall,
   getComposeRuntimeInfo,
@@ -611,6 +612,8 @@ async function runInstallOrRedeployOperation(
     env: effectiveEnv,
     webUiPort: requestedPort,
     storageMappingStrategy,
+    // An installed app stays where its data already is.
+    appDataRoot: isFreshInstall ? undefined : resolveInstalledAppDataRoot(params.appId),
   });
 
   await patchOperationAndEmit({

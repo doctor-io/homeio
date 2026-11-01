@@ -46,4 +46,35 @@ describe("data-root storage resolution", () => {
       path.join(process.cwd(), "DATA", "Apps"),
     );
   });
+
+  it("uses the mounted /DATA in the Docker layout, where stacks sit at /stacks", async () => {
+    vi.resetModules();
+    const mkdir = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("node:fs/promises", () => ({ mkdir }));
+    vi.doMock("node:fs", () => ({ existsSync: (target: string) => target === "/DATA/AppData/jellyfin" }));
+    serverEnvMock.STORE_STACKS_ROOT = "/stacks";
+    try {
+      const dataRootModule = await import("@/lib/server/storage/data-root");
+      await dataRootModule.ensureDataRootDirectories();
+
+      expect(dataRootModule.resolveDataRootDirectory()).toBe("/DATA");
+      expect(dataRootModule.resolveStoreStacksRoot()).toBe("/stacks");
+      expect(dataRootModule.resolveStoreAppDataRoot()).toBe("/DATA/AppData");
+      expect(mkdir).not.toHaveBeenCalledWith("/AppData", expect.anything());
+      // Installed since the fix: its folder is in /DATA. Installed by 1.11.1: it stays under /app/DATA.
+      expect(dataRootModule.resolveInstalledAppDataRoot("jellyfin")).toBe("/DATA/AppData");
+      expect(dataRootModule.resolveInstalledAppDataRoot("plex")).toBe(path.resolve(process.cwd(), "DATA", "AppData"));
+    } finally {
+      serverEnvMock.STORE_STACKS_ROOT = "/var/lib/home-server/stacks";
+      vi.doUnmock("node:fs");
+    }
+  });
+
+  it("keeps installed apps in the configured folder on a bare-metal install", async () => {
+    vi.resetModules();
+    vi.doMock("node:fs", () => ({ existsSync: () => false }));
+    const dataRootModule = await import("@/lib/server/storage/data-root");
+    expect(dataRootModule.resolveInstalledAppDataRoot("plex")).toBe("/DATA/AppData");
+    vi.doUnmock("node:fs");
+  });
 });

@@ -6,6 +6,8 @@ import {
   resetUserLocationReverseGeocodeStateForTests,
   useUserLocation,
 } from "@/modules/system/hooks/useUserLocation";
+import { queryKeys } from "@/lib/shared/query-keys";
+import { createTestQueryClient, createWrapper } from "@/test/query-client-wrapper";
 
 const USER_LOCATION_STORAGE_KEY = "weather.user-location.v1";
 
@@ -42,6 +44,12 @@ function mockPermissions(state: PermissionState = "prompt") {
   return { permission, query: permissions.query };
 }
 
+function renderUserLocation(serverLocation: unknown = null) {
+  const queryClient = createTestQueryClient();
+  queryClient.setQueryData(queryKeys.weatherLocation, serverLocation);
+  return renderHook(() => useUserLocation(), { wrapper: createWrapper(queryClient) });
+}
+
 describe("useUserLocation", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -60,7 +68,7 @@ describe("useUserLocation", () => {
     );
     const getCurrentPosition = mockGeolocation(() => {});
 
-    const { result } = renderHook(() => useUserLocation());
+    const { result } = renderUserLocation();
 
     await waitFor(() => {
       expect(result.current.location).toEqual({
@@ -98,7 +106,7 @@ describe("useUserLocation", () => {
       } as GeolocationPosition);
     });
 
-    const { result } = renderHook(() => useUserLocation());
+    const { result } = renderUserLocation();
 
     await waitFor(() => {
       expect(result.current.location).toEqual({
@@ -128,7 +136,7 @@ describe("useUserLocation", () => {
     mockGeolocation(() => {});
     const { permission } = mockPermissions("prompt");
 
-    const { result } = renderHook(() => useUserLocation());
+    const { result } = renderUserLocation();
 
     await waitFor(() => {
       expect(result.current.permissionStatus).toBe("prompt");
@@ -150,7 +158,7 @@ describe("useUserLocation", () => {
       value: undefined,
     });
 
-    const { result } = renderHook(() => useUserLocation());
+    const { result } = renderUserLocation();
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -178,7 +186,7 @@ describe("useUserLocation", () => {
       } as GeolocationPosition);
     });
 
-    const { result } = renderHook(() => useUserLocation());
+    const { result } = renderUserLocation();
 
     await waitFor(() => {
       expect(result.current.location).toEqual({
@@ -200,5 +208,18 @@ describe("useUserLocation", () => {
     });
 
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the server location without asking the browser", async () => {
+    const getCurrentPosition = mockGeolocation(() => {});
+    const serverLocation = { latitude: 36.75, longitude: 3.06, city: "Algiers", country: "DZ" };
+
+    const { result } = renderUserLocation(serverLocation);
+
+    await waitFor(() => {
+      expect(result.current.location).toEqual(serverLocation);
+    });
+    expect(result.current.loading).toBe(false);
+    expect(getCurrentPosition).not.toHaveBeenCalled();
   });
 });

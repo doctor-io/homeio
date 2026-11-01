@@ -3,11 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_DESKTOP_PREFERENCES,
+  DESKTOP_PREFERENCES_STORAGE_KEY,
   DESKTOP_LANGUAGE_OPTIONS,
+  DESKTOP_TIME_FORMAT_OPTIONS,
   readDesktopPreferences,
   writeDesktopPreferences,
   type DesktopNotificationPreferences,
+  type DesktopTimeFormat,
 } from "@/lib/desktop/preferences";
+
+const DESKTOP_PREFERENCES_CHANGED_EVENT = "homeio:desktop-preferences";
 
 export function useDesktopPreferences() {
   const [preferences, setPreferences] = useState(DEFAULT_DESKTOP_PREFERENCES);
@@ -20,10 +25,29 @@ export function useDesktopPreferences() {
     setIsHydrated(true);
   }, []);
 
+  // Each caller holds its own copy, so a change made in Settings has to reach
+  // the status bar and lock screen clocks without a reload.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const sync = () => setPreferences(readDesktopPreferences(window.localStorage));
+    window.addEventListener(DESKTOP_PREFERENCES_CHANGED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(DESKTOP_PREFERENCES_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isHydrated || typeof window === "undefined") return;
 
+    // Skip unchanged writes, or every synced copy would announce itself again.
+    if (window.localStorage.getItem(DESKTOP_PREFERENCES_STORAGE_KEY) === JSON.stringify(preferences)) {
+      return;
+    }
     writeDesktopPreferences(window.localStorage, preferences);
+    window.dispatchEvent(new Event(DESKTOP_PREFERENCES_CHANGED_EVENT));
   }, [isHydrated, preferences]);
 
   const languageLabel = useMemo(
@@ -33,15 +57,30 @@ export function useDesktopPreferences() {
     [preferences.language],
   );
 
+  const timeFormatLabel = useMemo(
+    () =>
+      DESKTOP_TIME_FORMAT_OPTIONS.find((option) => option.value === preferences.timeFormat)?.label ??
+      DESKTOP_TIME_FORMAT_OPTIONS[0].label,
+    [preferences.timeFormat],
+  );
+
   return {
     preferences,
     isHydrated,
     languageLabel,
     languageOptions: DESKTOP_LANGUAGE_OPTIONS,
+    timeFormatLabel,
+    timeFormatOptions: DESKTOP_TIME_FORMAT_OPTIONS,
     setLanguage(language: (typeof DESKTOP_LANGUAGE_OPTIONS)[number]["code"]) {
       setPreferences((current) => ({
         ...current,
         language,
+      }));
+    },
+    setTimeFormat(timeFormat: DesktopTimeFormat) {
+      setPreferences((current) => ({
+        ...current,
+        timeFormat,
       }));
     },
     setAutoCheckUpdates(autoCheckUpdates: boolean) {

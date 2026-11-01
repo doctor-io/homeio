@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/shared/query-keys"
 import {
   type AppearanceSettings,
   ACCENT_COLORS,
@@ -87,6 +89,7 @@ export function useDesktopAppearance() {
   const [loaded, setLoaded] = useState(false)
   const [wallpaperAccentColor, setWallpaperAccentColor] = useState<string | null>(null)
   const extractingRef = useRef<string | null>(null)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     fetchAppearance().then((saved) => {
@@ -112,8 +115,9 @@ export function useDesktopAppearance() {
 
   useEffect(() => {
     if (!loaded) return
+    queryClient.setQueryData(queryKeys.weatherLocation, appearance.weatherLocation)
     saveAppearance(appearance);
-  }, [appearance, loaded])
+  }, [appearance, loaded, queryClient])
 
   useEffect(() => {
     if (appearance.theme !== "system") return
