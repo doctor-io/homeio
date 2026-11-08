@@ -207,15 +207,12 @@ To opt out, turn off **Settings → Advanced → Usage Stats**, or set `HOMEIO_T
 
 ## Roadmap
 
-See [ROADMAP.md](./ROADMAP.md); the current release line is 1.10. Recent releases are in [CHANGELOG.md](./CHANGELOG.md).
+See [ROADMAP.md](./ROADMAP.md); the current release line is 1.11. Recent releases are in [CHANGELOG.md](./CHANGELOG.md).
 
-**Planned next:**
-- Metrics history: persist and graph system and container metrics over 1 h / 24 h / 7 d / 30 d
-- SMART disk health: drive status, temperature and pre-failure alerts via `smartctl`
-- Hardware sensors: CPU die temperature, NVMe temperature and fan RPM
-- Docker image manager: browse, pull, inspect and remove images without compose files
-- Webhooks: outbound HTTP notifications to Home Assistant, n8n and other services
-- File manager: zip/unzip, bulk rename, batch delete
+**In progress, Homeio 2.0:**
+- A new desktop: a full redesign of the interface
+- MCP server: let Claude, ChatGPT, Cursor or any MCP client manage your apps and your server
+- Android app: pair with your server and keep an eye on it from your phone
 
 ---
 

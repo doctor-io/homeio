@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.11.1] - 2026-10-28
+## [1.11.2] - 2026-11-08
 
 ### Added
 
@@ -18,11 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Docker install: apps install again, and their data goes to `/DATA`.** Installing an app whose folder must belong to its own user (Uptime Kuma, Jellyfin, n8n, Grafana and the linuxserver images) stopped with `EPERM: operation not permitted, chown`. Homeio now runs as root inside its container, like the systemd service of a script install, and uses the mounted `/DATA` for app data instead of `/app/DATA` inside the container. Apps installed before keep their data where it already is.
 - **Network readouts (#66, #69, thanks @ikhsanddy).** On a server wired to the network with an idle Wi-Fi radio, the status bar reported `wlan0` as offline with zero rates; it now reports the wired link. VPN tunnels such as `tailscale0` or `wg0` with an address now show as **Up** instead of **Unknown**, without a fake all-zero MAC.
 
 ### Security
 
-- **Dependency updates:** `next` 16.4.3 (unauthenticated remote code execution in `use cache`, denial of service with Server Actions; the SVG image-optimizer issue did not apply, Homeio does not use the optimizer), `ip-address`, and in the development tools `vite` 8.3.3 (#72), `esbuild` 0.25 and `vitest` 4.1.12.
+- **Dependency updates:** `next` 16.4.3 (unauthenticated remote code execution in `use cache`, denial of service with Server Actions; the SVG image-optimizer issue did not apply, Homeio does not use the optimizer), `ip-address`, and in the development tools `vite` 8.3.5 (#72), `postcss` 8.5.32 (#78), `esbuild` 0.25 and `vitest` 4.1.12.
 
 ### Changed
 
