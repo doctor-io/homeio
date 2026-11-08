@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { sanitizeWeatherLocation } from "@/lib/desktop/appearance";
+import { queryKeys } from "@/lib/shared/query-keys";
 
 const USER_LOCATION_STORAGE_KEY = "weather.user-location.v1";
 const USER_LOCATION_REVERSE_CACHE_STORAGE_KEY = "weather.user-location.reverse.v1";
@@ -171,7 +174,7 @@ function toStoredLocation(value: string | null) {
   }
 }
 
-async function resolveCityAndCountry(location: {
+export async function resolveCityAndCountry(location: {
   latitude: number;
   longitude: number;
 }) {
@@ -231,7 +234,23 @@ export function resetUserLocationReverseGeocodeStateForTests() {
   reverseLookupInFlight.clear();
 }
 
+async function fetchServerWeatherLocation(): Promise<UserLocation | null> {
+  const res = await fetch("/api/v1/settings/appearance", { cache: "no-store" });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { data?: { weatherLocation?: unknown } };
+  return sanitizeWeatherLocation(json.data?.weatherLocation);
+}
+
 export function useUserLocation(): UseUserLocationReturn {
+  // The location set in Settings wins: it needs no browser permission or HTTPS.
+  const serverLocationQuery = useQuery({
+    queryKey: queryKeys.weatherLocation,
+    queryFn: fetchServerWeatherLocation,
+    staleTime: Infinity,
+  });
+  const serverLocation = serverLocationQuery.data ?? null;
+  const serverLocationPending = serverLocationQuery.isPending;
+
   const [location, setLocation] = useState<UserLocation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -314,6 +333,8 @@ export function useUserLocation(): UseUserLocationReturn {
   }, []);
 
   useEffect(() => {
+    if (serverLocationPending || serverLocation) return;
+
     let savedLocation: UserLocation | null = null;
     try {
       savedLocation = toStoredLocation(
@@ -331,7 +352,7 @@ export function useUserLocation(): UseUserLocationReturn {
     }
 
     requestLocationFromBrowser();
-  }, [requestLocationFromBrowser]);
+  }, [requestLocationFromBrowser, serverLocationPending, serverLocation]);
 
   const setManualLocation = useCallback(
     (nextLocation: UserLocation) => {
@@ -344,9 +365,9 @@ export function useUserLocation(): UseUserLocationReturn {
   );
 
   return {
-    location,
-    loading,
-    error,
+    location: serverLocation ?? location,
+    loading: serverLocationPending || (!serverLocation && loading),
+    error: serverLocation ? null : error,
     permissionStatus,
     requestLocation: () => requestLocationFromBrowser(),
     setManualLocation,

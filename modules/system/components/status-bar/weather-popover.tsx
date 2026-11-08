@@ -17,9 +17,40 @@ import type { WeatherSnapshot } from "@/lib/shared/contracts/weather";
 type WeatherPopoverProps = {
   weather: WeatherSnapshot | undefined;
   onClose: () => void;
+  /** Why there is no weather; while it is still loading, leave it unset. */
+  problem?: "no-location" | "failed";
+  onSetLocation?: () => void;
 };
 
-export function WeatherPopover({ weather, onClose }: WeatherPopoverProps) {
+export function WeatherPopover({ weather, onClose, problem, onSetLocation }: WeatherPopoverProps) {
+  if (!weather && problem && onSetLocation) {
+    return (
+      <PopoverShell onClose={onClose} className="w-72">
+        <div className="flex flex-col items-start gap-3 p-4">
+          <CloudSun className="size-8 text-status-amber" />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {problem === "failed" ? "Weather unavailable" : "No weather yet"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {problem === "failed"
+                ? "This browser could not reach the weather service. Check its internet connection, or pick another location."
+                : "Choose a city in Settings. It works on every device, without asking the browser for its location."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSetLocation}
+            className="h-8 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Set a location
+          </button>
+        </div>
+      </PopoverShell>
+    );
+  }
+
+
   const mainTemperature = formatTemperature(weather?.current.temperatureC);
   const feelsLike = formatTemperature(weather?.current.feelsLikeC);
   const hasMainTemperature = typeof weather?.current.temperatureC === "number";

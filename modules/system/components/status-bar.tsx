@@ -23,6 +23,7 @@ import {
 import { WifiPopover } from "@/modules/system/components/status-bar/wifi-popover";
 import { useCurrentWeather } from "@/modules/system/hooks/useCurrentWeather";
 import { useNetworkEventsSse } from "@/modules/system/hooks/useNetworkEventsSse";
+import { useDesktopPreferences } from "@/hooks/useDesktopPreferences";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
@@ -42,6 +43,7 @@ export function StatusBar({
   onLogout: _onLogout,
   isLogoutPending: _isLogoutPending = false,
   onOpenNotifications,
+  onOpenSettings,
 }: StatusBarProps) {
   const {
     metrics,
@@ -58,7 +60,13 @@ export function StatusBar({
     markAllRead,
     clearNotifications,
   } = useStatusBarData();
-  const { data: weather } = useCurrentWeather();
+  const { preferences, isHydrated: preferencesHydrated } = useDesktopPreferences();
+  const { data: weather, isError: weatherFailed, hasLocation, locationPending } = useCurrentWeather();
+  const weatherProblem = weatherFailed
+    ? "failed"
+    : !hasLocation && !locationPending
+      ? "no-location"
+      : undefined;
   useNetworkEventsSse(true);
   const weatherText = formatTemperature(weather?.current.temperatureC);
 
@@ -129,7 +137,12 @@ export function StatusBar({
               </span>
             </button>
             {activePopover === "weather" && (
-              <WeatherPopover weather={weather} onClose={closePopovers} />
+              <WeatherPopover
+                weather={weather}
+                onClose={closePopovers}
+                problem={weatherProblem}
+                onSetLocation={onOpenSettings ? () => { closePopovers(); onOpenSettings(); } : undefined}
+              />
             )}
           </div>
 
@@ -251,10 +264,15 @@ export function StatusBar({
               aria-label="Open date picker"
             >
               <span className="hidden xl:text-xs xl:leading-tight xl:text-muted-foreground xl:block">
-                {now ? formatDate(now) : "---"}
+                {now && preferencesHydrated ? formatDate(now, preferences.language) : "---"}
               </span>
               <span className="text-xs font-medium text-foreground leading-tight">
-                {now ? formatTime(now) : "--:--"}
+                {now && preferencesHydrated
+                  ? formatTime(now, {
+                      locale: preferences.language,
+                      timeFormat: preferences.timeFormat,
+                    })
+                  : "--:--"}
               </span>
             </button>
             {activePopover === "date" && (

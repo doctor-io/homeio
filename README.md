@@ -13,6 +13,7 @@
   <a href="https://github.com/doctor-io/homeio/releases"><img src="https://img.shields.io/github/v/release/doctor-io/homeio?style=flat-square&color=f97316" alt="Latest release" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="License: AGPL-3.0" /></a>
   <a href="https://github.com/doctor-io/homeio/pkgs/container/homeio"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ed?style=flat-square&logo=docker&logoColor=white" alt="Docker image" /></a>
+  <a href="https://discord.gg/KFzTbRbex3"><img src="https://img.shields.io/badge/discord-join-5865f2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
 <p align="center">
@@ -227,6 +228,7 @@ Homeio is open source and built for the homelab and self-hosting community. If y
   <a href="https://buymeacoffee.com/doctor.io"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-doctor.io-ffdd00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee" /></a>
 </p>
 
+- Join the [Discord](https://discord.gg/KFzTbRbex3) for help, app configs and ideas
 - Contribute code or ideas, see [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Star the repo and share Homeio with the homelab community
 

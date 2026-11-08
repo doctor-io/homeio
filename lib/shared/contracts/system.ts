@@ -113,6 +113,7 @@ export const SYSTEM_TIMEZONE_OPTIONS = [
   "Europe/London",
   "Europe/Paris",
   "Europe/Berlin",
+  "Europe/Kyiv",
   "Europe/Madrid",
   "Europe/Rome",
   "Asia/Dubai",
