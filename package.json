@@ -92,14 +92,14 @@
     "recharts": "2.15.0",
     "server-only": "file:packages/server-only",
     "sonner": "^1.7.1",
-    "systeminformation": "^5.33.13",
+    "systeminformation": "^5.33.16",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
     "ws": "^8.22.0",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",
     "xterm-addon-web-links": "^0.9.0",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
