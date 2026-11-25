@@ -4,7 +4,7 @@ import type * as FileSystem from "node:fs";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { NextRequest } from "next/server";
 import type { Pool } from "pg";
-import { inc } from "semver";
+import { coerce, gt, inc } from "semver";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { version as installedVersion } from "../../package.json";
 
@@ -55,26 +55,28 @@ afterAll(async () => {
 });
 
 it("persists Beta and schedules exactly the advertised GitHub pre-release", async () => {
-  const betaSeries = inc(installedVersion, "major");
-  if (!betaSeries) throw new Error("The package version must use SemVer.");
+  const stableVersion = coerce(installedVersion)?.version;
+  const betaSeries = stableVersion && inc(stableVersion, "major");
+  if (!stableVersion || !betaSeries) throw new Error("The package version must use SemVer.");
   const beta = `${betaSeries}-beta.10`;
   const olderBeta = `${betaSeries}-beta.2`;
-  const stableTag = `v${installedVersion}`;
+  const stableTag = `v${stableVersion}`;
   let latestStableTag = stableTag;
 
   const github = "https://api.github.com/repos/doctor-io/homeio/releases";
-  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+  const betaReleaseUrl = `${github}?per_page=100&page=1`;
+  const betaReleases = () => Response.json([
+    { tag_name: `v${olderBeta}`, prerelease: true, draft: false },
+    { tag_name: `v${betaSeries}-beta.20`, prerelease: true, draft: true },
+    { tag_name: stableTag, prerelease: false, draft: false },
+    { tag_name: `v${beta}`, prerelease: true, draft: false },
+  ]);
+  const fetchMock = vi.fn(async (url: string) => {
     if (url === `${github}/latest`) return Response.json({ tag_name: latestStableTag });
-    if (url === `${github}?per_page=100&page=1`) {
-      return Response.json([
-        { tag_name: `v${olderBeta}`, prerelease: true, draft: false },
-        { tag_name: `v${betaSeries}-beta.20`, prerelease: true, draft: true },
-        { tag_name: stableTag, prerelease: false, draft: false },
-        { tag_name: `v${beta}`, prerelease: true, draft: false },
-      ]);
-    }
+    if (url === betaReleaseUrl) return betaReleases();
     throw new Error(`Unexpected network request: ${url}`);
-  }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
   execFile.mockImplementation((
     command: string,
     _args: string[],
@@ -115,7 +117,11 @@ it("persists Beta and schedules exactly the advertised GitHub pre-release", asyn
     data: { channel: "stable", disabledReason: null },
   });
   expect(await (await status.GET(request())).json()).toMatchObject({
-    data: { currentVersion: installedVersion, latestVersion: installedVersion, updateAvailable: false },
+    data: {
+      currentVersion: installedVersion,
+      latestVersion: stableVersion,
+      updateAvailable: gt(stableVersion, installedVersion),
+    },
   });
 
   expect((await channel.PUT(request("/channel", "PUT", { channel: "beta" }))).status).toBe(200);
@@ -133,9 +139,29 @@ it("persists Beta and schedules exactly the advertised GitHub pre-release", asyn
 
   expect((await apply.POST(request(`/apply?version=${olderBeta}`, "POST"))).status).toBe(409);
   expect((await apply.POST(request(`/apply?version=${beta}`, "POST"))).status).toBe(202);
+
+  const lookupStarted = Promise.withResolvers<void>();
+  const pendingLookup = Promise.withResolvers<Response>();
+  fetchMock.mockImplementationOnce(async (url) => {
+    expect(url).toBe(betaReleaseUrl);
+    lookupStarted.resolve();
+    return pendingLookup.promise;
+  });
+  const pendingApply = apply.POST(request(`/apply?version=${beta}`, "POST"));
+  await Promise.race([lookupStarted.promise, pendingApply.then(() => {
+    throw new Error("The update request completed before querying GitHub for Beta releases.");
+  })]);
   latestStableTag = "v0.0.0";
   resetUpdateStatusCacheForTests();
-  expect((await channel.PUT(request("/channel", "PUT", { channel: "stable" }))).status).toBe(200);
+  try {
+    expect((await channel.PUT(request("/channel", "PUT", { channel: "stable" }))).status).toBe(200);
+  } finally {
+    pendingLookup.resolve(betaReleases());
+  }
+  const staleApply = await pendingApply;
+  expect(staleApply.status).toBe(409);
+  expect(await staleApply.json()).toMatchObject({ error: expect.stringContaining("channel has changed") });
+
   expect((await apply.POST(request(`/apply?version=${beta}`, "POST"))).status).toBe(409);
   expect(await (await status.GET(request())).json()).toMatchObject({
     data: { latestVersion: "0.0.0", updateAvailable: false },

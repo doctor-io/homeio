@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { compare, prerelease, valid } from "semver";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
-import { readUpdateChannel, writeUpdateChannel } from "@/lib/server/modules/system/update-channel-repository";
+import { readUpdateChannel, withLockedUpdateChannel, writeUpdateChannel } from "@/lib/server/modules/system/update-channel-repository";
 import type {
   SystemUpdateApplyAcceptedResponse,
   SystemUpdateChannel,
@@ -345,10 +345,18 @@ export async function scheduleSystemUpdate(expectedVersion?: string): Promise<Sy
   }
 
   const branch = configuredRepoBranch();
-  let targetRef = branch;
-  if (!branch) {
-    const { channel } = await getSystemUpdateChannel();
-    targetRef = await fetchReleaseTag(channel);
+  if (branch) return launchSystemUpdate(updateScriptPath, branch);
+
+  const { channel } = await getSystemUpdateChannel();
+  const targetRef = await fetchReleaseTag(channel);
+  const currentVersion = await readCurrentVersion();
+
+  // A settings save must wait until systemd accepts this release, or win the
+  // lock first and cause the stale request to fail without starting an update.
+  return withLockedUpdateChannel(async (currentChannel) => {
+    if (currentChannel !== channel) {
+      throw new SystemUpdateConflictError("The update channel has changed. Check for updates again.");
+    }
     if (!targetRef) {
       throw new Error("There is no published Homeio release to update to yet.");
     }
@@ -356,11 +364,14 @@ export async function scheduleSystemUpdate(expectedVersion?: string): Promise<Sy
     if (expectedVersion !== undefined && targetVersion !== expectedVersion) {
       throw new SystemUpdateConflictError("The available version has changed. Check for updates again.");
     }
-    if (compareVersions(targetVersion, await readCurrentVersion()) <= 0) {
+    if (compareVersions(targetVersion, currentVersion) <= 0) {
       throw new SystemUpdateConflictError("There is no newer Homeio version in the selected update channel.");
     }
-  }
+    return launchSystemUpdate(updateScriptPath, targetRef);
+  });
+}
 
+async function launchSystemUpdate(updateScriptPath: string, targetRef: string): Promise<SystemUpdateApplyAcceptedResponse> {
   const unitName = `homeio-self-update-${Date.now()}`;
   const command = [
     "mkdir -p /var/log",

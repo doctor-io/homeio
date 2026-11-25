@@ -24,3 +24,18 @@ export async function writeUpdateChannel(channel: SystemUpdateChannel) {
       set: { updateChannel: channel, updatedAt: new Date() },
     });
 }
+
+export function withLockedUpdateChannel<T>(action: (channel: SystemUpdateChannel) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    // Settings can be absent on a fresh install. Ensure there is a row to lock.
+    await tx.insert(settings).values({ id: "singleton" }).onConflictDoNothing({ target: settings.id });
+    const [row] = await tx
+      .select({ channel: settings.updateChannel })
+      .from(settings)
+      .where(eq(settings.id, "singleton"))
+      .for("update");
+
+    if (!row) throw new Error("Could not lock the Homeio update channel settings.");
+    return action(row.channel === "beta" ? "beta" : "stable");
+  });
+}

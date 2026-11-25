@@ -1,5 +1,6 @@
 import type * as NodeFsPromises from "node:fs/promises";
 import path from "node:path";
+import { inc } from "semver";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 const { execFileMock, statMock } = vi.hoisted(() => ({
@@ -18,10 +19,11 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 vi.mock("@/lib/server/modules/system/update-channel-repository", () => ({
   readUpdateChannel: vi.fn(),
+  withLockedUpdateChannel: vi.fn(),
   writeUpdateChannel: vi.fn(),
 }));
 
-import { readUpdateChannel, writeUpdateChannel } from "@/lib/server/modules/system/update-channel-repository";
+import { readUpdateChannel, withLockedUpdateChannel, writeUpdateChannel } from "@/lib/server/modules/system/update-channel-repository";
 import {
   buildLatestReleaseApiUrl,
   buildRemotePackageJsonApiUrl,
@@ -42,13 +44,6 @@ function resolveExecFileCallback(args: unknown[]) {
   }
 
   return maybeCallback as (error: Error | null, stdout?: string, stderr?: string) => void;
-}
-
-function bumpPatchVersion(version: string) {
-  const parts = version.split(".");
-  const last = Number.parseInt(parts.at(-1) ?? "0", 10);
-  parts[parts.length - 1] = String(Number.isFinite(last) ? last + 1 : 1);
-  return parts.join(".");
 }
 
 function releaseResponse(tag: string) {
@@ -79,6 +74,7 @@ describe("update-service", () => {
     execFileMock.mockReset();
     statMock.mockReset();
     vi.mocked(readUpdateChannel).mockReset().mockResolvedValue("stable");
+    vi.mocked(withLockedUpdateChannel).mockReset().mockImplementation((action) => action("stable"));
     // Release mode unless a test opts into following a branch.
     vi.stubEnv("HOMEIO_REPO_BRANCH", "");
     vi.stubEnv("HOMEIO_CONTAINER", "");
@@ -110,14 +106,15 @@ describe("update-service", () => {
 
   it("reports that the Docker image cannot update itself", async () => {
     vi.stubEnv("HOMEIO_CONTAINER", "true");
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(releaseResponse(`v${packageJson.version}`));
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(releaseResponse("v1.0.0"));
 
     const status = await getSystemUpdateStatus();
     expect(status.canSelfUpdate).toBe(false);
   });
 
   it("offers the latest published release, not whatever main holds", async () => {
-    const nextVersion = bumpPatchVersion(packageJson.version);
+    const nextVersion = inc(packageJson.version, "patch");
+    if (!nextVersion) throw new Error("The package version must use SemVer.");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(releaseResponse(`v${nextVersion}`));
 
     const status = await getSystemUpdateStatus();
@@ -302,6 +299,7 @@ describe("update-service", () => {
     statMock.mockResolvedValue({});
     succeedAllExecFileCalls();
     vi.mocked(readUpdateChannel).mockResolvedValueOnce("beta");
+    vi.mocked(withLockedUpdateChannel).mockImplementationOnce((action) => action("beta"));
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json([
         { tag_name: "v2.0.0-beta.10", prerelease: true, draft: false },
@@ -329,6 +327,7 @@ describe("update-service", () => {
     await scheduleSystemUpdate();
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(withLockedUpdateChannel).not.toHaveBeenCalled();
     expect(execFileMock).toHaveBeenCalledWith(
       "systemd-run",
       expect.arrayContaining(["--setenv=HOMEIO_REPO_BRANCH=v2.0"]),
