@@ -43,7 +43,7 @@ function resolveExecFileCallback(args: unknown[]) {
     throw new Error("Expected execFile callback");
   }
 
-  return maybeCallback as (error: Error | null, stdout?: string, stderr?: string) => void;
+  return maybeCallback as (error: Error | null, result: { stdout: string; stderr: string }) => void;
 }
 
 function releaseResponse(tag: string) {
@@ -63,7 +63,7 @@ function branchResponse(version: string) {
 
 function succeedAllExecFileCalls() {
   execFileMock.mockImplementation((_command: string, _args: string[], ...rest: unknown[]) => {
-    resolveExecFileCallback(rest)(null, "", "");
+    resolveExecFileCallback(rest)(null, { stdout: "", stderr: "" });
   });
 }
 
@@ -316,6 +316,22 @@ describe("update-service", () => {
     await expect(scheduleSystemUpdate("2.0.0-beta.10")).rejects.toThrow("available version has changed");
     await expect(scheduleSystemUpdate()).rejects.toThrow("no newer Homeio version");
     expect(execFileMock.mock.calls.filter(([command]) => command === "systemd-run")).toHaveLength(1);
+  });
+
+  it("refuses to launch if an update starts during the release lookup", async () => {
+    statMock.mockResolvedValue({});
+    let updating = false;
+    execFileMock.mockImplementation((command: string, _args: string[], ...rest: unknown[]) => {
+      const stdout = command === "systemctl" && updating ? "homeio-self-update-1.service" : "";
+      resolveExecFileCallback(rest)(null, { stdout, stderr: "" });
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async () => {
+      updating = true;
+      return releaseResponse("v9.9.9");
+    });
+
+    await expect(scheduleSystemUpdate("9.9.9")).rejects.toThrow("already in progress");
+    expect(execFileMock).not.toHaveBeenCalledWith("systemd-run", expect.anything(), expect.anything());
   });
 
   it("installs the configured branch when the server follows one", async () => {

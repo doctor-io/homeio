@@ -324,26 +324,6 @@ export async function scheduleSystemUpdate(expectedVersion?: string): Promise<Sy
     );
   }
 
-  // Guard against concurrent updates. Two simultaneous update runs would race
-  // on the same git working tree, npm install, and migration steps.
-  try {
-    const { stdout } = await execFileAsync("systemctl", [
-      "list-units",
-      "--state=activating,active",
-      "--no-pager",
-      "--no-legend",
-      "homeio-self-update-*.service",
-    ]);
-    if (stdout.trim().length > 0) {
-      throw new Error("A system update is already in progress. Wait for it to complete before starting another.");
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("A system update")) {
-      throw error;
-    }
-    // systemctl failure is non-fatal — proceed with scheduling
-  }
-
   const branch = configuredRepoBranch();
   if (branch) return launchSystemUpdate(updateScriptPath, branch);
 
@@ -372,6 +352,26 @@ export async function scheduleSystemUpdate(expectedVersion?: string): Promise<Sy
 }
 
 async function launchSystemUpdate(updateScriptPath: string, targetRef: string): Promise<SystemUpdateApplyAcceptedResponse> {
+  // Check immediately before launching, while release-mode requests hold the
+  // settings row lock. Another update may have started during the GitHub lookup.
+  try {
+    const { stdout } = await execFileAsync("systemctl", [
+      "list-units",
+      "--state=activating,active",
+      "--no-pager",
+      "--no-legend",
+      "homeio-self-update-*.service",
+    ]);
+    if (stdout.trim().length > 0) {
+      throw new Error("A system update is already in progress. Wait for it to complete before starting another.");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("A system update")) {
+      throw error;
+    }
+    // systemctl failure is non-fatal — proceed with scheduling
+  }
+
   const unitName = `homeio-self-update-${Date.now()}`;
   const command = [
     "mkdir -p /var/log",
