@@ -22,6 +22,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:integration:updates": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "prepare": "husky",
     "db:init": "tsx ./scripts/db-migrate.ts",
