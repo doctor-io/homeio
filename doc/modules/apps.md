@@ -4,6 +4,8 @@
 
 This module displays installed Docker Compose apps, loads the App Store catalog, and runs install/update/uninstall/start/stop/restart operations. Long-running operations are persisted in PostgreSQL and streamed to the UI with SSE.
 
+The App Store groups catalog results by source. The **Source** filter works alongside search, categories, and installed status, and **Custom** includes locally imported apps. When sources publish the same app ID, the official catalog takes precedence, followed by the first configured source containing that app. The **Manage Sources** dialog lists entries suppressed by these conflicts.
+
 ## Locations
 
 - Server-side: `lib/server/modules/apps/`, `lib/server/modules/store/`, `lib/server/modules/docker/`
