@@ -34,7 +34,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d home_server"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -57,6 +57,17 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Apply test database migrations
+        run: npm run db:migrate
+
+      - name: Verify test database schema
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: >
+          docker exec "$POSTGRES_CONTAINER_ID"
+          psql --no-psqlrc --set=ON_ERROR_STOP=1 --username=postgres --dbname=home_server
+          --command="SELECT 'public.users'::regclass AS users, 'public.notifications'::regclass AS notifications"
 
       - name: Unit tests
         run: npm run test:coverage
