@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type * as StoreCatalog from "@/lib/server/modules/store/catalog";
 
-vi.mock("@/lib/server/modules/store/catalog", () => ({
+vi.mock("@/lib/server/modules/store/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof StoreCatalog>()),
   findStoreCatalogTemplateByAppId: vi.fn(),
   getStoreCatalogSnapshot: vi.fn(),
 }));
@@ -168,6 +170,36 @@ describe("store service", () => {
     expect(result.categories[0]?.name).toBe("Network");
     expect(result.featuredAppIds).toContain("adguard-home");
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("matches normalized catalog categories and merges the Custom category", async () => {
+    vi.mocked(getStoreCatalogSnapshot).mockResolvedValue({
+      apps: [createCatalogApp({ categories: ["Network  Tools", "custom"] })],
+      categories: [
+        { id: "network-tools", name: "Network Tools", description: "Tools", appCount: 1 },
+        { id: "custom", name: "Custom", description: "Community apps", appCount: 1 },
+      ],
+      featuredAppIds: [],
+      recommendedAppIds: [],
+      sourcePath: "/DATA/AppStore/CasaOS-AppStore",
+      sources: [],
+    });
+    vi.mocked(listInstalledStacksFromDb).mockResolvedValue([]);
+    vi.mocked(listCustomStoreTemplates).mockResolvedValue([{
+      ...createCatalogApp({ appId: "local-app", categories: ["Media"] }),
+      isCustom: true,
+      sourceType: "docker-compose",
+      composeContent: "",
+      sourceText: "",
+    }]);
+
+    const view = await getStoreCatalogView({ category: "Network Tools" });
+    expect(view.apps.map((app) => app.id)).toEqual(["adguard-home"]);
+    expect(view.categories.filter((category) => category.id === "custom")).toEqual([
+      { id: "custom", name: "Custom", description: "Community apps", appCount: 2 },
+    ]);
+    expect((await getStoreCatalogView({ category: "Custom" })).apps.map((app) => app.id))
+      .toEqual(["adguard-home", "local-app"]);
   });
 
   it("returns detail or null", async () => {

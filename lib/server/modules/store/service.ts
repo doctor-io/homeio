@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import {
   findStoreCatalogTemplateByAppId,
   getStoreCatalogSnapshot,
-  type StoreCatalogCategory,
+  normalizeCategoryId,
 } from "@/lib/server/modules/store/catalog";
 import {
   findCustomStoreTemplateByAppId,
@@ -146,10 +146,10 @@ export async function getStoreCatalogView(options?: {
       let templates = allTemplates;
 
       if (options?.category) {
+        const categoryId = normalizeCategoryId(options.category);
         templates = templates.filter((template) =>
-          template.categories.some(
-            (category) => category.toLowerCase() === options.category?.toLowerCase(),
-          ),
+          (categoryId === "custom" && "isCustom" in template) ||
+          template.categories.some((category) => normalizeCategoryId(category) === categoryId),
         );
       }
 
@@ -181,17 +181,24 @@ export async function getStoreCatalogView(options?: {
         apps = apps.filter((app) => app.updateAvailable);
       }
 
-      const categories: StoreCatalogCategory[] = customTemplates.length > 0
-        ? [
-            ...catalogSnapshot.categories,
-            {
-              id: "custom",
-              name: "Custom",
-              description: "Custom compose apps",
-              appCount: customTemplates.length,
-            },
-          ]
-        : catalogSnapshot.categories;
+      const categories = [...catalogSnapshot.categories];
+      if (customTemplates.length > 0) {
+        const customIndex = categories.findIndex((category) => category.id === "custom");
+        if (customIndex === -1) {
+          categories.push({
+            id: "custom",
+            name: "Custom",
+            description: "Custom compose apps",
+            appCount: customTemplates.length,
+          });
+        } else {
+          const customCategory = categories[customIndex];
+          categories[customIndex] = {
+            ...customCategory,
+            appCount: customCategory.appCount + customTemplates.length,
+          };
+        }
+      }
 
       return {
         apps,

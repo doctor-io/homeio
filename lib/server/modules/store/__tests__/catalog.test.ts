@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import type * as FsPromises from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -117,7 +117,7 @@ x-casaos:
       description: "Network DNS blocker",
       categories: ["Network"],
       repositoryUrl: "https://github.com/IceWhaleTech/CasaOS-AppStore",
-      stackFile: "Apps/AdGuardHome/docker-compose.yml",
+      stackFile: path.join("Apps", "AdGuardHome", "docker-compose.yml"),
       port: 3001,
       screenshots: ["https://example.com/screenshot.png"],
     });
@@ -137,6 +137,59 @@ x-casaos:
       sourceKind: "official",
       sourceName: "Official CasaOS",
     });
+  });
+
+  it("counts shared categories once and reports conflicts on the suppressed sources", async () => {
+    const [official] = await readStoreCatalogSources();
+    const remoteSources = ["community", "extras"].map((id) => ({
+      ...official,
+      id,
+      name: id,
+      kind: "remote" as const,
+      url: `https://example.com/${id}.zip`,
+      sourcePath: path.join(repoRoot, id),
+    }));
+
+    for (const source of remoteSources) {
+      const sharedDir = path.join(source.sourcePath, "Apps", "Shared");
+      await mkdir(sharedDir, { recursive: true });
+      await writeFile(
+        path.join(sharedDir, "docker-compose.yml"),
+        `name: shared
+services:
+  shared:
+    image: example/shared:latest
+x-casaos:
+  category: [network, Network]
+  title:
+    en_us: Shared
+`,
+      );
+      await writeFile(
+        path.join(source.sourcePath, "category-list.json"),
+        JSON.stringify([{ name: "Network" }, { name: "network" }]),
+      );
+    }
+    const duplicateDir = path.join(remoteSources[0].sourcePath, "Apps", "AdGuardHome");
+    await mkdir(duplicateDir);
+    await copyFile(
+      path.join(repoRoot, "Apps", "AdGuardHome", "docker-compose.yml"),
+      path.join(duplicateDir, "docker-compose.yml"),
+    );
+
+    vi.mocked(readStoreCatalogSources).mockResolvedValue([official, ...remoteSources]);
+    const { getStoreCatalogSnapshot, findStoreCatalogTemplateByAppId } = await import("@/lib/server/modules/store/catalog");
+    const snapshot = await getStoreCatalogSnapshot();
+
+    expect(snapshot.categories).toEqual([
+      { id: "network", name: "Network", description: "Network apps", appCount: 2 },
+    ]);
+    expect(snapshot.apps.map(({ appId, sourceId }) => [appId, sourceId])).toEqual([
+      ["adguardhome", "official-casaos"],
+      ["shared", "community"],
+    ]);
+    expect(snapshot.sources.map((source) => source.suppressedAppIds)).toEqual([[], ["adguardhome"], ["shared"]]);
+    expect(await findStoreCatalogTemplateByAppId("shared")).toMatchObject({ sourceId: "community" });
   });
 
   it("does not re-stat the catalog on every request", async () => {
