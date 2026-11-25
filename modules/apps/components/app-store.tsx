@@ -2,7 +2,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import type { StoreAppDetail, StoreAppSummary, StoreCatalogSource } from "@/lib/shared/contracts/apps";
+import {
+  CUSTOM_STORE_SOURCE_ID,
+  type StoreAppDetail,
+  type StoreAppSummary,
+  type StoreCatalogCategory,
+  type StoreCatalogSource,
+} from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
 import { getStoreOperationLabel, isStoreOperationActiveStatus } from "@/lib/shared/store-operations";
 import { AppStoreInstallMenu } from "@/modules/apps/components/app-store-install-menu";
@@ -39,12 +45,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const STORE_PAGE_SIZE = 24;
-const CUSTOM_SOURCE_FILTER = "custom";
+const STORE_SECTION_LIMIT = 8;
 
 function getAppSourceId(app: StoreAppSummary) {
-  return app.sourceKind === "custom" ? CUSTOM_SOURCE_FILTER : app.sourceId;
+  return app.sourceKind === "custom" ? CUSTOM_STORE_SOURCE_ID : app.sourceId;
 }
-const STORE_SECTION_LIMIT = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -161,8 +166,6 @@ function SourceBadge({ sourceName, sourceKind }: Pick<StoreAppSummary, "sourceNa
 
 // ── Catalog sidebar ───────────────────────────────────────────────────────────
 
-type CatalogCategory = { id: string; name: string; description: string; appCount: number };
-
 function CatalogSidebar({
   categories,
   selectedCategory,
@@ -171,7 +174,7 @@ function CatalogSidebar({
   selectedSourceId,
   onSelectSource,
 }: {
-  categories: CatalogCategory[];
+  categories: StoreCatalogCategory[];
   selectedCategory: string | null;
   onSelectCategory: (category: string | null) => void;
   sources: StoreCatalogSource[];
@@ -193,7 +196,7 @@ function CatalogSidebar({
           {sources.map((source) => (
             <option key={source.id} value={source.id}>{source.name}</option>
           ))}
-          <option value={CUSTOM_SOURCE_FILTER}>Custom</option>
+          <option value={CUSTOM_STORE_SOURCE_ID}>Custom</option>
         </select>
       </label>
       <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
@@ -223,7 +226,7 @@ function CatalogSidebar({
           >
             <span className="truncate">{cat.name}</span>
             <span className={cn(STORE_BADGE_SURFACE, "ml-1.5 shrink-0 px-1.5 py-0.5 text-2xs text-muted-foreground")}>
-              {cat.appCount}
+              {selectedSourceId ? (cat.appCountBySource[selectedSourceId] ?? 0) : cat.appCount}
             </span>
           </button>
         ))}
@@ -641,7 +644,7 @@ export function AppStore({
 
   const catalog = catalogQuery.data;
   const sources = (catalog?.sources ?? storeSourcesQuery.data ?? []).filter((source) => source.enabled);
-  const isSelectedSourceAvailable = selectedSourceId === CUSTOM_SOURCE_FILTER ||
+  const isSelectedSourceAvailable = selectedSourceId === CUSTOM_STORE_SOURCE_ID ||
     sources.some((source) => source.id === selectedSourceId);
   const sourceFilter = isSelectedSourceAvailable ? selectedSourceId : "";
   const apps = useMemo(

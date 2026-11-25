@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppOperationState } from "@/modules/apps/hooks/useStoreActions";
 import type { useStoreCatalog } from "@/modules/apps/hooks/useStoreCatalog";
-import type { InstalledStackConfig, StoreAppDetail, StoreAppSummary, StoreCatalogSource } from "@/lib/shared/contracts/apps";
+import type { InstalledStackConfig, StoreAppDetail, StoreAppSummary, StoreCatalogCategory, StoreCatalogSource } from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
 import { createTestQueryClient, createWrapper } from "@/test/query-client-wrapper";
 
@@ -96,6 +96,14 @@ const communityApp: StoreAppSummary = {
   sourceKind: communitySource.kind,
 };
 
+const mediaCategory: StoreCatalogCategory = {
+  id: "media",
+  name: "Media",
+  description: "Media apps",
+  appCount: 1,
+  appCountBySource: { [officialSource.id]: 1 },
+};
+
 const installedSummaryApp: StoreAppSummary = {
   ...summaryApp,
   status: "installed",
@@ -159,7 +167,7 @@ function setup({
   apps = [summaryApp],
   detail = null,
   operationsByApp = {},
-  categories = [{ id: "media", name: "Media", description: "Media apps", appCount: apps.length }],
+  categories = [mediaCategory],
   featuredAppIds = [apps[0]?.id].filter(Boolean) as string[],
   recommendedAppIds = [apps[0]?.id].filter(Boolean) as string[],
   sources = [officialSource],
@@ -168,7 +176,7 @@ function setup({
   apps?: StoreAppSummary[];
   detail?: StoreAppDetail | null;
   operationsByApp?: Record<string, AppOperationState>;
-  categories?: Array<{ id: string; name: string; description: string; appCount: number }>;
+  categories?: StoreCatalogCategory[];
   featuredAppIds?: string[];
   recommendedAppIds?: string[];
   sources?: StoreCatalogSource[];
@@ -370,6 +378,40 @@ describe("AppStore", () => {
     expect(screen.queryByText("Jelly Books")).toBeNull();
   });
 
+  it("updates category counts when switching sources", () => {
+    setup({
+      apps: [
+        summaryApp,
+        communityApp,
+        { ...communityApp, id: "books", name: "Bookshelf", categories: ["Books"] },
+      ],
+      categories: [
+        { ...mediaCategory, appCount: 2, appCountBySource: { [officialSource.id]: 1, [communitySource.id]: 1 } },
+        { id: "books", name: "Books", description: "Books apps", appCount: 1, appCountBySource: { [communitySource.id]: 1 } },
+      ],
+      sources: [officialSource, communitySource],
+    });
+
+    const sourceFilter = screen.getByRole("combobox", { name: "Source" });
+    const media = screen.getByTitle("Media apps");
+    const books = screen.getByTitle("Books apps");
+    expect(within(media).getByText("2")).toBeTruthy();
+    expect(within(books).getByText("1")).toBeTruthy();
+
+    fireEvent.click(media);
+    fireEvent.change(sourceFilter, { target: { value: officialSource.id } });
+    expect(within(media).getByText("1")).toBeTruthy();
+    expect(within(books).getByText("0")).toBeTruthy();
+
+    fireEvent.change(sourceFilter, { target: { value: communitySource.id } });
+    expect(within(media).getByText("1")).toBeTruthy();
+    expect(within(books).getByText("1")).toBeTruthy();
+
+    fireEvent.change(sourceFilter, { target: { value: "" } });
+    expect(within(media).getByText("2")).toBeTruthy();
+    expect(within(books).getByText("1")).toBeTruthy();
+  });
+
   it("shows smaller source groups on the first page", () => {
     setup({
       apps: [
@@ -446,7 +488,7 @@ describe("AppStore", () => {
     useStoreCatalogMock.mockReturnValue({
       data: {
         apps: [summaryApp],
-        categories: [{ id: "media", name: "Media", description: "Media apps", appCount: 1 }],
+        categories: [mediaCategory],
         featuredAppIds: [],
         recommendedAppIds: [],
         sourcePath: "/DATA/AppStore/CasaOS-AppStore",

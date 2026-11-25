@@ -127,6 +127,7 @@ x-casaos:
         name: "Network",
         description: "Network apps",
         appCount: 1,
+        appCountBySource: { "official-casaos": 1 },
       },
     ]);
     expect(snapshot.featuredAppIds).toEqual(["adguardhome"]);
@@ -182,7 +183,13 @@ x-casaos:
     const snapshot = await getStoreCatalogSnapshot();
 
     expect(snapshot.categories).toEqual([
-      { id: "network", name: "Network", description: "Network apps", appCount: 2 },
+      {
+        id: "network",
+        name: "Network",
+        description: "Network apps",
+        appCount: 2,
+        appCountBySource: { "official-casaos": 1, community: 1 },
+      },
     ]);
     expect(snapshot.apps.map(({ appId, sourceId }) => [appId, sourceId])).toEqual([
       ["adguardhome", "official-casaos"],

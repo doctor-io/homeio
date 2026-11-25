@@ -3,6 +3,7 @@ import "server-only";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
 import { readFile } from "node:fs/promises";
 import {
+  buildCatalogCategories,
   findStoreCatalogTemplateByAppId,
   getStoreCatalogSnapshot,
   normalizeCategoryId,
@@ -21,6 +22,7 @@ import {
   parseComposeFile,
 } from "@/lib/server/modules/docker/compose-parser";
 import { isTagUpdateAvailable } from "@/lib/server/modules/store/update-check";
+import { CUSTOM_STORE_SOURCE_ID } from "@/lib/shared/contracts/apps";
 import type {
   InstalledStackConfig,
   StoreAppDetail,
@@ -181,24 +183,21 @@ export async function getStoreCatalogView(options?: {
         apps = apps.filter((app) => app.updateAvailable);
       }
 
-      const categories = [...catalogSnapshot.categories];
-      if (customTemplates.length > 0) {
-        const customIndex = categories.findIndex((category) => category.id === "custom");
-        if (customIndex === -1) {
-          categories.push({
-            id: "custom",
-            name: "Custom",
-            description: "Custom compose apps",
-            appCount: customTemplates.length,
+      const categories = customTemplates.length === 0
+        ? catalogSnapshot.categories
+        : buildCatalogCategories({
+            apps: [
+              ...catalogSnapshot.apps,
+              ...customTemplates.map((template) => ({
+                categories: [...template.categories, "Custom"],
+                sourceId: CUSTOM_STORE_SOURCE_ID,
+              })),
+            ],
+            categoryEntries: [
+              ...catalogSnapshot.categories,
+              { name: "Custom", description: "Custom compose apps" },
+            ],
           });
-        } else {
-          const customCategory = categories[customIndex];
-          categories[customIndex] = {
-            ...customCategory,
-            appCount: customCategory.appCount + customTemplates.length,
-          };
-        }
-      }
 
       return {
         apps,

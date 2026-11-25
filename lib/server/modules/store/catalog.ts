@@ -24,6 +24,7 @@ import {
   writeStoreCatalogConfig,
 } from "@/lib/server/modules/store/catalog-config";
 import type {
+  StoreCatalogCategory,
   StoreCatalogSource,
   StoreCatalogSourceKind,
 } from "@/lib/shared/contracts/apps";
@@ -48,13 +49,6 @@ export type StoreCatalogTemplate = AppDefinition & {
   sourceId: string;
   sourceName: string;
   sourceKind: StoreCatalogSourceKind;
-};
-
-export type StoreCatalogCategory = {
-  id: string;
-  name: string;
-  description: string;
-  appCount: number;
 };
 
 export type StoreCatalogSnapshot = {
@@ -261,8 +255,8 @@ function mapCatalogApp(
   };
 }
 
-function buildCatalogCategories(input: {
-  apps: StoreCatalogTemplate[];
+export function buildCatalogCategories(input: {
+  apps: Pick<StoreCatalogTemplate, "categories" | "sourceId">[];
   categoryEntries: CasaosCategoryEntry[];
 }) {
   const categories = new Map<string, StoreCatalogCategory>();
@@ -275,6 +269,7 @@ function buildCatalogCategories(input: {
       name,
       description: (typeof item.description === "string" && item.description.trim()) || `${name} apps`,
       appCount: 0,
+      appCountBySource: Object.create(null),
     });
   }
 
@@ -285,12 +280,19 @@ function buildCatalogCategories(input: {
       const id = normalizeCategoryId(name);
       if (!id || counted.has(id)) continue;
       counted.add(id);
-      const category = categories.get(id) ?? unlisted.get(id);
-      if (category) {
-        category.appCount += 1;
-      } else {
-        unlisted.set(id, { id, name, description: `${name} apps`, appCount: 1 });
+      let category = categories.get(id) ?? unlisted.get(id);
+      if (!category) {
+        category = {
+          id,
+          name,
+          description: `${name} apps`,
+          appCount: 0,
+          appCountBySource: Object.create(null),
+        };
+        unlisted.set(id, category);
       }
+      category.appCount += 1;
+      category.appCountBySource[app.sourceId] = (category.appCountBySource[app.sourceId] ?? 0) + 1;
     }
   }
 
