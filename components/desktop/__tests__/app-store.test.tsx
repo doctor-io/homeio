@@ -3,6 +3,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppOperationState } from "@/modules/apps/hooks/useStoreActions";
+import type { useStoreCatalog } from "@/modules/apps/hooks/useStoreCatalog";
 import type { InstalledStackConfig, StoreAppDetail, StoreAppSummary, StoreCatalogSource } from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
 import { createTestQueryClient, createWrapper } from "@/test/query-client-wrapper";
@@ -181,17 +182,25 @@ function setup({
   const redeployApp = vi.fn().mockResolvedValue(undefined);
   const uninstallApp = vi.fn().mockResolvedValue(undefined);
 
-  useStoreCatalogMock.mockReturnValue({
-    data: {
-      apps,
-      categories,
-      featuredAppIds,
-      recommendedAppIds,
-      sourcePath: "/DATA/AppStore/CasaOS-AppStore",
-      sources,
-    },
-    isLoading: false,
-    isError: false,
+  useStoreCatalogMock.mockImplementation((options: Parameters<typeof useStoreCatalog>[0] = {}) => {
+    const { category, search, installedOnly } = options;
+    const searchTerm = search?.toLowerCase();
+    return {
+      data: {
+        apps: apps.filter((app) =>
+          (!category || app.categories.includes(category)) &&
+          (!searchTerm || app.name.toLowerCase().includes(searchTerm) || app.description.toLowerCase().includes(searchTerm)) &&
+          (!installedOnly || app.status !== "not_installed"),
+        ),
+        categories,
+        featuredAppIds,
+        recommendedAppIds,
+        sourcePath: "/DATA/AppStore/CasaOS-AppStore",
+        sources,
+      },
+      isLoading: false,
+      isError: false,
+    };
   });
   useStoreAppMock.mockReturnValue({
     data: detail,
@@ -316,8 +325,11 @@ describe("AppStore", () => {
   it("groups apps by source and combines the source filter with other filters", async () => {
     setup({
       apps: [
-        summaryApp,
-        communityApp,
+        installedSummaryApp,
+        { ...communityApp, status: "installed" },
+        { ...installedSummaryApp, id: "jellyseerr", name: "Jellyseerr" },
+        { ...communityApp, id: "jellystat", name: "Jellystat" },
+        { ...communityApp, id: "jelly-books", name: "Jelly Books", categories: ["Books"], status: "installed" },
         { ...summaryApp, id: "local-one", name: "Local One", sourceId: "local-one", sourceName: "Custom", sourceKind: "custom" },
         { ...summaryApp, id: "local-two", name: "Local Two", sourceId: "local-two", sourceName: "Custom", sourceKind: "custom" },
       ],
@@ -340,14 +352,22 @@ describe("AppStore", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Installed/ }));
     fireEvent.click(screen.getByTitle("Media apps"));
     fireEvent.change(screen.getByPlaceholderText(/^Search apps/), { target: { value: "jelly" } });
-    await waitFor(() => expect(useStoreCatalogMock).toHaveBeenLastCalledWith({
+    const catalogFilters = {
       category: "Media",
       search: "jelly",
       installedOnly: true,
-    }));
-    expect(screen.queryByText("Plex")).toBeNull();
+    };
+    await waitFor(() => expect(useStoreCatalogMock).toHaveBeenLastCalledWith(catalogFilters));
+    expect(screen.getByText("Jellyfin")).toBeTruthy();
+    expect(screen.queryByText("Jellyseerr")).toBeNull();
+
     fireEvent.change(sourceFilter, { target: { value: "" } });
-    expect(screen.getByText("Plex")).toBeTruthy();
+    expect(useStoreCatalogMock).toHaveBeenLastCalledWith(catalogFilters);
+    expect(screen.getByText("Jellyfin")).toBeTruthy();
+    expect(screen.getByText("Jellyseerr")).toBeTruthy();
+    expect(screen.queryByText("Plex")).toBeNull();
+    expect(screen.queryByText("Jellystat")).toBeNull();
+    expect(screen.queryByText("Jelly Books")).toBeNull();
   });
 
   it("shows smaller source groups on the first page", () => {
