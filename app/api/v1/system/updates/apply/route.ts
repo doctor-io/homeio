@@ -5,7 +5,7 @@ import {
   logServerAction,
   withServerTiming,
 } from "@/lib/server/logging/logger";
-import { scheduleSystemUpdate } from "@/lib/server/modules/system/update-service";
+import { scheduleSystemUpdate, SystemUpdateConflictError } from "@/lib/server/modules/system/update-service";
 import { emitPowerAction } from "@/lib/server/modules/system/power-action-events";
 import { requireApiSession } from "@/lib/server/modules/auth/api";
 
@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
   const apiSession = await requireApiSession(request);
   if (apiSession.response) return apiSession.response;
   const requestId = createRequestId();
+  const expectedVersion = new URL(request.url).searchParams.get("version") ?? undefined;
 
   try {
     return await withServerTiming(
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
         requestId,
       },
       async () => {
-        const accepted = await scheduleSystemUpdate();
+        const accepted = await scheduleSystemUpdate(expectedVersion);
         emitPowerAction("update");
 
         logServerAction({
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
     });
 
     const message = error instanceof Error ? error.message : "Failed to schedule Homeio update";
+    if (error instanceof SystemUpdateConflictError) {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
     const statusCode =
       error instanceof Error &&
       (error.message.includes("Docker") ||

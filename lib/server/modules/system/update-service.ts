@@ -5,9 +5,13 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { compare, prerelease, valid } from "semver";
 import { logServerAction, withServerTiming } from "@/lib/server/logging/logger";
+import { readUpdateChannel, writeUpdateChannel } from "@/lib/server/modules/system/update-channel-repository";
 import type {
   SystemUpdateApplyAcceptedResponse,
+  SystemUpdateChannel,
+  SystemUpdateChannelSettings,
   SystemUpdateStatus,
 } from "@/lib/shared/contracts/system";
 
@@ -34,15 +38,13 @@ type LatestVersion = {
   checkedAt: string;
 };
 
-type LatestVersionCache = LatestVersion & {
-  /** The branch followed, or "release": switching invalidates the answer. */
-  source: string;
-  expiresAt: number;
-};
+const latestVersionCache = new Map<string, LatestVersion & { expiresAt: number }>();
+const latestVersionInFlight = new Map<string, Promise<LatestVersion>>();
+const latestVersionFailure = new Map<string, { error: unknown; retryAt: number }>();
 
-let latestVersionCache: LatestVersionCache | null = null;
-let latestVersionInFlight: Promise<LatestVersion> | null = null;
-let latestVersionFailure: { source: string; error: unknown; retryAt: number } | null = null;
+export class SystemUpdateConflictError extends Error {
+  override name = "SystemUpdateConflictError";
+}
 
 /**
  * A server that sets HOMEIO_REPO_BRANCH follows that branch, as before.
@@ -68,31 +70,28 @@ function parseGitHubRepository(repositoryUrl: string) {
   return { owner, repo };
 }
 
-function parseVersionParts(version: string) {
-  return version
-    .trim()
-    .replace(/^v/i, "")
-    .split(".")
-    .map((part) => {
-      const numeric = Number.parseInt(part, 10);
-      return Number.isFinite(numeric) ? numeric : 0;
-    });
+function updateChannelDisabledReason() {
+  if (configuredRepoBranch()) return "This server follows the branch configured in HOMEIO_REPO_BRANCH.";
+  if (isContainerRuntime()) return "Docker installations follow their image tag.";
+  return null;
+}
+
+export async function getSystemUpdateChannel(): Promise<SystemUpdateChannelSettings> {
+  const disabledReason = updateChannelDisabledReason();
+  return { channel: disabledReason ? "stable" : await readUpdateChannel(), disabledReason };
+}
+
+export async function setSystemUpdateChannel(channel: SystemUpdateChannel): Promise<SystemUpdateChannelSettings> {
+  const disabledReason = updateChannelDisabledReason();
+  if (disabledReason) throw new SystemUpdateConflictError(disabledReason);
+  await writeUpdateChannel(channel);
+  return { channel, disabledReason };
 }
 
 export function compareVersions(left: string, right: string) {
-  const leftParts = parseVersionParts(left);
-  const rightParts = parseVersionParts(right);
-  const length = Math.max(leftParts.length, rightParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const leftValue = leftParts[index] ?? 0;
-    const rightValue = rightParts[index] ?? 0;
-
-    if (leftValue > rightValue) return 1;
-    if (leftValue < rightValue) return -1;
-  }
-
-  return 0;
+  const leftVersion = valid(left.trim());
+  const rightVersion = valid(right.trim());
+  return leftVersion && rightVersion ? compare(leftVersion, rightVersion) : 0;
 }
 
 async function readCurrentVersion() {
@@ -121,6 +120,11 @@ export function buildRemotePackageJsonApiUrl(
 export function buildLatestReleaseApiUrl(repositoryUrl = DEFAULT_REPO_URL) {
   const { owner, repo } = parseGitHubRepository(repositoryUrl);
   return `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
+}
+
+function versionTag(value: unknown) {
+  const tag = typeof value === "string" ? value.trim() : "";
+  return RELEASE_TAG.test(tag) && valid(tag) ? tag : null;
 }
 
 async function fetchBranchVersion(branch: string) {
@@ -162,21 +166,43 @@ async function fetchLatestReleaseTag() {
   }
 
   const parsed = (await response.json()) as { tag_name?: unknown };
-  const tag = typeof parsed.tag_name === "string" ? parsed.tag_name.trim() : "";
   // The tag becomes a git ref for update.sh, so only accept a version tag.
-  if (!RELEASE_TAG.test(tag)) {
-    throw new Error("The latest Homeio release does not have a version tag");
+  const tag = versionTag(parsed.tag_name);
+  if (!tag || prerelease(tag)) {
+    throw new Error("The latest Homeio release does not have a version tag for a stable release");
   }
 
   return tag;
 }
 
-async function fetchLatestVersion() {
-  const branch = configuredRepoBranch();
-  if (branch) return fetchBranchVersion(branch);
+async function fetchBetaReleaseTag() {
+  const { owner, repo } = parseGitHubRepository(DEFAULT_REPO_URL);
+  const endpoint = `https://api.github.com/repos/${owner}/${repo}/releases`;
+  let latest: string | null = null;
+  for (let page = 1; ; page += 1) {
+    const response = await fetch(`${endpoint}?per_page=100&page=${page}`, {
+      cache: "no-store",
+      headers: GITHUB_API_HEADERS,
+    });
+    if (response.status === 404) return latest;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Homeio releases (${response.status})`);
+    }
+    const releases = await response.json();
+    if (!Array.isArray(releases)) throw new Error("Invalid Homeio releases response");
 
-  const tag = await fetchLatestReleaseTag();
-  return tag ? tag.replace(/^v/i, "") : null;
+    for (const release of releases) {
+      if (release?.draft !== false) continue;
+      const tag = versionTag(release.tag_name);
+      if (!tag || release.prerelease !== (prerelease(tag) !== null)) continue;
+      if (latest === null || compare(tag, latest) > 0) latest = tag;
+    }
+    if (!response.headers.get("link")?.includes('rel="next"')) return latest;
+  }
+}
+
+function fetchReleaseTag(channel: SystemUpdateChannel) {
+  return channel === "beta" ? fetchBetaReleaseTag() : fetchLatestReleaseTag();
 }
 
 /**
@@ -185,27 +211,31 @@ async function fetchLatestVersion() {
  * a fresh check (the "Check now" button), which must report the failure.
  */
 async function getLatestVersion({ refresh = false } = {}): Promise<LatestVersion> {
-  const source = configuredRepoBranch() ?? "release";
-  const cached = latestVersionCache?.source === source ? latestVersionCache : null;
+  const branch = configuredRepoBranch();
+  const { channel } = await getSystemUpdateChannel();
+  const source = branch ? `branch:${branch}` : `release:${channel}`;
+  const cached = latestVersionCache.get(source);
   if (!refresh && cached && cached.expiresAt > Date.now()) return cached;
-  const failure = latestVersionFailure?.source === source ? latestVersionFailure : null;
+  const failure = latestVersionFailure.get(source);
   if (!refresh && !cached && failure && failure.retryAt > Date.now()) throw failure.error;
   // Desktops opening together share one GitHub call.
-  if (!refresh && latestVersionInFlight) return latestVersionInFlight;
+  const inFlight = latestVersionInFlight.get(source);
+  if (!refresh && inFlight) return inFlight;
 
-  const lookup = fetchLatestVersion()
-    .then((version) => {
-      latestVersionFailure = null;
-      latestVersionCache = {
-        source,
+  const lookup = (branch ? fetchBranchVersion(branch) : fetchReleaseTag(channel))
+    .then((versionOrTag) => {
+      latestVersionFailure.delete(source);
+      const version = branch ? versionOrTag : versionOrTag?.replace(/^v/i, "") ?? null;
+      const entry = {
         version,
         checkedAt: new Date().toISOString(),
         expiresAt: Date.now() + LATEST_VERSION_TTL_MS,
       };
-      return latestVersionCache;
+      latestVersionCache.set(source, entry);
+      return entry;
     })
     .catch((error: unknown) => {
-      if (!cached) latestVersionFailure = { source, error, retryAt: Date.now() + FAILED_CHECK_BACKOFF_MS };
+      if (!cached) latestVersionFailure.set(source, { error, retryAt: Date.now() + FAILED_CHECK_BACKOFF_MS });
       if (refresh || !cached) throw error;
       logServerAction({
         level: "warn",
@@ -218,16 +248,16 @@ async function getLatestVersion({ refresh = false } = {}): Promise<LatestVersion
       return cached;
     })
     .finally(() => {
-      if (latestVersionInFlight === lookup) latestVersionInFlight = null;
+      if (latestVersionInFlight.get(source) === lookup) latestVersionInFlight.delete(source);
     });
-  if (!refresh) latestVersionInFlight = lookup;
+  if (!refresh) latestVersionInFlight.set(source, lookup);
   return lookup;
 }
 
 export function resetUpdateStatusCacheForTests() {
-  latestVersionCache = null;
-  latestVersionInFlight = null;
-  latestVersionFailure = null;
+  latestVersionCache.clear();
+  latestVersionInFlight.clear();
+  latestVersionFailure.clear();
 }
 
 export async function getSystemUpdateStatus(
@@ -271,7 +301,7 @@ export function isContainerRuntime(): boolean {
   return false;
 }
 
-export async function scheduleSystemUpdate(): Promise<SystemUpdateApplyAcceptedResponse> {
+export async function scheduleSystemUpdate(expectedVersion?: string): Promise<SystemUpdateApplyAcceptedResponse> {
   if (isContainerRuntime()) {
     throw new Error(
       "Homeio is running in a Docker container. In-app self-update via systemd is disabled. Please update your container using: docker compose pull && docker compose up -d",
@@ -314,11 +344,21 @@ export async function scheduleSystemUpdate(): Promise<SystemUpdateApplyAcceptedR
     // systemctl failure is non-fatal — proceed with scheduling
   }
 
-  // update.sh fetches this ref: the configured branch, or the exact tag of the
-  // release the update check announced.
-  const targetRef = configuredRepoBranch() ?? (await fetchLatestReleaseTag());
-  if (!targetRef) {
-    throw new Error("There is no published Homeio release to update to yet.");
+  const branch = configuredRepoBranch();
+  let targetRef = branch;
+  if (!branch) {
+    const { channel } = await getSystemUpdateChannel();
+    targetRef = await fetchReleaseTag(channel);
+    if (!targetRef) {
+      throw new Error("There is no published Homeio release to update to yet.");
+    }
+    const targetVersion = targetRef.replace(/^v/i, "");
+    if (expectedVersion !== undefined && targetVersion !== expectedVersion) {
+      throw new SystemUpdateConflictError("The available version has changed. Check for updates again.");
+    }
+    if (compareVersions(targetVersion, await readCurrentVersion()) <= 0) {
+      throw new SystemUpdateConflictError("There is no newer Homeio version in the selected update channel.");
+    }
   }
 
   const unitName = `homeio-self-update-${Date.now()}`;

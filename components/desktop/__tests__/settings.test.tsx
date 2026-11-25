@@ -1,8 +1,10 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { AppearanceSettings } from "@/lib/desktop/appearance";
+import { createTestQueryClient, createWrapper } from "@/test/query-client-wrapper";
+import { queryKeys } from "@/lib/shared/query-keys";
 
 const mockUseSettingsBackend = vi.fn();
 const mockUseDesktopPreferences = vi.fn();
@@ -193,6 +195,7 @@ function createBackendMock() {
       currentVersion: "0.1.74",
       latestVersion: "0.1.75",
       updateAvailable: true,
+      canSelfUpdate: true,
       checkedAt: "2026-03-08T10:00:00.000Z",
       isLoading: false,
       unavailable: false,
@@ -432,8 +435,13 @@ describe("SettingsPanel", () => {
     expect(backend.actions.pruneDockerVolumes).toHaveBeenCalledTimes(1);
   });
 
-  it("triggers Homeio update actions", () => {
+  it("triggers Homeio update actions and saves the Beta channel", async () => {
     const backend = createBackendMock();
+    const client = createTestQueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: { channel: "stable", disabledReason: null } }))
+      .mockResolvedValueOnce(Response.json({ data: { channel: "beta", disabledReason: null } }));
     const setAutoCheckUpdates = vi.fn();
     mockUseSettingsBackend.mockReturnValue(backend);
     mockUseDesktopPreferences.mockReturnValue({
@@ -494,6 +502,7 @@ describe("SettingsPanel", () => {
         accentOptions={[]}
         onAppearanceChange={() => {}}
       />,
+      { wrapper: createWrapper(client) },
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Updates/i }));
@@ -506,7 +515,15 @@ describe("SettingsPanel", () => {
     expect(screen.getByText("0.1.74")).toBeTruthy();
     expect(screen.getByText("0.1.75")).toBeTruthy();
     expect(screen.getByText("v0.1.75 available")).toBeTruthy();
-    expect(screen.queryByText("Update channel")).toBeNull();
+    const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Update channel" });
+    await waitFor(() => expect(select.value).toBe("stable"));
+    fireEvent.change(select, { target: { value: "beta" } });
+    await waitFor(() => expect(select.value).toBe("beta"));
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/v1/system/updates/channel", expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({ channel: "beta" }),
+    }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.systemUpdates });
     expect(screen.queryByText("Auto-update policy")).toBeNull();
     expect(screen.queryByText("Update History")).toBeNull();
 

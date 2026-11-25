@@ -151,6 +151,13 @@ export type SystemPreferences = {
   timezone: string;
 };
 
+export type SystemUpdateChannel = "stable" | "beta";
+
+export type SystemUpdateChannelSettings = {
+  channel: SystemUpdateChannel;
+  disabledReason: string | null;
+};
+
 export type SystemUpdateStatus = {
   currentVersion: string;
   latestVersion: string | null;

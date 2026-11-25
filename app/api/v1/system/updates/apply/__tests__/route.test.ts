@@ -13,6 +13,7 @@ vi.mock("@/lib/server/modules/system/power-action-events", () => ({
 
 vi.mock("@/lib/server/modules/system/update-service", () => ({
   scheduleSystemUpdate: scheduleSystemUpdateMock,
+  SystemUpdateConflictError: class extends Error {},
 }));
 
 vi.mock("@/lib/server/modules/auth/api", () => ({
@@ -20,6 +21,7 @@ vi.mock("@/lib/server/modules/auth/api", () => ({
 }));
 
 import { POST } from "@/app/api/v1/system/updates/apply/route";
+import { SystemUpdateConflictError } from "@/lib/server/modules/system/update-service";
 import { NextResponse } from "next/server";
 
 describe("POST /api/v1/system/updates/apply", () => {
@@ -73,15 +75,32 @@ describe("POST /api/v1/system/updates/apply", () => {
     });
     scheduleSystemUpdateMock.mockResolvedValueOnce({ accepted: true, action: "update" });
 
-    const request = new Request("http://localhost/api/v1/system/updates/apply", {
+    const request = new Request("http://localhost/api/v1/system/updates/apply?version=2.0.0-beta.1", {
       method: "POST",
     });
 
     const response = await POST(request as unknown as NextRequest);
     expect(response.status).toBe(202);
+    expect(scheduleSystemUpdateMock).toHaveBeenCalledWith("2.0.0-beta.1");
     const json = await response.json();
     expect(json.data.accepted).toBe(true);
     // Other open sessions switch to the update screen too.
     expect(emitPowerActionMock).toHaveBeenCalledWith("update");
+  });
+
+  it("returns 409 when the advertised update has changed", async () => {
+    requireApiSessionMock.mockResolvedValueOnce({
+      session: { userId: "user-1", username: "admin" },
+      response: null,
+    });
+    scheduleSystemUpdateMock.mockRejectedValueOnce(new SystemUpdateConflictError("Check again."));
+
+    const request = new Request("http://localhost/api/v1/system/updates/apply?version=2.0.0-beta.1", {
+      method: "POST",
+    });
+    const response = await POST(request as unknown as NextRequest);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "Check again." });
+    expect(emitPowerActionMock).not.toHaveBeenCalled();
   });
 });

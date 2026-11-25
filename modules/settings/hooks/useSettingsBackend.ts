@@ -518,6 +518,7 @@ export function useSettingsBackend() {
       latestVersion: null,
       updateAvailable: false,
       checkedAt: null,
+      canSelfUpdate: true,
     };
 
     return {
@@ -525,6 +526,7 @@ export function useSettingsBackend() {
       latestVersion: data.latestVersion,
       updateAvailable: data.updateAvailable,
       checkedAt: data.checkedAt,
+      canSelfUpdate: data.canSelfUpdate !== false,
       isLoading: systemUpdatesQuery.isLoading,
       unavailable: !isUpdateRecoveryActive && Boolean(systemUpdatesQuery.error),
       warning:
@@ -763,10 +765,11 @@ export function useSettingsBackend() {
     actions: {
       checkForUpdates,
       applySystemUpdate: async () => {
-        if (isUpdateRecoveryActive || applySystemUpdateMutation.isPending) return;
+        if (isUpdateRecoveryActive || applySystemUpdateMutation.isPending ||
+          !updates.updateAvailable || !updates.latestVersion || !updates.canSelfUpdate) return;
 
         try {
-          await applySystemUpdateMutation.mutateAsync(undefined);
+          await applySystemUpdateMutation.mutateAsync(updates.latestVersion);
         } catch {
           return;
         }
