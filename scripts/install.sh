@@ -815,6 +815,18 @@ configure_local_postgres() {
 	systemctl enable --now postgresql
 	wait_for_postgres
 
+	# psql above goes through the default cluster's socket, whatever its port.
+	# The app connects over TCP, so point DATABASE_URL at that cluster's real
+	# port: a cluster created next to an older one gets 5433, not 5432 (#82).
+	local pg_port
+	pg_port="$(runuser -u postgres -- psql -tAc 'SHOW port' | tr -d '[:space:]')"
+	if [[ "${pg_port}" =~ ^[0-9]+$ ]] && [[ -f "${ENV_FILE}" ]]; then
+		sed -i -E "s#^(DATABASE_URL=\"?postgresql://[^@]+@(127\.0\.0\.1|localhost)):[0-9]+/#\1:${pg_port}/#" "${ENV_FILE}"
+		if [[ "${pg_port}" != "5432" ]]; then
+			print_status "PostgreSQL listens on port ${pg_port}; DATABASE_URL updated"
+		fi
+	fi
+
 	local db_user="${EFFECTIVE_DB_USER}"
 	local db_pass="${EFFECTIVE_DB_PASSWORD}"
 	local db_name="${EFFECTIVE_DB_NAME}"

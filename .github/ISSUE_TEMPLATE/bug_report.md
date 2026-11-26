@@ -27,4 +27,4 @@ What you expected to happen.
 
 ## Logs or screenshots
 
-Paste any relevant logs or screenshots here. Server logs are at `/var/log/homeio/` by default.
+Paste any relevant logs or screenshots here. With the install script, get the server logs with `sudo journalctl -u home-server --since "1 hour ago"`. With Docker, use `docker logs homeio`.
