@@ -531,6 +531,41 @@ describe("SettingsPanel", () => {
     expect(setAutoCheckUpdates).toHaveBeenCalledWith(false);
   });
 
+  it("keeps the saved Beta channel when an older channel read finishes", async () => {
+    const client = createTestQueryClient();
+    const stable = { channel: "stable", disabledReason: null };
+    const beta = { channel: "beta", disabledReason: null };
+    client.setQueryData(queryKeys.systemUpdateChannel, stable);
+
+    const staleRead = Promise.withResolvers<Response>();
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => staleRead.promise)
+      .mockResolvedValueOnce(Response.json({ data: beta }));
+
+    render(
+      <SettingsPanel
+        appearance={appearance}
+        wallpaperOptions={[]}
+        accentOptions={[]}
+        onAppearanceChange={() => {}}
+      />,
+      { wrapper: createWrapper(client) },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Updates/i }));
+    const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Update channel" });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(select.value).toBe("stable");
+
+    fireEvent.change(select, { target: { value: "beta" } });
+    await waitFor(() => expect(client.getQueryData(queryKeys.systemUpdateChannel)).toEqual(beta));
+
+    staleRead.resolve(Response.json({ data: stable }));
+    await waitFor(() => expect(client.getQueryState(queryKeys.systemUpdateChannel)?.fetchStatus).toBe("idle"));
+    expect(client.getQueryData(queryKeys.systemUpdateChannel)).toEqual(beta);
+    expect(select.value).toBe("beta");
+  });
+
   it("renders real backup controls and removes placeholder backup fields", () => {
     const backend = createBackendMock();
     mockUseSettingsBackend.mockReturnValue(backend);

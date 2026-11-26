@@ -46,6 +46,7 @@ export function UpdatesSection({
   const channelMutation = useMutation({
     mutationFn: saveSystemUpdateChannelRequest,
     onSuccess: async (channel) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.systemUpdateChannel });
       queryClient.setQueryData(queryKeys.systemUpdateChannel, channel);
       await queryClient.invalidateQueries({ queryKey: queryKeys.systemUpdates });
     },

@@ -77,6 +77,8 @@ it("persists Beta and schedules exactly the advertised GitHub pre-release", asyn
     throw new Error(`Unexpected network request: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
+  const schedulerStarted = Promise.withResolvers<void>();
+  const releaseScheduler = Promise.withResolvers<void>();
   execFile.mockImplementation((
     command: string,
     _args: string[],
@@ -84,6 +86,11 @@ it("persists Beta and schedules exactly the advertised GitHub pre-release", asyn
   ) => {
     if (!["which", "systemctl", "systemd-run"].includes(command)) {
       throw new Error(`Unexpected process: ${command}`);
+    }
+    if (command === "systemd-run") {
+      schedulerStarted.resolve();
+      void releaseScheduler.promise.then(() => callback(null, { stdout: "", stderr: "" }));
+      return;
     }
     callback(null, { stdout: "", stderr: "" });
   });
@@ -138,7 +145,31 @@ it("persists Beta and schedules exactly the advertised GitHub pre-release", asyn
   });
 
   expect((await apply.POST(request(`/apply?version=${olderBeta}`, "POST"))).status).toBe(409);
-  expect((await apply.POST(request(`/apply?version=${beta}`, "POST"))).status).toBe(202);
+  const scheduledApply = apply.POST(request(`/apply?version=${beta}`, "POST"));
+  await Promise.race([schedulerStarted.promise, scheduledApply.then(() => {
+    throw new Error("The update request completed before invoking systemd-run.");
+  })]);
+
+  const concurrentSave = channel.PUT(request("/channel", "PUT", { channel: "stable" }));
+  try {
+    await expect.poll(async () => {
+      const { rows } = await pgPool.query<{ blocked: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND wait_event_type = 'Lock'
+            AND query ILIKE 'insert into "settings"%on conflict%do update%'
+        ) AS blocked
+      `);
+      return rows[0].blocked;
+    }, { timeout: 3_000 }).toBe(true);
+  } finally {
+    releaseScheduler.resolve();
+    await Promise.allSettled([scheduledApply, concurrentSave]);
+  }
+  expect((await scheduledApply).status).toBe(202);
+  expect(await (await concurrentSave).json()).toMatchObject({ data: { channel: "stable" } });
+  expect((await channel.PUT(request("/channel", "PUT", { channel: "beta" }))).status).toBe(200);
 
   const lookupStarted = Promise.withResolvers<void>();
   const pendingLookup = Promise.withResolvers<Response>();
