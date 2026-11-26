@@ -32,7 +32,7 @@ export function ClassicFormView({
   };
 
   return (
-    <section className="flex-1 overflow-y-auto px-4 py-3">
+    <section className="min-h-0 flex-1 overflow-y-auto px-4 py-3 handheld:overscroll-contain handheld:px-[var(--mobile-gutter)]">
       {appIdLabel ? (
         <div className="mb-3 border-b border-glass-border pb-3">
           <button className="cursor-default border-b-2 border-primary pb-1 text-base font-semibold text-primary">

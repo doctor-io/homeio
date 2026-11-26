@@ -94,8 +94,8 @@ export function ContainerSettingsPanel({
   }
 
   return (
-    <div className="flex h-full flex-col bg-card/90">
-      <section className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+    <div className="flex h-full min-h-0 flex-col bg-card/90 handheld:bg-[var(--mobile-canvas)]">
+      <section className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 handheld:overscroll-contain handheld:px-[var(--mobile-gutter)]">
         <div className="flex items-center gap-3 rounded-lg border border-glass-border bg-secondary/25 px-3 py-2.5">
           <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-glass-border bg-white/90">
             {iconUrl && iconUrlValid && !iconFailed ? (
@@ -111,10 +111,10 @@ export function ContainerSettingsPanel({
             )}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">
+            <p className="truncate text-sm font-semibold text-foreground handheld:whitespace-normal handheld:[overflow-wrap:anywhere]">
               {form.displayName.trim() || target.containerName}
             </p>
-            <p className="truncate text-2xs text-muted-foreground">
+            <p className="truncate text-2xs text-muted-foreground handheld:whitespace-normal handheld:[overflow-wrap:anywhere]">
               {target.containerName}
               {container?.image ? ` · ${container.image}` : ""}
             </p>
@@ -162,8 +162,8 @@ export function ContainerSettingsPanel({
         </Field>
       </section>
 
-      <footer className="flex items-center justify-between gap-2 border-t border-glass-border px-3 py-2.5">
-        <span className="min-w-0 truncate text-xs text-status-red">
+      <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-glass-border px-3 py-2.5 handheld:bg-[var(--mobile-panel)] handheld:px-[var(--mobile-gutter)]">
+        <span className="min-w-0 truncate text-xs text-status-red handheld:whitespace-normal handheld:[overflow-wrap:anywhere]">
           {saveMutation.error instanceof Error ? saveMutation.error.message : ""}
         </span>
         <div className="flex shrink-0 items-center gap-2">
@@ -174,7 +174,7 @@ export function ContainerSettingsPanel({
               void save(EMPTY_FORM);
             }}
             disabled={saveMutation.isPending}
-            className="cursor-pointer rounded-[var(--radius)] border border-glass-border bg-secondary/40 px-3.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className="cursor-pointer rounded-[var(--radius)] border border-glass-border bg-secondary/40 px-3.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary/60 disabled:cursor-not-allowed disabled:opacity-50 handheld:min-h-11"
           >
             Reset
           </button>
@@ -182,7 +182,7 @@ export function ContainerSettingsPanel({
             type="button"
             onClick={() => void save(form)}
             disabled={!canSave}
-            className="flex cursor-pointer items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex cursor-pointer items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 handheld:min-h-11"
           >
             {saveMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Save
@@ -241,7 +241,7 @@ function TextInput({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
-      className={`h-9 w-full rounded-lg border bg-secondary/35 px-2.5 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none ${
+      className={`h-9 w-full rounded-lg border bg-secondary/35 px-2.5 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none handheld:h-11 handheld:text-base ${
         invalid
           ? "border-status-red/70 focus:border-status-red"
           : "border-glass-border focus:border-primary/50"

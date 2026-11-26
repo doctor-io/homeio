@@ -105,6 +105,19 @@ describe("AppGrid context menu", () => {
     });
   });
 
+  it("anchors the mobile actions dialog and restores focus after closing", async () => {
+    render(<AppGrid mobile animationsEnabled={false} />);
+    const opener = screen.getByRole("button", { name: "Actions for Plex", hidden: true });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = screen.getByRole("dialog", { name: "Plex" });
+    expect(dialog.hasAttribute("data-mobile-app-menu")).toBe(true);
+    expect(screen.getByRole("button", { name: "Open Dashboard" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
   it("opens dashboard with default url mapping", async () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 

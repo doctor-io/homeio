@@ -30,9 +30,9 @@ export function UsbStorageDialog({ isOpen, onClose, onNavigateToUsb }: UsbStorag
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
+      <DialogContent mobileSheet
         showCloseButton={false}
-        className="max-w-[min(96vw,60rem)] gap-0 overflow-hidden rounded-[calc(var(--radius)+0.75rem)] border-glass-border bg-popover/96 p-0 shadow-2xl shadow-black/45 backdrop-blur-2xl"
+        className="max-w-[min(96vw,60rem)] gap-0 overflow-hidden rounded-[calc(var(--radius)+0.75rem)] border-glass-border bg-popover/96 p-0 shadow-2xl shadow-black/45 backdrop-blur-2xl handheld:grid-rows-[auto_minmax(0,1fr)]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>USB & Removable Storage</DialogTitle>
@@ -40,32 +40,33 @@ export function UsbStorageDialog({ isOpen, onClose, onNavigateToUsb }: UsbStorag
         </DialogHeader>
 
         {/* Window chrome title bar */}
-        <div className="flex h-11 shrink-0 select-none items-center gap-0 border-b border-glass-border/50 bg-popover/70 backdrop-blur-2xl">
+        <div className="flex h-11 shrink-0 select-none items-center gap-0 border-b border-glass-border/50 bg-popover/70 backdrop-blur-2xl handheld:grid handheld:h-auto handheld:min-h-12 handheld:grid-cols-[5rem_minmax(0,1fr)_5rem]">
           {/* Traffic lights */}
-          <div className="flex items-center gap-1.5 px-4">
+          <div className="flex items-center gap-1.5 px-4 handheld:px-2">
             <button
               onClick={onClose}
-              className="group flex size-3 cursor-pointer items-center justify-center rounded-full bg-[#ff5f57] transition-all hover:brightness-110"
+              className="group flex size-3 cursor-pointer items-center justify-center rounded-full bg-[#ff5f57] transition-all hover:brightness-110 handheld:size-[var(--mobile-touch-target)] handheld:bg-transparent handheld:text-muted-foreground"
               aria-label="Close"
             >
-              <X className="size-[7px] text-[#6a0002] opacity-0 transition-opacity group-hover:opacity-100" />
+              <X className="size-[7px] text-[#6a0002] opacity-0 transition-opacity group-hover:opacity-100 handheld:size-4 handheld:text-current handheld:opacity-100" />
             </button>
-            <span className="size-3 rounded-full bg-white/10" />
-            <span className="size-3 rounded-full bg-white/10" />
+            <span className="size-3 rounded-full bg-white/10 handheld:hidden" />
+            <span className="size-3 rounded-full bg-white/10 handheld:hidden" />
           </div>
 
           {/* Centered title */}
           <div className="flex flex-1 items-center justify-center">
-            <span className="text-xs font-medium text-foreground/80">USB & Removable Storage</span>
+            <span className="text-xs font-medium text-foreground/80 handheld:hidden">USB & Removable Storage</span>
+            <span className="hidden text-center text-sm font-semibold text-foreground/80 handheld:block">USB Storage</span>
           </div>
 
           {/* Right actions */}
-          <div className="flex items-center justify-end gap-2 px-4">
+          <div className="flex items-center justify-end gap-2 px-4 handheld:px-2">
             <button
               type="button"
               onClick={handleRefresh}
               disabled={isBusy}
-              className="inline-flex h-6 items-center gap-1 rounded-md border border-glass-border bg-background/80 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-6 items-center gap-1 rounded-md border border-glass-border bg-background/80 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 handheld:h-[var(--mobile-touch-target)] handheld:border-transparent handheld:bg-transparent handheld:px-1 handheld:text-xs"
             >
               <RefreshCw className="size-3" />
               Rescan
@@ -74,7 +75,7 @@ export function UsbStorageDialog({ isOpen, onClose, onNavigateToUsb }: UsbStorag
         </div>
 
         {/* Content */}
-        <div className="relative min-h-[50vh] overflow-y-auto p-5">
+        <div className="relative min-h-[50vh] overflow-y-auto p-5 handheld:min-h-0 handheld:overscroll-contain handheld:[&_button]:min-h-[var(--mobile-touch-target)]">
           {drives.length === 0 ? (
             <div className="flex min-h-52 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
               <HardDrive className="size-8 opacity-25" />
@@ -135,7 +136,7 @@ export function UsbStorageDialog({ isOpen, onClose, onNavigateToUsb }: UsbStorag
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-1.5 handheld:[&_button]:min-w-[var(--mobile-touch-target)]">
                     {isBusy ? (
                       <Loader2 className="size-4 animate-spin text-muted-foreground/40" />
                     ) : drive.isMounted ? (

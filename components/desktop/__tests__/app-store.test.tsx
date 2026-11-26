@@ -430,6 +430,13 @@ describe("AppStore", () => {
     expect(communityGroup.getAllByRole("button")).toHaveLength(25);
   });
 
+  it("applies the mobile category selector to the catalog", () => {
+    setup();
+    fireEvent.change(screen.getByRole("combobox", { name: "Category" }), { target: { value: "Media" } });
+    expect(useStoreCatalogMock).toHaveBeenLastCalledWith({ category: "Media", search: undefined, installedOnly: false });
+    expect(screen.getByText("Plex")).toBeTruthy();
+  });
+
   it("opens the source management dialog from the install menu", async () => {
     useStoreSourcesMock.mockReturnValue({
       data: [

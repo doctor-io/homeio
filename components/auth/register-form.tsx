@@ -119,25 +119,25 @@ export function RegisterForm() {
 
       {step === "welcome" && (
         <div>
-          <div className="mx-auto mb-6 flex w-fit flex-col items-center">
-            <div className="system-hero-surface flex size-[5.5rem] items-center justify-center">
+          <div className="mx-auto mb-6 flex w-fit flex-col items-center handheld:mx-0 handheld:mb-4">
+            <div className="system-hero-surface flex size-[5.5rem] items-center justify-center handheld:size-14 handheld:bg-[var(--mobile-panel)] handheld:shadow-none">
               <Image
                 src="/icon.png"
                 alt="Homeio"
                 width={64}
                 height={64}
-                className="relative z-10 size-[3.4rem] blur-[0.12px]"
+                className="relative z-10 size-[3.4rem] blur-[0.12px] handheld:size-10 handheld:blur-none"
               />
             </div>
-            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase">
+            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase handheld:hidden">
               Home server
             </div>
           </div>
 
-          <p className="text-[1.6rem] font-medium leading-[1.2] tracking-[-0.03em] text-foreground">
+          <h1 className="text-[1.6rem] font-medium leading-[1.2] tracking-[-0.03em] text-foreground handheld:text-left handheld:text-3xl">
             Welcome to your<br />Home Server
-          </p>
-          <p className="mx-auto mb-7 mt-2.5 max-w-[22rem] text-[12px] leading-relaxed text-muted-foreground/72">
+          </h1>
+          <p className="mx-auto mb-7 mt-2.5 max-w-[22rem] text-[12px] leading-relaxed text-muted-foreground/72 handheld:mx-0 handheld:text-left handheld:text-sm">
             Set up your private home server in minutes. All your files, apps,
             and settings — in one place.
           </p>
@@ -145,7 +145,7 @@ export function RegisterForm() {
           <button
             type="button"
             onClick={() => setStep("account")}
-            className="system-primary-action inline-flex cursor-pointer items-center gap-2 rounded-full px-8 py-2.5 text-sm font-medium transition-all hover:brightness-110"
+            className="system-primary-action inline-flex cursor-pointer items-center gap-2 rounded-full px-8 py-2.5 text-sm font-medium transition-all hover:brightness-110 handheld:min-h-11 handheld:w-full handheld:justify-center"
           >
             Get Started
             <ArrowRight className="size-4" />
@@ -155,17 +155,17 @@ export function RegisterForm() {
 
       {step === "account" && (
         <div>
-          <div className="mx-auto mb-5 flex w-fit flex-col items-center">
-            <div className="system-hero-surface flex size-22 items-center justify-center">
+          <div className="mx-auto mb-5 flex w-fit flex-col items-center handheld:mx-0 handheld:mb-4">
+            <div className="system-hero-surface flex size-22 items-center justify-center handheld:size-14 handheld:bg-[var(--mobile-panel)] handheld:shadow-none">
               <Image
                 src="/icon.png"
                 alt="Homeio"
                 width={64}
                 height={64}
-                className="relative z-10 size-[3.2rem] blur-[0.12px]"
+                className="relative z-10 size-[3.2rem] blur-[0.12px] handheld:size-10 handheld:blur-none"
               />
             </div>
-            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase">
+            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase handheld:hidden">
               Home server
             </div>
           </div>
@@ -187,13 +187,14 @@ export function RegisterForm() {
                   </div>
                   <input
                     id="username"
+                    aria-label="Admin username"
                     name="username"
                     type="text"
                     autoComplete="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Admin username"
-                    className="h-10 w-full border-0 bg-transparent px-1 text-[15px] text-foreground outline-none placeholder:text-muted-foreground/52"
+                    className="h-11 min-w-0 w-full border-0 bg-transparent px-1 text-base sm:h-10 sm:text-[15px] handheld:h-11 handheld:text-base text-foreground outline-none placeholder:text-muted-foreground/52"
                     required
                     autoFocus
                   />
@@ -205,18 +206,19 @@ export function RegisterForm() {
                   </div>
                   <input
                     id="password"
+                    aria-label="New password"
                     name="password"
                     type={isPasswordVisible ? "text" : "password"}
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="New password"
-                    className="h-10 w-full border-0 bg-transparent px-1 text-[15px] text-foreground outline-none placeholder:text-muted-foreground/52"
+                    className="h-11 min-w-0 w-full border-0 bg-transparent px-1 text-base sm:h-10 sm:text-[15px] handheld:h-11 handheld:text-base text-foreground outline-none placeholder:text-muted-foreground/52"
                     required
                   />
                   <button
                     type="button"
-                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="flex size-9 shrink-0 cursor-pointer handheld:size-11 items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     aria-label={isPasswordVisible ? "Hide password" : "Show password"}
                     onClick={() => setIsPasswordVisible((v) => !v)}
                   >
@@ -230,18 +232,19 @@ export function RegisterForm() {
                   </div>
                   <input
                     id="confirmPassword"
+                    aria-label="Confirm new password"
                     name="confirmPassword"
                     type={isConfirmPasswordVisible ? "text" : "password"}
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
-                    className="h-10 w-full border-0 bg-transparent px-1 text-[15px] text-foreground outline-none placeholder:text-muted-foreground/52"
+                    className="h-11 min-w-0 w-full border-0 bg-transparent px-1 text-base sm:h-10 sm:text-[15px] handheld:h-11 handheld:text-base text-foreground outline-none placeholder:text-muted-foreground/52"
                     required
                   />
                   <button
                     type="button"
-                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="flex size-9 shrink-0 cursor-pointer handheld:size-11 items-center justify-center rounded-[var(--system-radius-icon)] text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     aria-label={isConfirmPasswordVisible ? "Hide confirm password" : "Show confirm password"}
                     onClick={() => setIsConfirmPasswordVisible((v) => !v)}
                   >
@@ -287,16 +290,16 @@ export function RegisterForm() {
       {step === "setup" && (
         <div>
           <div className="mx-auto mb-4 flex w-fit flex-col items-center">
-            <div className="system-hero-surface flex size-22 items-center justify-center">
+            <div className="system-hero-surface flex size-22 items-center justify-center handheld:size-14 handheld:bg-[var(--mobile-panel)] handheld:shadow-none">
               <Image
                 src="/icon.png"
                 alt="Homeio"
                 width={64}
                 height={64}
-                className="relative z-10 size-[3.2rem] blur-[0.12px]"
+                className="relative z-10 size-[3.2rem] blur-[0.12px] handheld:size-10 handheld:blur-none"
               />
             </div>
-            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase">
+            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase handheld:hidden">
               Home server
             </div>
           </div>
@@ -344,16 +347,16 @@ export function RegisterForm() {
       {step === "done" && (
         <div>
           <div className="mx-auto mb-6 flex w-fit flex-col items-center">
-            <div className="system-hero-surface flex size-[5.5rem] items-center justify-center">
+            <div className="system-hero-surface flex size-[5.5rem] items-center justify-center handheld:size-14 handheld:bg-[var(--mobile-panel)] handheld:shadow-none">
               <Image
                 src="/icon.png"
                 alt="Homeio"
                 width={64}
                 height={64}
-                className="relative z-10 size-[3.4rem] blur-[0.12px]"
+                className="relative z-10 size-[3.4rem] blur-[0.12px] handheld:size-10 handheld:blur-none"
               />
             </div>
-            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase">
+            <div className="system-pill-surface mt-2 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/54 uppercase handheld:hidden">
               Home server
             </div>
           </div>

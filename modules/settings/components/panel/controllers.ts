@@ -26,28 +26,6 @@ import {
   parseSecurityDraft,
 } from "@/modules/settings/components/panel/save-policies";
 
-export function useActiveSettingsSection(
-  selectedSection: string | null | undefined,
-  availableSectionIds: SettingsSectionId[],
-) {
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>(
-    selectedSection && availableSectionIds.includes(selectedSection as SettingsSectionId)
-      ? (selectedSection as SettingsSectionId)
-      : "general",
-  );
-
-  useEffect(() => {
-    if (!selectedSection) return;
-    if (!availableSectionIds.includes(selectedSection as SettingsSectionId)) return;
-    setActiveSection(selectedSection as SettingsSectionId);
-  }, [availableSectionIds, selectedSection]);
-
-  return {
-    activeSection,
-    setActiveSection,
-  };
-}
-
 export function useGeneralSettingsController(
   generalPreferences: SettingsBackend["generalPreferences"],
   saveGeneralPreferences: SettingsBackend["actions"]["saveGeneralPreferences"],

@@ -80,7 +80,7 @@ function PreferenceRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3", disabled && "opacity-50")}>
+    <div className={cn(SETTINGS_PANEL_INSET, "flex flex-col items-stretch gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4", disabled && "opacity-50")}>
       <div className="min-w-0">
         <div className="text-sm text-foreground">{label}</div>
         {description && <div className="mt-0.5 text-[11px] text-muted-foreground/70">{description}</div>}
@@ -163,7 +163,7 @@ export function GeneralSection({
             value={preferences.hostname}
             onChange={(e) => onHostnameChange(e.target.value)}
             disabled={capabilities.hostname.disabled}
-            className="h-8 w-44 rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground placeholder:text-muted-foreground/60 transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
+            className="min-h-11 w-full md:min-h-0 md:h-8 md:w-44 rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground placeholder:text-muted-foreground/60 transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
           />
         </PreferenceRow>
 
@@ -176,7 +176,7 @@ export function GeneralSection({
             value={preferences.timezone}
             onChange={(e) => onTimezoneChange(e.target.value)}
             disabled={capabilities.timezone.disabled}
-            className="h-8 w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
+            className="min-h-11 w-full md:min-h-0 md:h-8 md:w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
           >
             {preferences.timezoneOptions.map((tz) => (
               <option key={tz} value={tz}>{tz}</option>
@@ -195,7 +195,7 @@ export function GeneralSection({
             value={languageValue}
             onChange={(e) => onLanguageChange(e.target.value)}
             disabled={capabilities.language.disabled}
-            className="h-8 w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
+            className="min-h-11 w-full md:min-h-0 md:h-8 md:w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
           >
             {languageOptions.map((lang) => (
               <option key={lang} value={lang}>{lang}</option>
@@ -212,7 +212,7 @@ export function GeneralSection({
             value={timeFormatValue}
             onChange={(e) => onTimeFormatChange(e.target.value)}
             disabled={capabilities.language.disabled}
-            className="h-8 w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
+            className="min-h-11 w-full md:min-h-0 md:h-8 md:w-44 cursor-pointer appearance-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground transition-all focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed"
           >
             {timeFormatOptions.map((option) => (
               <option key={option} value={option}>{option}</option>

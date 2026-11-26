@@ -21,10 +21,18 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <QueryClientProvider client={queryClient}>
         {children}
-        <Toaster position="bottom-center" offset="5.75rem" />
+        <Toaster
+          position="bottom-center"
+          offset="max(5.75rem, calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 0.75rem))"
+          mobileOffset={{
+            bottom: "calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 0.75rem)",
+            left: "max(1rem, env(safe-area-inset-left))",
+            right: "max(1rem, env(safe-area-inset-right))",
+          }}
+        />
       </QueryClientProvider>
     </ThemeProvider>
   );

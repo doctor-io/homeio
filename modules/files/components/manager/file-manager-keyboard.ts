@@ -10,6 +10,7 @@ import type {
 } from "@/modules/files/components/manager/file-manager-state";
 
 type UseFileManagerKeyboardArgs = {
+  enabled: boolean;
   clipboardState: ClipboardState | null;
   createEntryDialogOpen: boolean;
   currentPath: string[];
@@ -36,6 +37,7 @@ type UseFileManagerKeyboardArgs = {
 };
 
 export function useFileManagerKeyboard({
+  enabled,
   clipboardState,
   createEntryDialogOpen,
   currentPath,
@@ -77,6 +79,8 @@ export function useFileManagerKeyboard({
   });
 
   useEffect(() => {
+    if (!enabled) return;
+
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
@@ -105,20 +109,20 @@ export function useFileManagerKeyboard({
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const currentIndex = selectedFile
-          ? sortedEntries.findIndex((entry) => entry.name === selectedFile)
+          ? sortedEntries.findIndex((entry) => entry.path === selectedFile)
           : -1;
         const nextIndex =
           event.key === "ArrowDown"
             ? Math.min(currentIndex + 1, sortedEntries.length - 1)
             : Math.max(currentIndex - 1, 0);
-        dispatch({ type: "SELECT_FILE", name: sortedEntries[nextIndex].name });
-        dispatch({ type: "SET_SELECTED_FILES", files: new Set([sortedEntries[nextIndex].name]) });
+        dispatch({ type: "SELECT_FILE", path: sortedEntries[nextIndex].path });
+        dispatch({ type: "SET_SELECTED_FILES", files: new Set([sortedEntries[nextIndex].path]) });
         return;
       }
 
       if (event.key === "Enter" || event.key === "ArrowRight") {
         if (!selectedFile) return;
-        const entry = sortedEntries.find((candidate) => candidate.name === selectedFile);
+        const entry = sortedEntries.find((candidate) => candidate.path === selectedFile);
         if (!entry) return;
         event.preventDefault();
         navigateToEvent(entry);
@@ -134,12 +138,11 @@ export function useFileManagerKeyboard({
       }
 
       if (event.key === "Delete") {
-        const names =
-          selectedFiles.size > 0 ? [...selectedFiles] : selectedFile ? [selectedFile] : [];
-        if (names.length === 0) return;
+        const paths = selectedFiles.size > 0 ? [...selectedFiles] : selectedFile ? [selectedFile] : [];
+        if (paths.length === 0) return;
         event.preventDefault();
-        for (const name of names) {
-          const entry = sortedEntries.find((candidate) => candidate.name === name);
+        for (const path of paths) {
+          const entry = sortedEntries.find((candidate) => candidate.path === path);
           if (!entry) continue;
           if (isTrashView) deleteFromTrashEvent(entry);
           else moveToTrashEvent(entry);
@@ -149,7 +152,7 @@ export function useFileManagerKeyboard({
 
       if (event.key === "F2") {
         if (!selectedFile || isTrashView) return;
-        const entry = sortedEntries.find((candidate) => candidate.name === selectedFile);
+        const entry = sortedEntries.find((candidate) => candidate.path === selectedFile);
         if (!entry) return;
         event.preventDefault();
         renameEntryEvent(entry);
@@ -163,10 +166,10 @@ export function useFileManagerKeyboard({
         event.preventDefault();
         dispatch({
           type: "SET_SELECTED_FILES",
-          files: new Set(sortedEntries.map((entry) => entry.name)),
+          files: new Set(sortedEntries.map((entry) => entry.path)),
         });
         if (sortedEntries.length > 0) {
-          dispatch({ type: "SELECT_FILE", name: sortedEntries[0].name });
+          dispatch({ type: "SELECT_FILE", path: sortedEntries[0].path });
         }
         return;
       }
@@ -175,9 +178,9 @@ export function useFileManagerKeyboard({
         if (isTrashView) return;
         const entries =
           selectedFiles.size > 0
-            ? sortedEntries.filter((entry) => selectedFiles.has(entry.name))
+            ? sortedEntries.filter((entry) => selectedFiles.has(entry.path))
             : selectedFile
-              ? sortedEntries.filter((entry) => entry.name === selectedFile)
+              ? sortedEntries.filter((entry) => entry.path === selectedFile)
               : [];
         if (entries.length === 0) return;
         event.preventDefault();
@@ -195,6 +198,7 @@ export function useFileManagerKeyboard({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    enabled,
     clipboardState,
     createEntryDialogOpen,
     currentPath,

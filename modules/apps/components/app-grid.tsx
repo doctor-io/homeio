@@ -6,9 +6,13 @@ import { AppGridContextMenu } from "@/modules/apps/components/app-grid-menu";
 import type { AppActionTarget } from "@/modules/apps/components/app-grid-presenters";
 import { UninstallAppDialog } from "@/modules/apps/components/uninstall-app-dialog";
 import { X } from "@/components/icons/platform-icons";
+import { cn } from "@/lib/utils";
 export type { AppActionTarget } from "@/modules/apps/components/app-grid-presenters";
 
 type AppGridProps = {
+  className?: string;
+  mobile?: boolean;
+  onBrowseStore?: () => void;
   iconSize?: "small" | "medium" | "large";
   animationsEnabled?: boolean;
   onOpenDashboard?: (target: AppActionTarget) => void;
@@ -19,6 +23,9 @@ type AppGridProps = {
 };
 
 export function AppGrid({
+  className,
+  mobile = false,
+  onBrowseStore,
   iconSize = "medium",
   animationsEnabled = true,
   onOpenDashboard,
@@ -37,7 +44,7 @@ export function AppGrid({
 
   return (
     <section
-      className="flex-1 px-6 pt-4 pb-6 overflow-y-auto"
+      className={cn("min-h-0 flex-1", mobile ? "flex flex-col overflow-hidden px-[var(--mobile-gutter)]" : "overflow-y-auto px-6 pt-4 pb-6", className)}
       onClick={controller.closeContextMenu}
     >
       {controller.actionError ? (
@@ -53,6 +60,8 @@ export function AppGrid({
         </div>
       ) : null}
       <AppGridContent
+        mobile={mobile}
+        onBrowseStore={onBrowseStore}
         activeAppId={controller.activeAppId}
         activeOperationsCount={controller.activeOperationsCount}
         animationsEnabled={animationsEnabled}
@@ -67,7 +76,7 @@ export function AppGrid({
         primaryOperation={controller.primaryOperation}
       />
 
-      {controller.contextMenu ? (
+      {controller.contextMenu && !mobile ? (
         <div
           className="fixed inset-0 z-[219]"
           onClick={controller.closeContextMenu}
@@ -79,8 +88,11 @@ export function AppGrid({
           app={controller.menuApp}
           hasDashboardUrl={controller.menuHasDashboardUrl}
           isBusy={controller.isMenuAppBusy}
+          anchor={controller.contextMenu.anchor}
+          opener={controller.contextMenu.opener}
           x={controller.contextMenu.x}
           y={controller.contextMenu.y}
+          onClose={mobile ? controller.closeContextMenu : undefined}
           onAction={(action) => {
             void controller.handleMenuAction(action);
           }}

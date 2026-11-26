@@ -60,16 +60,16 @@ export function AddNetworkShareDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={false} className="max-w-[34rem] gap-0 border-glass-border bg-popover/96 p-0 shadow-2xl shadow-black/45 backdrop-blur-2xl">
+      <DialogContent mobileSheet showCloseButton={false} className="max-w-[34rem] gap-0 border-glass-border bg-popover/96 p-0 shadow-2xl shadow-black/45 backdrop-blur-2xl handheld:grid-rows-[auto_minmax(0,1fr)_auto]">
         <DialogHeader className="sr-only">
           <DialogTitle>Add Network Share</DialogTitle>
           <DialogDescription>Connect to an SMB share</DialogDescription>
         </DialogHeader>
 
         {/* Window chrome title bar */}
-        <div className="flex h-11 shrink-0 select-none items-center gap-0 border-b border-glass-border/50 bg-popover/70 backdrop-blur-2xl">
+        <div className="flex h-11 shrink-0 select-none items-center gap-0 border-b border-glass-border/50 bg-popover/70 backdrop-blur-2xl handheld:grid handheld:h-auto handheld:min-h-12 handheld:grid-cols-[5rem_minmax(0,1fr)_5rem]">
           {/* Traffic lights */}
-          <div className="flex items-center gap-1.5 px-4">
+          <div className="flex items-center gap-1.5 px-4 handheld:hidden">
             <button
               onClick={onClose}
               className="group flex size-3 cursor-pointer items-center justify-center rounded-full bg-[#ff5f57] transition-all hover:brightness-110"
@@ -83,15 +83,15 @@ export function AddNetworkShareDialog({
 
           {/* Centered title */}
           <div className="flex flex-1 items-center justify-center">
-            <span className="text-xs font-medium text-foreground/80">Add Network Share</span>
+            <span className="text-xs font-medium text-foreground/80 handheld:text-center handheld:text-sm handheld:font-semibold">Add Network Share</span>
           </div>
 
           {/* Right action — back button to balance */}
-          <div className="flex items-center justify-end px-4">
+          <div className="flex items-center justify-end px-4 handheld:order-first handheld:justify-start handheld:px-2">
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-6 items-center gap-1 rounded-md border border-glass-border bg-background/80 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground"
+              className="inline-flex h-6 items-center gap-1 rounded-md border border-glass-border bg-background/80 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground handheld:h-[var(--mobile-touch-target)] handheld:border-transparent handheld:bg-transparent handheld:text-xs handheld:text-[var(--mobile-accent-text)]"
               aria-label="Back"
             >
               <ArrowLeft className="size-3" />
@@ -100,7 +100,7 @@ export function AddNetworkShareDialog({
           </div>
         </div>
 
-        <div className="space-y-5 px-5 py-5">
+        <div className="space-y-5 px-5 py-5 handheld:overflow-y-auto handheld:overscroll-contain handheld:[&_button]:min-h-[var(--mobile-touch-target)] handheld:[&_input]:min-h-[var(--mobile-touch-target)] handheld:[&_input]:text-base">
           {/* Server */}
           <div>
             <FieldLabel>Server</FieldLabel>
@@ -185,7 +185,7 @@ export function AddNetworkShareDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-glass-border/60 px-5 py-4">
+        <div className="flex items-center justify-end gap-2 border-t border-glass-border/60 px-5 py-4 handheld:py-2 handheld:[&_button]:min-h-[var(--mobile-touch-target)]">
           <button
             type="button"
             onClick={onClose}

@@ -25,6 +25,17 @@ describe("middleware auth guard", () => {
     resetAuthStatusCacheForTests();
   });
 
+  it.each(["/manifest.webmanifest", "/icon-192.png", "/icon.png", "/apple-touch-icon.png"])(
+    "allows the public installation asset %s without a session",
+    async (path) => {
+      const fetchSpy = vi.spyOn(global, "fetch");
+      const response = await proxy(new NextRequest(`http://localhost${path}`));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
   it("verifies a valid token", async () => {
     const token = createToken(
       "session-1",

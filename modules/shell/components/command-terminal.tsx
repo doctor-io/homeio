@@ -519,9 +519,9 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div ref={rootRef} className="flex h-full flex-col bg-card/90 select-text">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-card/90 select-text handheld:bg-[var(--mobile-canvas)]">
       {/* ── Header bar ───────────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-glass-border bg-popover/70 px-3 py-1.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-glass-border bg-popover/70 px-3 py-1.5 handheld:border-[var(--mobile-divider)] handheld:bg-[var(--mobile-panel)] handheld:px-[var(--mobile-gutter)] handheld:py-0.5">
         {/* Status indicator dot */}
         <span
           className={`size-2 shrink-0 rounded-[var(--radius)] transition-colors ${
@@ -533,17 +533,17 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
           }`}
         />
         <ChevronRight className="size-3 text-muted-foreground shrink-0" />
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={`${USER}@${HOSTNAME}`}>
           {USER}@{HOSTNAME}
         </span>
 
         {/* Right-side action buttons */}
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={() => setSearchOpen((o) => !o)}
-                className={`rounded p-1 transition-colors cursor-pointer ${
+                className={`rounded p-1 transition-colors cursor-pointer handheld:grid handheld:size-11 handheld:place-items-center ${
                   searchOpen
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -559,7 +559,7 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
             <TooltipTrigger asChild>
               <button
                 onClick={handleCopyAll}
-                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer handheld:grid handheld:size-11 handheld:place-items-center"
                 aria-label="Copy all terminal output"
               >
                 <Copy className="size-3.5" />
@@ -571,7 +571,7 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
             <TooltipTrigger asChild>
               <button
                 onClick={handleDownloadTranscript}
-                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer handheld:grid handheld:size-11 handheld:place-items-center"
                 aria-label="Download terminal transcript"
               >
                 <Download className="size-3.5" />
@@ -584,7 +584,7 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
 
       {/* ── Search bar (shown when searchOpen) ───────────────────────────── */}
       {searchOpen && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-glass-border bg-popover/50 px-3 py-1.5">
+        <div className="flex shrink-0 items-center gap-2 border-b border-glass-border bg-popover/50 px-3 py-1.5 handheld:gap-1 handheld:px-[var(--mobile-gutter)] handheld:py-0.5">
           <Search className="size-3.5 text-muted-foreground shrink-0" />
           <input
             ref={searchInputRef}
@@ -609,12 +609,13 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
               }
             }}
             placeholder="Search output…"
-            className="flex-1 bg-transparent font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Search output"
+            className="min-w-0 flex-1 bg-transparent font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground handheld:min-h-11 handheld:text-base"
             spellCheck={false}
           />
 
           {searchQuery.trim() && (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+            <span className="shrink-0 font-mono text-xs text-muted-foreground handheld:sr-only" role="status">
               {searchMatchLineIndices.length > 0
                 ? `${searchMatchIndex + 1}/${searchMatchLineIndices.length}`
                 : "no matches"}
@@ -624,14 +625,14 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
           <div className="flex items-center">
             <button
               onClick={() => navigateSearchMatch("prev")}
-              className="rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+              className="rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer handheld:size-11"
               title="Previous match (Shift+Enter)"
             >
               ↑
             </button>
             <button
               onClick={() => navigateSearchMatch("next")}
-              className="rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+              className="rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer handheld:size-11"
               title="Next match (Enter)"
             >
               ↓
@@ -644,7 +645,7 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
               setSearchQuery("");
               scheduleFocusInput();
             }}
-            className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+            className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer handheld:grid handheld:size-11 handheld:place-items-center"
             aria-label="Close search"
           >
             <X className="size-3.5" />
@@ -655,7 +656,7 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
       {/* ── Output area ──────────────────────────────────────────────────── */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 font-mono text-sm leading-5 cursor-text"
+        className="min-h-0 flex-1 overflow-y-auto p-4 font-mono text-sm leading-5 cursor-text handheld:overscroll-contain handheld:px-[var(--mobile-gutter)]"
         onClick={readOnly ? undefined : focusInput}
       >
         {lines.map((line, index) => {
@@ -705,7 +706,7 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex items-center">
-            <span className="text-status-green shrink-0">{getPrompt(cwd)}</span>
+            <span className="text-status-green shrink-0 handheld:max-w-[45%] handheld:truncate">{getPrompt(cwd)}</span>
             <span>&nbsp;</span>
             <input
               ref={inputRef}
@@ -718,7 +719,9 @@ Shortcuts: Ctrl+C interrupt  Ctrl+L clear  Ctrl+F search  Ctrl+W delete word`,
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={handleInputBlur}
-              className="flex-1 bg-transparent text-foreground outline-none font-mono text-sm caret-primary"
+              className="min-w-0 flex-1 bg-transparent text-foreground outline-none font-mono text-sm caret-primary handheld:min-h-11 handheld:text-base"
+              aria-label="Terminal command"
+              enterKeyHint="send"
               autoFocus
               spellCheck={false}
               autoComplete="off"

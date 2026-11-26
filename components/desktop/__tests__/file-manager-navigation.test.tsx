@@ -1,12 +1,15 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  fileManagerElement,
   mockDirectory,
   mockUseFilesDirectory,
   mockUseCurrentUser,
+  mockUseMoveToTrash,
   mockUseNetworkShares,
+  mockUseSearchFiles,
   renderFileManager,
   resetFileManagerMocks,
 } from "./file-manager-test-utils";
@@ -93,6 +96,66 @@ describe("FileManager navigation", () => {
     return renderFileManager().then(() => {
       expect(screen.getByText("1.8 TB / 4 TB")).toBeTruthy();
     });
+  });
+
+  it("moves only the selected paths to Trash when mobile rows have the same name", async () => {
+    const originalMatchMedia = window.matchMedia;
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      ...originalMatchMedia(query),
+      matches: query.includes("pointer: coarse"),
+    }));
+    const moveToTrash = vi.fn().mockResolvedValue({ trashPath: "Trash/file" });
+    mockUseMoveToTrash.mockReturnValue({ mutateAsync: moveToTrash, isPending: false });
+    mockUseSearchFiles.mockReturnValue(mockDirectory([
+      { name: "notes.txt", path: "A/notes.txt", type: "file" },
+      { name: "notes.txt", path: "B/notes.txt", type: "file" },
+      { name: "notes.txt", path: "C/notes.txt", type: "file" },
+    ]));
+
+    try {
+      await renderFileManager();
+      fireEvent.click(screen.getByRole("button", { name: "Search everywhere" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Search files" }), { target: { value: "notes" } });
+      const secondNotes = await screen.findByRole("button", { name: "notes.txt, B" });
+      const firstNotes = screen.getByRole("button", { name: "notes.txt, A" });
+      const thirdNotes = screen.getByRole("button", { name: "notes.txt, C" });
+      expect(secondNotes.textContent).toContain("B");
+      fireEvent.click(screen.getByRole("button", { name: "Select" }));
+      fireEvent.click(secondNotes);
+      expect(firstNotes.getAttribute("aria-pressed")).toBe("false");
+      expect(secondNotes.getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(thirdNotes);
+      fireEvent.click(screen.getByRole("button", { name: "Trash selected" }));
+
+      await waitFor(() => expect(moveToTrash.mock.calls).toEqual([
+        [{ path: "B/notes.txt" }],
+        [{ path: "C/notes.txt" }],
+      ]));
+    } finally {
+      media.mockRestore();
+    }
+  });
+
+  it("ignores Delete while Files is hidden or its last selection is deselected", async () => {
+    const moveToTrash = vi.fn().mockResolvedValue({ trashPath: "Trash/notes.txt" });
+    mockUseMoveToTrash.mockReturnValue({ mutateAsync: moveToTrash, isPending: false });
+    mockUseFilesDirectory.mockReturnValue(mockDirectory([{ name: "notes.txt", path: "notes.txt", type: "file" }]));
+
+    const view = render(fileManagerElement());
+    const notes = screen.getByRole("button", { name: "notes.txt" });
+    fireEvent.click(notes);
+    view.rerender(fileManagerElement(false));
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(moveToTrash).not.toHaveBeenCalled();
+
+    view.rerender(fileManagerElement());
+    fireEvent.click(notes, { ctrlKey: true });
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(moveToTrash).not.toHaveBeenCalled();
+
+    fireEvent.click(notes);
+    fireEvent.keyDown(window, { key: "Delete" });
+    await waitFor(() => expect(moveToTrash).toHaveBeenCalledExactlyOnceWith({ path: "notes.txt" }));
   });
 
   it("shows Empty Trash in header and deletes all trash entries", async () => {
