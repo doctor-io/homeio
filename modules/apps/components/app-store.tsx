@@ -190,13 +190,13 @@ function CatalogSidebar({
   return (
     <aside id={id} className={cn("mx-4 max-[360px]:mx-3 mb-2 flex min-w-0 shrink-0 flex-row gap-2 border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-none md:m-2 md:w-48 md:flex-col md:gap-0 md:overflow-y-auto md:border md:bg-card/78 md:px-2 md:py-3 md:shadow-sm md:backdrop-blur-xl handheld:!mx-[var(--mobile-gutter)] handheld:!mb-2 handheld:!w-auto handheld:!flex-row handheld:!gap-2 handheld:!overflow-visible handheld:!border-0 handheld:!bg-transparent handheld:!px-0 handheld:!py-0 handheld:!shadow-none handheld:!backdrop-blur-none", STORE_PANEL_SHELL, !mobileExpanded && "handheld:!hidden")}>
       <label className="relative flex min-w-0 flex-1 flex-col gap-1.5 md:mb-3 md:flex-none md:px-3 handheld:!mb-0 handheld:!flex-1 handheld:!px-0">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
+        <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground md:font-sans md:text-[10px] md:font-semibold md:tracking-[0.16em] md:text-muted-foreground/50 handheld:!font-mono handheld:!text-[11px] handheld:!font-medium handheld:!tracking-wider handheld:!text-muted-foreground">
           Source
         </span>
         <select
           value={selectedSourceId}
           onChange={(event) => onSelectSource(event.target.value)}
-          className="w-full rounded-lg border border-glass-border bg-background/55 px-2 py-1.5 text-xs text-foreground focus-visible:outline-primary"
+          className="min-h-11 w-full appearance-none rounded-lg border border-[var(--mobile-divider)] bg-[var(--mobile-panel)] pr-8 pl-3 text-base text-foreground focus-visible:outline-primary md:min-h-0 md:appearance-auto md:border-glass-border md:bg-background/55 md:px-2 md:py-1.5 md:text-xs handheld:!min-h-11 handheld:!appearance-none handheld:!border-[var(--mobile-divider)] handheld:!bg-[var(--mobile-panel)] handheld:!pr-8 handheld:!pl-3 handheld:!py-0 handheld:!text-base"
         >
           <option value="">All Sources</option>
           {sources.map((source) => (
@@ -204,6 +204,7 @@ function CatalogSidebar({
           ))}
           <option value={CUSTOM_STORE_SOURCE_ID}>Custom</option>
         </select>
+        <ChevronDownRegular className="pointer-events-none absolute right-3 bottom-3.5 size-4 text-muted-foreground md:hidden handheld:!block" aria-hidden="true" />
       </label>
       <label className="relative flex min-w-0 flex-1 flex-col gap-1.5 md:hidden handheld:!flex">
         <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Category</span>
