@@ -98,7 +98,8 @@ export type FileManagerAction =
   | { type: "NAVIGATE_TO_PATH"; path: string[] }
   | { type: "NAVIGATE_UP" }
   | { type: "SET_VIEW_MODE"; mode: ViewMode }
-  | { type: "SELECT_FILE"; name: string | null }
+  | { type: "SELECT_FILE"; path: string | null }
+  | { type: "TOGGLE_FILE_SELECTION"; path: string }
   | { type: "SET_SELECTED_FILES"; files: Set<string> }
   | { type: "CLEAR_SELECTION" }
   | { type: "SET_SEARCH_QUERY"; query: string }
@@ -177,7 +178,15 @@ export function fileManagerReducer(
     case "SET_VIEW_MODE":
       return { ...state, viewMode: action.mode };
     case "SELECT_FILE":
-      return { ...state, selectedFile: action.name };
+      return { ...state, selectedFile: action.path };
+    case "TOGGLE_FILE_SELECTION": {
+      const selectedFiles = new Set(state.selectedFiles);
+      if (selectedFiles.delete(action.path)) {
+        return { ...state, selectedFile: [...selectedFiles].at(-1) ?? null, selectedFiles };
+      }
+      selectedFiles.add(action.path);
+      return { ...state, selectedFile: action.path, selectedFiles };
+    }
     case "SET_SELECTED_FILES":
       return { ...state, selectedFiles: action.files };
     case "CLEAR_SELECTION":
@@ -210,8 +219,8 @@ export function fileManagerReducer(
       return {
         ...state,
         openFile: { path: action.path, entry: action.entry },
-        selectedFile: action.entry.name,
-        selectedFiles: new Set([action.entry.name]),
+        selectedFile: action.entry.path,
+        selectedFiles: new Set([action.entry.path]),
         editorNotice: null,
       };
     case "CLOSE_FILE":

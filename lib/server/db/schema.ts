@@ -238,6 +238,7 @@ export const settings = pgTable("settings", {
   cloudflareApiTokenTag: text("cloudflare_api_token_tag"),
   telemetryEnabled: boolean("telemetry_enabled").notNull().default(true),
   telemetryInstanceId: text("telemetry_instance_id"),
+  updateChannel: text("update_channel", { enum: ["stable", "beta"] }).notNull().default("stable"),
 });
 
 export const filesGoogleDriveTokens = pgTable(

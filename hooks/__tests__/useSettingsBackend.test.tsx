@@ -424,7 +424,7 @@ describe("useSettingsBackend", () => {
       if (url === "/api/v1/system/updates") {
         return mockOkJson({ currentVersion: "0.1.79", latestVersion: "0.1.80", updateAvailable: true, checkedAt: "2026-03-11T10:00:00.000Z" });
       }
-      if (url === "/api/v1/system/updates/apply" && init?.method === "POST") {
+      if (url === "/api/v1/system/updates/apply?version=0.1.80" && init?.method === "POST") {
         return mockOkJson({ action: "update", accepted: true });
       }
       return null;
@@ -435,6 +435,7 @@ describe("useSettingsBackend", () => {
       wrapper: createWrapper(client),
     });
 
+    await waitFor(() => expect(result.current.updates.latestVersion).toBe("0.1.80"));
     await act(async () => {
       await expect(result.current.actions.applySystemUpdate()).resolves.toBeUndefined();
     });
@@ -446,7 +447,7 @@ describe("useSettingsBackend", () => {
       requestDispatchedAt: expect.any(String),
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/system/updates/apply",
+      "/api/v1/system/updates/apply?version=0.1.80",
       {
         method: "POST",
       },
@@ -459,7 +460,7 @@ describe("useSettingsBackend", () => {
       if (url === "/api/v1/system/updates") {
         return mockOkJson({ currentVersion: "0.1.81", latestVersion: "0.1.82", updateAvailable: true, checkedAt: "2026-03-11T21:49:04.000Z" });
       }
-      if (url === "/api/v1/system/updates/apply" && init?.method === "POST") {
+      if (url === "/api/v1/system/updates/apply?version=0.1.82" && init?.method === "POST") {
         return mockOkJson({ action: "update", accepted: true });
       }
       return null;
@@ -470,6 +471,7 @@ describe("useSettingsBackend", () => {
       wrapper: createWrapper(client),
     });
 
+    await waitFor(() => expect(result.current.updates.latestVersion).toBe("0.1.82"));
     await act(async () => {
       await expect(result.current.actions.applySystemUpdate()).resolves.toBeUndefined();
     });
@@ -488,7 +490,7 @@ describe("useSettingsBackend", () => {
       if (url === "/api/v1/system/updates") {
         return mockOkJson({ currentVersion: "0.1.81", latestVersion: "0.1.82", updateAvailable: true, checkedAt: "2026-03-11T21:49:04.000Z" });
       }
-      if (url === "/api/v1/system/updates/apply" && init?.method === "POST") {
+      if (url === "/api/v1/system/updates/apply?version=0.1.82" && init?.method === "POST") {
         return { ok: false, status: 500, json: async () => ({ error: "Update runner failed" }) };
       }
       return null;
@@ -499,6 +501,7 @@ describe("useSettingsBackend", () => {
       wrapper: createWrapper(client),
     });
 
+    await waitFor(() => expect(result.current.updates.latestVersion).toBe("0.1.82"));
     await act(async () => {
       await expect(result.current.actions.applySystemUpdate()).resolves.toBeUndefined();
     });

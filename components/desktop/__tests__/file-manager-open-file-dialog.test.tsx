@@ -1,14 +1,19 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  fileManagerElement,
   mockDirectory,
   mockUseFileContent,
   mockUseFilesDirectory,
   renderFileManager,
   resetFileManagerMocks,
 } from "./file-manager-test-utils";
+
+vi.mock("@/modules/files/components/content/file-manager-editor-pane", () => ({
+  MonacoEditorPane: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => <textarea aria-label="Editor" value={value} onChange={(event) => onChange(event.target.value)} />,
+}));
 
 describe("FileManager open-file dialog", () => {
   beforeEach(resetFileManagerMocks);
@@ -39,12 +44,32 @@ describe("FileManager open-file dialog", () => {
     });
 
     await renderFileManager();
-    fireEvent.doubleClick(screen.getByRole("button", { name: /notes\.txt/i }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "notes.txt" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /notes\.txt/i })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "notes.txt" })).toBeTruthy();
     });
     expect(screen.queryByRole("button", { name: "Back to files" })).toBeNull();
+  });
+
+  it("hides a portaled editor while inactive and restores it on return", async () => {
+    mockUseFilesDirectory.mockReturnValue(mockDirectory([{ name: "notes.txt", path: "notes.txt", type: "file" }]));
+    mockUseFileContent.mockImplementation((path: string | null) => path === "notes.txt" ? {
+      data: { root: "/DATA", path, name: path, ext: "txt", mode: "text", mimeType: "text/plain", sizeBytes: 12, modifiedAt: "2026-02-27T00:00:00.000Z", mtimeMs: 1234, content: "hello world" },
+      isLoading: false, isError: false, error: null,
+    } : { data: null, isLoading: false, isError: false, error: null });
+    const view = render(fileManagerElement());
+    fireEvent.doubleClick(screen.getByRole("button", { name: "notes.txt" }));
+    expect(await screen.findByRole("dialog", { name: "notes.txt" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Editor"), { target: { value: "unsaved draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("button", { name: "Keep editing" })).toBeTruthy();
+    view.rerender(fileManagerElement(false));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "notes.txt" })).toBeNull());
+    view.rerender(fileManagerElement(true));
+    expect(await screen.findByRole("dialog", { name: "notes.txt" })).toBeTruthy();
+    expect(screen.getByDisplayValue("unsaved draft")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Keep editing" })).toBeTruthy();
   });
 
   it("ignores stale text preview data when opening an audio file", async () => {
@@ -73,7 +98,7 @@ describe("FileManager open-file dialog", () => {
     });
 
     await renderFileManager();
-    fireEvent.doubleClick(screen.getByRole("button", { name: /song\.mp3/i }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "song.mp3" }));
 
     await waitFor(() => {
       expect(screen.getByText("Loading file...")).toBeTruthy();

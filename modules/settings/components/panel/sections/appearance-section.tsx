@@ -41,14 +41,14 @@ function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-glass-border bg-background/40 p-0.5">
+    <div className="inline-flex rounded-lg border border-glass-border bg-background/40 p-0.5 handheld:flex handheld:w-full">
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            "rounded-md px-3 py-1 text-xs font-medium transition-all cursor-pointer",
+            "rounded-md px-3 py-1 text-xs font-medium transition-all cursor-pointer handheld:min-h-11 handheld:min-w-0 handheld:flex-1 handheld:px-1",
             value === opt.value
               ? "bg-background/80 text-foreground shadow-sm border border-glass-border"
               : "text-muted-foreground hover:text-foreground",
@@ -71,7 +71,7 @@ function ControlRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3")}>
+    <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3 handheld:flex-col handheld:items-stretch handheld:gap-2")}>
       <span className="text-sm text-foreground">{label}</span>
       {children}
     </div>
@@ -144,6 +144,7 @@ export function AppearanceSection({
   const themeOptions: { name: string; value: AppearanceSettings["theme"] }[] = [
     { name: "Dark", value: "dark" },
     { name: "Light", value: "light" },
+    { name: "System", value: "system" },
   ];
 
   return (
@@ -162,15 +163,21 @@ export function AppearanceSection({
               key={theme.value}
               type="button"
               title={theme.name}
+              aria-pressed={active}
               onClick={() => onAppearanceChange({ theme: theme.value })}
               className={cn(
-                "flex w-44 shrink-0 flex-col gap-2 rounded-[calc(var(--radius)+0.375rem)] border p-2.5 text-left transition-all cursor-pointer",
+                "flex w-44 shrink-0 flex-col gap-2 handheld:w-[46%] rounded-[calc(var(--radius)+0.375rem)] border p-2.5 text-left transition-all cursor-pointer",
                 active
                   ? "border-primary bg-primary/10 shadow-[0_0_0_1px_color-mix(in_oklab,var(--primary)_28%,transparent)]"
                   : "border-glass-border bg-background/46 hover:border-foreground/20 hover:bg-background/68",
               )}
             >
-              <ThemePreview theme={theme.value as "dark" | "light"} />
+              {theme.value === "system" ? (
+                <div className="flex gap-1" aria-hidden="true">
+                  <ThemePreview theme="light" />
+                  <ThemePreview theme="dark" />
+                </div>
+              ) : <ThemePreview theme={theme.value} />}
               <div className="flex items-center justify-between gap-2 px-0.5">
                 <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
                   {theme.name}
@@ -201,9 +208,11 @@ export function AppearanceSection({
               <button
                 type="button"
                 title="Auto (from wallpaper)"
+                aria-label="Auto (from wallpaper)"
+                aria-pressed={active}
                 onClick={() => onAppearanceChange({ accentColor: AUTO_ACCENT_VALUE })}
                 className={cn(
-                  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-all overflow-hidden",
+                  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-all handheld:!size-11 overflow-hidden",
                   active
                     ? "border-foreground/60 scale-110 shadow-md"
                     : "border-transparent hover:scale-105 hover:border-foreground/20",
@@ -222,9 +231,11 @@ export function AppearanceSection({
                 key={color.name}
                 type="button"
                 title={color.name}
+                aria-label={color.name}
+                aria-pressed={active}
                 onClick={() => onAppearanceChange({ accentColor: color.value })}
                 className={cn(
-                  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-all",
+                  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-all handheld:!size-11",
                   active
                     ? "border-foreground/60 scale-110 shadow-md"
                     : "border-transparent hover:scale-105 hover:border-foreground/20",
@@ -256,6 +267,8 @@ export function AppearanceSection({
               key={wallpaper.id}
               type="button"
               title={wallpaper.name}
+              aria-label={wallpaper.name}
+              aria-pressed={active}
               // The desktop waits for the image before it fades, so warming it
               // on hover turns the click from "nothing happened" into instant.
               onMouseEnter={() => {
@@ -291,9 +304,10 @@ export function AppearanceSection({
           />
           {/* Slider + badge */}
           <div className="flex flex-1 items-center gap-2">
-            <div className="flex-1">
+            <div className="flex min-w-0 flex-1 items-center handheld:min-h-11">
               <Slider
                 aria-label="Corner radius"
+                className="handheld:min-h-11"
                 min={APPEARANCE_RADIUS_MIN}
                 max={APPEARANCE_RADIUS_MAX}
                 step={1}
@@ -321,14 +335,14 @@ export function AppearanceSection({
                 aria-label={`Set ${preset.name} radius`}
                 onClick={() => onAppearanceChange({ radius: preset.value })}
                 className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 transition-all cursor-pointer",
+                  "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 transition-all cursor-pointer handheld:min-h-11 handheld:gap-1 handheld:px-1",
                   active
                     ? "border-primary bg-primary/10"
                     : "border-glass-border bg-background/40 hover:border-foreground/20",
                 )}
               >
                 <div
-                  className={cn("h-4 w-6 shrink-0 border", active ? "border-primary bg-primary/20" : "border-glass-border bg-background/60")}
+                  className={cn("h-4 w-6 shrink-0 border handheld:w-4", active ? "border-primary bg-primary/20" : "border-glass-border bg-background/60")}
                   style={{ borderRadius: preset.value }}
                 />
                 <span className={cn("text-[11px] font-medium", active ? "text-primary" : "text-muted-foreground")}>

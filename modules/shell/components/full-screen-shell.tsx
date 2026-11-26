@@ -15,6 +15,7 @@ type FullScreenShellProps = {
   topRight?: ReactNode;
   wallpaper?: string;
   showClock?: boolean;
+  compactOnMobile?: boolean;
   centerClassName?: string;
   bottomClassName?: string;
 };
@@ -25,6 +26,7 @@ export function FullScreenShell({
   topRight,
   wallpaper,
   showClock = true,
+  compactOnMobile = false,
   centerClassName,
   bottomClassName,
 }: FullScreenShellProps) {
@@ -43,10 +45,11 @@ export function FullScreenShell({
 
   return (
     <main
-      className="relative min-h-screen overflow-hidden bg-background text-white"
+      className={cn("relative min-h-dvh overflow-hidden bg-background text-white sm:min-h-screen",
+        compactOnMobile && "handheld:min-h-dvh handheld:bg-[var(--mobile-canvas)] handheld:text-foreground")}
       data-testid="full-screen-shell"
     >
-      <div className="absolute inset-0">
+      <div className={cn("absolute inset-0", compactOnMobile && "handheld:hidden")}>
         <div
           className="absolute inset-0 scale-110 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url('${resolvedWallpaper}')` }}
@@ -59,17 +62,24 @@ export function FullScreenShell({
       </div>
 
       {topRight ? (
-        <div className="absolute right-5 top-5 z-10">{topRight}</div>
+        <div className={cn(
+          "absolute top-[max(1.25rem,env(safe-area-inset-top))] right-[max(1.25rem,env(safe-area-inset-right))] z-10 sm:right-5 sm:top-5",
+          compactOnMobile && "handheld:top-[max(0.75rem,env(safe-area-inset-top))]! handheld:right-[max(0.75rem,env(safe-area-inset-right))]!",
+        )}>{topRight}</div>
       ) : null}
 
-      <div className="relative flex min-h-screen flex-col px-6">
+      <div className={cn(
+        "relative flex min-h-dvh flex-col pt-[env(safe-area-inset-top)] pr-[max(1rem,env(safe-area-inset-right))] pb-[env(safe-area-inset-bottom)] pl-[max(1rem,env(safe-area-inset-left))] sm:min-h-screen sm:px-6 sm:py-0",
+        compactOnMobile && "handheld:min-h-dvh! handheld:pt-[env(safe-area-inset-top)]! handheld:pb-[env(safe-area-inset-bottom)]! handheld:px-[var(--mobile-overlay-gutter)]!",
+      )}>
         {showClock ? (
           <div
-            className="pointer-events-none absolute inset-x-0 top-12 text-center sm:top-14"
+            className={cn("pointer-events-none mt-9 text-center sm:absolute sm:inset-x-0 sm:top-14 sm:mt-0",
+              compactOnMobile && "handheld:hidden")}
             data-testid="full-screen-clock"
           >
-            <div className="system-floating-surface inline-flex min-w-[18rem] flex-col items-center bg-black/14 px-8 py-5 shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
-              <p className="text-6xl font-semibold tracking-[-0.08em] text-foreground/96 tabular-nums sm:text-7xl">
+            <div className="system-floating-surface inline-flex max-w-full flex-col items-center bg-black/14 px-5 py-3 shadow-[0_24px_60px_rgba(0,0,0,0.24)] sm:min-w-[18rem] sm:px-8 sm:py-5">
+              <p className="text-5xl font-semibold tracking-[-0.08em] text-foreground/96 tabular-nums sm:text-7xl">
                 {now && preferencesHydrated
                   ? formatLockScreenTime(now, {
                       locale: preferences.language,
@@ -88,9 +98,10 @@ export function FullScreenShell({
 
         <div
           className={cn(
-            "flex flex-1 items-center justify-center",
-            showClock ? "pt-32 sm:pt-36" : "",
-            bottom ? "pt-14 sm:pt-16" : "",
+            "flex min-w-0 flex-1 items-center justify-center py-6 sm:py-0",
+            showClock ? "sm:pt-36" : "",
+            bottom ? "sm:pt-16" : "",
+            compactOnMobile && "handheld:py-[clamp(0.75rem,4dvh,2.5rem)]",
             centerClassName,
           )}
         >

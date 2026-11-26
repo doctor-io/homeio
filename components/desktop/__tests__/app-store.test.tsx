@@ -3,7 +3,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppOperationState } from "@/modules/apps/hooks/useStoreActions";
-import type { InstalledStackConfig, StoreAppDetail, StoreAppSummary } from "@/lib/shared/contracts/apps";
+import type { useStoreCatalog } from "@/modules/apps/hooks/useStoreCatalog";
+import type { InstalledStackConfig, StoreAppDetail, StoreAppSummary, StoreCatalogCategory, StoreCatalogSource } from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
 import { createTestQueryClient, createWrapper } from "@/test/query-client-wrapper";
 
@@ -62,6 +63,45 @@ const summaryApp: StoreAppSummary = {
   sourceId: "official-casaos",
   sourceName: "Official CasaOS",
   sourceKind: "official",
+};
+
+const officialSource: StoreCatalogSource = {
+  id: "official-casaos",
+  name: "Official CasaOS",
+  url: "https://github.com/IceWhaleTech/CasaOS-AppStore",
+  kind: "official",
+  enabled: true,
+  status: "ready",
+  sourcePath: "/DATA/AppStore/CasaOS-AppStore",
+  suppressedAppIds: [],
+  addedAt: "2026-02-23T10:00:00.000Z",
+  updatedAt: "2026-02-23T10:00:00.000Z",
+  lastSyncedAt: "2026-02-23T10:00:00.000Z",
+  lastError: null,
+};
+
+const communitySource: StoreCatalogSource = {
+  ...officialSource,
+  id: "community",
+  name: "Community",
+  kind: "remote",
+};
+
+const communityApp: StoreAppSummary = {
+  ...summaryApp,
+  id: "jellyfin",
+  name: "Jellyfin",
+  sourceId: communitySource.id,
+  sourceName: communitySource.name,
+  sourceKind: communitySource.kind,
+};
+
+const mediaCategory: StoreCatalogCategory = {
+  id: "media",
+  name: "Media",
+  description: "Media apps",
+  appCount: 1,
+  appCountBySource: { [officialSource.id]: 1 },
 };
 
 const installedSummaryApp: StoreAppSummary = {
@@ -127,17 +167,19 @@ function setup({
   apps = [summaryApp],
   detail = null,
   operationsByApp = {},
-  categories = [{ id: "media", name: "Media", description: "Media apps", appCount: apps.length }],
+  categories = [mediaCategory],
   featuredAppIds = [apps[0]?.id].filter(Boolean) as string[],
   recommendedAppIds = [apps[0]?.id].filter(Boolean) as string[],
+  sources = [officialSource],
   onOpenCustomInstall = () => {},
 }: {
   apps?: StoreAppSummary[];
   detail?: StoreAppDetail | null;
   operationsByApp?: Record<string, AppOperationState>;
-  categories?: Array<{ id: string; name: string; description: string; appCount: number }>;
+  categories?: StoreCatalogCategory[];
   featuredAppIds?: string[];
   recommendedAppIds?: string[];
+  sources?: StoreCatalogSource[];
   onOpenCustomInstall?: () => void;
 } = {}) {
   const client = createTestQueryClient();
@@ -148,32 +190,25 @@ function setup({
   const redeployApp = vi.fn().mockResolvedValue(undefined);
   const uninstallApp = vi.fn().mockResolvedValue(undefined);
 
-  useStoreCatalogMock.mockReturnValue({
-    data: {
-      apps,
-      categories,
-      featuredAppIds,
-      recommendedAppIds,
-      sourcePath: "/DATA/AppStore/CasaOS-AppStore",
-      sources: [
-        {
-          id: "official-casaos",
-          name: "Official CasaOS",
-          url: "https://github.com/IceWhaleTech/CasaOS-AppStore",
-          kind: "official",
-          enabled: true,
-          status: "ready",
-          sourcePath: "/DATA/AppStore/CasaOS-AppStore",
-          suppressedAppIds: [],
-          addedAt: "2026-02-23T10:00:00.000Z",
-          updatedAt: "2026-02-23T10:00:00.000Z",
-          lastSyncedAt: "2026-02-23T10:00:00.000Z",
-          lastError: null,
-        },
-      ],
-    },
-    isLoading: false,
-    isError: false,
+  useStoreCatalogMock.mockImplementation((options: Parameters<typeof useStoreCatalog>[0] = {}) => {
+    const { category, search, installedOnly } = options;
+    const searchTerm = search?.toLowerCase();
+    return {
+      data: {
+        apps: apps.filter((app) =>
+          (!category || app.categories.includes(category)) &&
+          (!searchTerm || app.name.toLowerCase().includes(searchTerm) || app.description.toLowerCase().includes(searchTerm)) &&
+          (!installedOnly || app.status !== "not_installed"),
+        ),
+        categories,
+        featuredAppIds,
+        recommendedAppIds,
+        sourcePath: "/DATA/AppStore/CasaOS-AppStore",
+        sources,
+      },
+      isLoading: false,
+      isError: false,
+    };
   });
   useStoreAppMock.mockReturnValue({
     data: detail,
@@ -295,6 +330,113 @@ describe("AppStore", () => {
     expect(screen.getByTitle("Media apps")).toBeTruthy();
   });
 
+  it("groups apps by source and combines the source filter with other filters", async () => {
+    setup({
+      apps: [
+        installedSummaryApp,
+        { ...communityApp, status: "installed" },
+        { ...installedSummaryApp, id: "jellyseerr", name: "Jellyseerr" },
+        { ...communityApp, id: "jellystat", name: "Jellystat" },
+        { ...communityApp, id: "jelly-books", name: "Jelly Books", categories: ["Books"], status: "installed" },
+        { ...summaryApp, id: "local-one", name: "Local One", sourceId: "local-one", sourceName: "Custom", sourceKind: "custom" },
+        { ...summaryApp, id: "local-two", name: "Local Two", sourceId: "local-two", sourceName: "Custom", sourceKind: "custom" },
+      ],
+      sources: [officialSource, communitySource, { ...communitySource, id: "disabled", name: "Disabled", enabled: false }],
+    });
+
+    expect(within(screen.getByRole("region", { name: "Official CasaOS" })).getByText("Plex")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Community" })).getByText("Jellyfin")).toBeTruthy();
+    const customGroup = within(screen.getByRole("region", { name: "Custom" }));
+    expect(customGroup.getByText("Local One")).toBeTruthy();
+    expect(customGroup.getByText("Local Two")).toBeTruthy();
+
+    const sourceFilter = screen.getByRole("combobox", { name: "Source" });
+    expect(within(sourceFilter).queryByRole("option", { name: "Disabled" })).toBeNull();
+    fireEvent.change(sourceFilter, { target: { value: communitySource.id } });
+    expect(screen.getByText("Jellyfin")).toBeTruthy();
+    expect(screen.queryByText("Plex")).toBeNull();
+    expect(screen.queryByText("Featured")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Installed/ }));
+    fireEvent.click(screen.getByTitle("Media apps"));
+    fireEvent.change(screen.getByPlaceholderText(/^Search apps/), { target: { value: "jelly" } });
+    const catalogFilters = {
+      category: "Media",
+      search: "jelly",
+      installedOnly: true,
+    };
+    await waitFor(() => expect(useStoreCatalogMock).toHaveBeenLastCalledWith(catalogFilters));
+    expect(screen.getByText("Jellyfin")).toBeTruthy();
+    expect(screen.queryByText("Jellyseerr")).toBeNull();
+
+    fireEvent.change(sourceFilter, { target: { value: "" } });
+    expect(useStoreCatalogMock).toHaveBeenLastCalledWith(catalogFilters);
+    expect(screen.getByText("Jellyfin")).toBeTruthy();
+    expect(screen.getByText("Jellyseerr")).toBeTruthy();
+    expect(screen.queryByText("Plex")).toBeNull();
+    expect(screen.queryByText("Jellystat")).toBeNull();
+    expect(screen.queryByText("Jelly Books")).toBeNull();
+  });
+
+  it("updates category counts when switching sources", () => {
+    setup({
+      apps: [
+        summaryApp,
+        communityApp,
+        { ...communityApp, id: "books", name: "Bookshelf", categories: ["Books"] },
+      ],
+      categories: [
+        { ...mediaCategory, appCount: 2, appCountBySource: { [officialSource.id]: 1, [communitySource.id]: 1 } },
+        { id: "books", name: "Books", description: "Books apps", appCount: 1, appCountBySource: { [communitySource.id]: 1 } },
+      ],
+      sources: [officialSource, communitySource],
+    });
+
+    const sourceFilter = screen.getByRole("combobox", { name: "Source" });
+    const media = screen.getByTitle("Media apps");
+    const books = screen.getByTitle("Books apps");
+    expect(within(media).getByText("2")).toBeTruthy();
+    expect(within(books).getByText("1")).toBeTruthy();
+
+    fireEvent.click(media);
+    fireEvent.change(sourceFilter, { target: { value: officialSource.id } });
+    expect(within(media).getByText("1")).toBeTruthy();
+    expect(within(books).getByText("0")).toBeTruthy();
+
+    fireEvent.change(sourceFilter, { target: { value: communitySource.id } });
+    expect(within(media).getByText("1")).toBeTruthy();
+    expect(within(books).getByText("1")).toBeTruthy();
+
+    fireEvent.change(sourceFilter, { target: { value: "" } });
+    expect(within(media).getByText("2")).toBeTruthy();
+    expect(within(books).getByText("1")).toBeTruthy();
+  });
+
+  it("shows smaller source groups on the first page", () => {
+    setup({
+      apps: [
+        ...Array.from({ length: 25 }, (_, index) => ({ ...communityApp, id: `app-${index}`, name: `App ${index}` })),
+        summaryApp,
+      ],
+      sources: [communitySource, officialSource],
+      featuredAppIds: [],
+      recommendedAppIds: [],
+    });
+
+    const communityGroup = within(screen.getByRole("region", { name: "Community" }));
+    expect(communityGroup.getAllByRole("button")).toHaveLength(24);
+    expect(within(screen.getByRole("region", { name: "Official CasaOS" })).getByText("Plex")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load more apps" }));
+    expect(communityGroup.getAllByRole("button")).toHaveLength(25);
+  });
+
+  it("applies the mobile category selector to the catalog", () => {
+    setup();
+    fireEvent.change(screen.getByRole("combobox", { name: "Category" }), { target: { value: "Media" } });
+    expect(useStoreCatalogMock).toHaveBeenLastCalledWith({ category: "Media", search: undefined, installedOnly: false });
+    expect(screen.getByText("Plex")).toBeTruthy();
+  });
+
   it("opens the source management dialog from the install menu", async () => {
     useStoreSourcesMock.mockReturnValue({
       data: [
@@ -353,7 +495,7 @@ describe("AppStore", () => {
     useStoreCatalogMock.mockReturnValue({
       data: {
         apps: [summaryApp],
-        categories: [{ id: "media", name: "Media", description: "Media apps", appCount: 1 }],
+        categories: [mediaCategory],
         featuredAppIds: [],
         recommendedAppIds: [],
         sourcePath: "/DATA/AppStore/CasaOS-AppStore",

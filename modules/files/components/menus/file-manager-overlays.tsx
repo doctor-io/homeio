@@ -67,8 +67,8 @@ export function FileManagerContextMenu({
 }) {
   return (
     <div
-      className={cn("absolute z-[200] min-w-44 py-1.5", FILES_MENU_SHELL)}
-      style={{ left: x, top: y }}
+      className={cn("absolute z-[200] max-h-[min(70vh,28rem)] min-w-44 overflow-y-auto py-1.5", FILES_MENU_SHELL)}
+      style={{ left: x, top: y, maxHeight: `calc(100% - ${y + 8}px)` }}
       onClick={(e) => e.stopPropagation()}
     >
       <MenuItem icon={<FolderOpen className="size-3.5" />} label="Open" onClick={() => { onOpen(); onClose(); }} />
@@ -142,8 +142,8 @@ export function FileManagerBackgroundContextMenu({
 }) {
   return (
     <div
-      className={cn("absolute z-[200] min-w-44 py-1.5", FILES_MENU_SHELL)}
-      style={{ left: x, top: y }}
+      className={cn("absolute z-[200] max-h-[min(70vh,28rem)] min-w-44 overflow-y-auto py-1.5", FILES_MENU_SHELL)}
+      style={{ left: x, top: y, maxHeight: `calc(100% - ${y + 8}px)` }}
       onClick={(e) => e.stopPropagation()}
     >
       <MenuItem icon={<ClipboardPaste className="size-3.5" />} label="Paste" disabled={pasteDisabled} onClick={() => { onPaste(); onClose(); }} />

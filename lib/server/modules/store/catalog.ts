@@ -24,6 +24,7 @@ import {
   writeStoreCatalogConfig,
 } from "@/lib/server/modules/store/catalog-config";
 import type {
+  StoreCatalogCategory,
   StoreCatalogSource,
   StoreCatalogSourceKind,
 } from "@/lib/shared/contracts/apps";
@@ -48,13 +49,6 @@ export type StoreCatalogTemplate = AppDefinition & {
   sourceId: string;
   sourceName: string;
   sourceKind: StoreCatalogSourceKind;
-};
-
-export type StoreCatalogCategory = {
-  id: string;
-  name: string;
-  description: string;
-  appCount: number;
 };
 
 export type StoreCatalogSnapshot = {
@@ -101,7 +95,7 @@ const CATALOG_REVALIDATE_INTERVAL_MS = 30_000;
  */
 const snapshotRevalidations = new Map<string, Promise<SourceSnapshot>>();
 
-function normalizeCategoryId(value: string) {
+export function normalizeCategoryId(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
@@ -261,56 +255,51 @@ function mapCatalogApp(
   };
 }
 
-function buildCatalogCategories(input: {
-  apps: StoreCatalogTemplate[];
+export function buildCatalogCategories(input: {
+  apps: Pick<StoreCatalogTemplate, "categories" | "sourceId">[];
   categoryEntries: CasaosCategoryEntry[];
-  includeCustomCategory?: boolean;
 }) {
-  const counts = new Map<string, number>();
+  const categories = new Map<string, StoreCatalogCategory>();
+  for (const item of input.categoryEntries) {
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    const id = normalizeCategoryId(name);
+    if (!id || categories.has(id)) continue;
+    categories.set(id, {
+      id,
+      name,
+      description: (typeof item.description === "string" && item.description.trim()) || `${name} apps`,
+      appCount: 0,
+      appCountBySource: Object.create(null),
+    });
+  }
+
+  const unlisted = new Map<string, StoreCatalogCategory>();
   for (const app of input.apps) {
-    for (const category of app.categories) {
-      counts.set(category, (counts.get(category) ?? 0) + 1);
+    const counted = new Set<string>();
+    for (const name of app.categories) {
+      const id = normalizeCategoryId(name);
+      if (!id || counted.has(id)) continue;
+      counted.add(id);
+      let category = categories.get(id) ?? unlisted.get(id);
+      if (!category) {
+        category = {
+          id,
+          name,
+          description: `${name} apps`,
+          appCount: 0,
+          appCountBySource: Object.create(null),
+        };
+        unlisted.set(id, category);
+      }
+      category.appCount += 1;
+      category.appCountBySource[app.sourceId] = (category.appCountBySource[app.sourceId] ?? 0) + 1;
     }
   }
 
-  const ordered: StoreCatalogCategory[] = [];
-  for (const item of input.categoryEntries) {
-    const name = typeof item.name === "string" ? item.name.trim() : "";
-    if (!name) continue;
-    ordered.push({
-      id: normalizeCategoryId(name),
-      name,
-      description:
-        typeof item.description === "string" && item.description.trim().length > 0
-          ? item.description.trim()
-          : `${name} apps`,
-      appCount: counts.get(name) ?? 0,
-    });
-  }
-
-  const known = new Set(ordered.map((item) => item.name));
-  for (const [name, appCount] of Array.from(counts.entries()).sort((left, right) =>
-    left[0].localeCompare(right[0]),
-  )) {
-    if (known.has(name)) continue;
-    ordered.push({
-      id: normalizeCategoryId(name),
-      name,
-      description: `${name} apps`,
-      appCount,
-    });
-  }
-
-  if (input.includeCustomCategory && !ordered.some((item) => item.name === "Custom")) {
-    ordered.push({
-      id: normalizeCategoryId("Custom"),
-      name: "Custom",
-      description: "Custom compose apps",
-      appCount: counts.get("Custom") ?? 0,
-    });
-  }
-
-  return ordered.filter((item) => item.appCount > 0);
+  return [
+    ...Array.from(categories.values()).filter((category) => category.appCount > 0),
+    ...Array.from(unlisted.values()).sort((left, right) => left.name.localeCompare(right.name)),
+  ];
 }
 
 function normalizeReferences(entries: CasaosAppReference[]) {
@@ -578,13 +567,10 @@ function mergeSourceSnapshots(input: {
         continue;
       }
 
-      const winner =
-        existing.sourceKind === "official" ||
-        existing.sourceId === OFFICIAL_STORE_SOURCE_ID
-          ? existing
-          : app;
-      const suppressedSourceId =
-        winner.sourceId === existing.sourceId ? app.sourceId : existing.sourceId;
+      if (existing.sourceId === app.sourceId) continue;
+      const useIncoming = app.sourceKind === "official" && existing.sourceKind !== "official";
+      if (useIncoming) mergedApps.set(app.appId, app);
+      const suppressedSourceId = useIncoming ? existing.sourceId : app.sourceId;
 
       if (!suppressedBySource.has(suppressedSourceId)) {
         suppressedBySource.set(suppressedSourceId, new Set());

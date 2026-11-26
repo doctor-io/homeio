@@ -4,6 +4,10 @@
 
 The system module exposes metrics, Docker info/stats, server info, updates, backups, power controls, disk management, thermal warnings, weather widgets, and status bar data.
 
+For native installations, **Settings → Updates → Update channel** saves a server-wide preference. **Stable** follows the latest stable GitHub Release. **Beta** also considers published GitHub pre-releases, using SemVer precedence to select the newest available version. Publish a pre-release with a tag such as `v1.12.0-beta.1` and the GitHub pre-release flag. Switching back to Stable waits for a newer stable version. Docker follows its image tag, and an explicit `HOMEIO_REPO_BRANCH` takes precedence over the release channel.
+
+To run the update channel integration test, set `HOMEIO_INTEGRATION_DATABASE_URL` to a disposable empty PostgreSQL database and run `npm run test:integration:updates`. The test applies the migrations, signs in, saves the channel, and exercises the update routes with fixture releases and a simulated systemd launcher.
+
 ## Locations
 
 - Server-side: `lib/server/modules/system/`, plus Docker/network modules for some data
@@ -44,7 +48,7 @@ The system module exposes metrics, Docker info/stats, server info, updates, back
 
 ## Database Tables
 
-- `settings` for appearance/system settings stored as JSON
+- `settings` for appearance and system preferences, including the update channel
 - Backup metadata is file-backed through the backup service, not a dedicated table in `schema.ts`.
 
 ## API Routes Owned
@@ -55,6 +59,7 @@ The system module exposes metrics, Docker info/stats, server info, updates, back
 - `GET/PUT /api/v1/system/preferences`
 - `GET/PUT /api/v1/system/security`
 - `GET /api/v1/system/updates`
+- `GET/PUT /api/v1/system/updates/channel`
 - `POST /api/v1/system/updates/check`
 - `POST /api/v1/system/updates/apply`
 - `GET/POST/PUT /api/v1/system/backups*`

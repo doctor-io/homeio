@@ -18,6 +18,7 @@ import type { FileReadResponse } from "@/lib/shared/contracts/files";
 import type { DragEventHandler, MouseEvent, SetStateAction } from "react";
 
 type FileManagerFileAreaProps = {
+  active: boolean;
   canSaveOpenFile: boolean;
   directoryErrorMessage: string;
   directoryIsError: boolean;
@@ -44,6 +45,7 @@ type FileManagerFileAreaProps = {
   pendingEntryPath: string | null;
   searchQuery: string;
   selectedFiles: Set<string>;
+  selectingFiles: boolean;
   sortedEntries: FileEntry[];
   totalEntriesCount: number;
   viewMode: "grid" | "list";
@@ -55,12 +57,14 @@ type FileManagerFileAreaProps = {
   onDrop: DragEventHandler<HTMLDivElement>;
   onEntryClick: (event: MouseEvent, entry: FileEntry) => void;
   onEntryContextMenu: (event: MouseEvent, entry: FileEntry) => void;
+  onToggleSelection: (entry: FileEntry) => void;
   onLoadMoreSearch: () => void;
   onOpenEntry: (entry: FileEntry) => void;
   onSaveOpenFile: () => void;
 };
 
 export function FileManagerFileArea({
+  active,
   canSaveOpenFile,
   directoryErrorMessage,
   directoryIsError,
@@ -84,6 +88,7 @@ export function FileManagerFileArea({
   onDrop,
   onEntryClick,
   onEntryContextMenu,
+  onToggleSelection,
   onLoadMoreSearch,
   onOpenEntry,
   onSaveOpenFile,
@@ -98,13 +103,14 @@ export function FileManagerFileArea({
   pendingEntryPath,
   searchQuery,
   selectedFiles,
+  selectingFiles,
   sortedEntries,
   totalEntriesCount,
   viewMode,
 }: FileManagerFileAreaProps) {
   return (
     <div
-      className="relative flex-1 overflow-y-auto p-3"
+      className="relative min-h-0 flex-1 overflow-y-auto p-3 handheld:overscroll-contain handheld:@lg/mobile-files:py-0"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -124,14 +130,17 @@ export function FileManagerFileArea({
         globalSearchIsFetching,
         hasMoreSearchResults,
         isGlobalSearchActive,
+        isStarredView,
         isTrashView,
         onEntryClick,
         onEntryContextMenu,
+        onToggleSelection,
         onLoadMoreSearch,
         onOpenEntry,
         pendingEntryPath,
         searchQuery,
         selectedFiles,
+        selectingFiles,
         sortedEntries,
         totalEntriesCount,
         viewMode,
@@ -139,6 +148,7 @@ export function FileManagerFileArea({
 
       {openFile ? (
         <OpenFileDialog
+          active={active}
           canSaveOpenFile={canSaveOpenFile}
           editorNotice={editorNotice}
           fileContentErrorMessage={fileContentErrorMessage}
@@ -169,19 +179,23 @@ function renderBrowserState({
   globalSearchIsFetching,
   hasMoreSearchResults,
   isGlobalSearchActive,
+  isStarredView,
   isTrashView,
   onEntryClick,
   onEntryContextMenu,
+  onToggleSelection,
   onLoadMoreSearch,
   onOpenEntry,
   pendingEntryPath,
   searchQuery,
   selectedFiles,
+  selectingFiles,
   sortedEntries,
   totalEntriesCount,
   viewMode,
 }: Omit<
   FileManagerFileAreaProps,
+  | "active"
   | "canSaveOpenFile"
   | "editorNotice"
   | "fileContentErrorMessage"
@@ -189,7 +203,6 @@ function renderBrowserState({
   | "fileContentIsLoading"
   | "hasUnsavedChanges"
   | "isDragOver"
-  | "isStarredView"
   | "openFile"
   | "openFileAssetUrl"
   | "openFileBadgeLabel"
@@ -267,20 +280,24 @@ function renderBrowserState({
         entries={sortedEntries}
         pendingEntryPath={pendingEntryPath}
         selectedFiles={selectedFiles}
-        titleFromPath={isGlobalSearchActive}
+        selecting={selectingFiles}
+        showLocation={isGlobalSearchActive || isStarredView}
         onEntryClick={onEntryClick}
         onEntryContextMenu={onEntryContextMenu}
+        onToggleSelection={onToggleSelection}
         onOpenEntry={onOpenEntry}
       />
     ) : (
       <FileList
         entries={sortedEntries}
-        isGlobalSearchActive={isGlobalSearchActive}
+        showLocation={isGlobalSearchActive || isStarredView}
         isTrashView={isTrashView}
         pendingEntryPath={pendingEntryPath}
         selectedFiles={selectedFiles}
+        selecting={selectingFiles}
         onEntryClick={onEntryClick}
         onEntryContextMenu={onEntryContextMenu}
+        onToggleSelection={onToggleSelection}
         onOpenEntry={onOpenEntry}
       />
     );

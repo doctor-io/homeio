@@ -99,14 +99,12 @@ export function useFileManagerEntryActions({
 }: UseFileManagerEntryActionsArgs) {
   return useMemo(() => {
     async function handleTrashSelected() {
-      const names = [...selectedFiles];
-      if (names.length === 0) return;
+      if (selectedFiles.size === 0) return;
       dispatch({ type: "CLEAR_SELECTION" });
-      for (const name of names) {
-        const entry = sortedEntries.find((candidate) => candidate.name === name);
-        if (!entry) continue;
+      for (const path of selectedFiles) {
+        if (!sortedEntries.some((entry) => entry.path === path)) continue;
         try {
-          await moveToTrashMutation.mutateAsync({ path: entry.path });
+          await moveToTrashMutation.mutateAsync({ path });
         } catch {
           // Errors surface through mutation state.
         }
@@ -118,7 +116,7 @@ export function useFileManagerEntryActions({
       try {
         const result = await moveToTrashMutation.mutateAsync({ path: entry.path });
         if (openFile && toFilePath(openFile.path) === entry.path) dispatch({ type: "CLOSE_FILE" });
-        dispatch({ type: "SELECT_FILE", name: null });
+        dispatch({ type: "SELECT_FILE", path: null });
         setStatusNotice(`Moved to Trash: ${result.trashPath}`);
       } catch (error) {
         setStatusNotice(error instanceof Error ? error.message : "Failed to move item to Trash");
@@ -134,7 +132,7 @@ export function useFileManagerEntryActions({
           path: entry.path,
           collision: "keep-both",
         });
-        dispatch({ type: "SELECT_FILE", name: null });
+        dispatch({ type: "SELECT_FILE", path: null });
         setStatusNotice(`Restored: ${result.restoredPath}`);
       } catch (error) {
         setStatusNotice(error instanceof Error ? error.message : "Failed to restore item from Trash");
@@ -147,7 +145,7 @@ export function useFileManagerEntryActions({
       dispatch({ type: "SET_PENDING_ENTRY_PATH", path: entry.path });
       try {
         await deleteFromTrashMutation.mutateAsync({ path: entry.path });
-        dispatch({ type: "SELECT_FILE", name: null });
+        dispatch({ type: "SELECT_FILE", path: null });
         setStatusNotice(`Deleted permanently: ${entry.name}`);
       } catch (error) {
         setStatusNotice(error instanceof Error ? error.message : "Failed to permanently delete item");
@@ -218,7 +216,7 @@ export function useFileManagerEntryActions({
           newName,
         });
         dispatch({ type: "CLOSE_RENAME_DIALOG" });
-        dispatch({ type: "SELECT_FILE", name: null });
+        dispatch({ type: "SELECT_FILE", path: null });
         setStatusNotice(`Renamed to ${result.path.split("/").pop() ?? newName}`);
       } catch (error) {
         dispatch({

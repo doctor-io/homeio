@@ -75,12 +75,12 @@ export function useUpdateReminder({ enabled }: { enabled: boolean }) {
   }
 
   async function update() {
-    if (isApplying) return;
+    if (isApplying || !latestVersion) return;
     setIsApplying(true);
     setError(null);
 
     try {
-      await applySystemUpdateRequest();
+      await applySystemUpdateRequest(latestVersion);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start the update");
       setIsApplying(false);

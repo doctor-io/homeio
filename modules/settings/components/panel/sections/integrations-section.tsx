@@ -85,17 +85,17 @@ async function installTailscaleService(authKey?: string): Promise<TailscaleInsta
 
 function InputRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className={cn(SETTINGS_PANEL_INSET, "flex items-start justify-between gap-4 px-4 py-3")}>
+    <div className={cn(SETTINGS_PANEL_INSET, "flex flex-col items-stretch gap-2 px-4 py-3 md:flex-row md:items-start md:justify-between md:gap-4")}>
       <div className="min-w-0 flex-1">
         <div className="text-sm text-foreground">{label}</div>
         {description && <div className="mt-0.5 text-[11px] text-muted-foreground/70">{description}</div>}
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className="min-w-0 md:shrink-0">{children}</div>
     </div>
   );
 }
 
-const inputCls = "h-8 w-64 rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
+const inputCls = "min-h-11 w-full rounded-lg md:min-h-0 md:h-8 md:w-64 border border-glass-border bg-background/55 px-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
 function StatusPill({ tone, label }: { tone: "ok" | "warn" | "muted"; label: string }) {
   return (
@@ -728,7 +728,7 @@ function TunnelExposureRow({
   const [subdomain, setSubdomain] = useState(exposure.subdomain);
 
   return (
-    <div className="flex items-center gap-2 border-t border-glass-border/60 px-1 py-2 first:border-t-0">
+    <div className="flex flex-wrap items-center gap-2 border-t border-glass-border/60 px-1 py-2 first:border-t-0">
       <input
         type="checkbox"
         aria-label={`Expose ${exposure.name}`}

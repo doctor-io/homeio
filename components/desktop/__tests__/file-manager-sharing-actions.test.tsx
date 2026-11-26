@@ -1,13 +1,15 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  fileManagerElement,
   mockDirectory,
   mockUseCreateFile,
   mockUseCreateFolder,
   mockUseFilesDirectory,
   mockUseLocalFolderShares,
+  mockUseMoveToTrash,
   mockUsePasteFileEntry,
   mockUseSystemMetrics,
   renderFileManager,
@@ -17,11 +19,48 @@ import {
 describe("FileManager sharing and actions", () => {
   beforeEach(resetFileManagerMocks);
 
+  it("disables shortcuts while hidden and restores them when active", async () => {
+    mockUseFilesDirectory.mockReturnValue(mockDirectory([{ name: "notes.txt", path: "notes.txt", type: "file" }]));
+    const moveToTrash = vi.fn().mockResolvedValue({ trashPath: "Trash/notes.txt" });
+    mockUseMoveToTrash.mockReturnValue({ mutateAsync: moveToTrash, isPending: false });
+    const view = render(fileManagerElement());
+
+    fireEvent.click(screen.getByRole("button", { name: "notes.txt" }));
+    view.rerender(fileManagerElement(false));
+    const hiddenDelete = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+    window.dispatchEvent(hiddenDelete);
+    expect(hiddenDelete.defaultPrevented).toBe(false);
+    expect(moveToTrash).not.toHaveBeenCalled();
+
+    view.rerender(fileManagerElement(true));
+    fireEvent.keyDown(window, { key: "Delete" });
+    await waitFor(() => expect(moveToTrash).toHaveBeenCalledWith({ path: "notes.txt" }));
+  });
+
+  it("does not act on an item after deselecting the last selection", async () => {
+    mockUseFilesDirectory.mockReturnValue(mockDirectory([{ name: "notes.txt", path: "notes.txt", type: "file" }]));
+    const moveToTrash = vi.fn();
+    mockUseMoveToTrash.mockReturnValue({ mutateAsync: moveToTrash, isPending: false });
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    try {
+      await renderFileManager();
+      fireEvent.click(screen.getByRole("button", { name: "Select" }));
+      fireEvent.click(screen.getByRole("button", { name: "notes.txt" }));
+      fireEvent.click(screen.getByRole("button", { name: "notes.txt" }));
+      fireEvent.keyDown(window, { key: "Delete" });
+      fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+      expect(moveToTrash).not.toHaveBeenCalled();
+      expect(screen.queryByText(/Clipboard:/)).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("shows Share Folder action when folder is not shared", async () => {
     mockUseFilesDirectory.mockReturnValue(mockDirectory([{ name: "FolderToShare", path: "FolderToShare", type: "folder" }]));
     await renderFileManager();
 
-    fireEvent.contextMenu(screen.getByRole("button", { name: /FolderToShare/i }), { clientX: 120, clientY: 120 });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "FolderToShare" }), { clientX: 120, clientY: 120 });
     expect(screen.getByRole("button", { name: "Share Folder" })).toBeTruthy();
   });
 
@@ -35,7 +74,7 @@ describe("FileManager sharing and actions", () => {
     });
 
     await renderFileManager();
-    fireEvent.contextMenu(screen.getByRole("button", { name: /FolderToShare/i }), { clientX: 120, clientY: 120 });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "FolderToShare" }), { clientX: 120, clientY: 120 });
     expect(screen.getByRole("button", { name: "Unshare Folder" })).toBeTruthy();
   });
 
@@ -62,7 +101,7 @@ describe("FileManager sharing and actions", () => {
 
     await renderFileManager();
     fireEvent.click(screen.getByRole("button", { name: "Shared" }));
-    fireEvent.contextMenu(screen.getByRole("button", { name: /portainer/i }), { clientX: 120, clientY: 120 });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "portainer" }), { clientX: 120, clientY: 120 });
     fireEvent.click(screen.getByRole("button", { name: "Copy Path" }));
 
     await waitFor(() => {
@@ -93,9 +132,9 @@ describe("FileManager sharing and actions", () => {
     mockUseFilesDirectory.mockReturnValue(mockDirectory([{ name: "FolderToShare", path: "FolderToShare", type: "folder" }]));
     await renderFileManager();
 
-    fireEvent.contextMenu(screen.getByRole("button", { name: /FolderToShare/i }), { clientX: 100, clientY: 100 });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "FolderToShare" }), { clientX: 100, clientY: 100 });
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
-    fireEvent.contextMenu(screen.getByRole("button", { name: /FolderToShare/i }), { clientX: 110, clientY: 110 });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "FolderToShare" }), { clientX: 110, clientY: 110 });
     fireEvent.click(screen.getByRole("button", { name: "Paste" }));
 
     await waitFor(() => {

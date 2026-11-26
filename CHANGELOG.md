@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.12.0] - 2026-11-26
+
+### Added
+
+- **Mobile workspace and Home Screen install (#86, thanks @lucasromanomr).** On a phone, Homeio shows one tool at a time, with a toolbar on top and a Dock at the bottom. Open tools keep their state when you switch between them. Files, App Store, Monitor, Settings, Notifications, Terminal and app settings are adapted for touch. Homeio can be added to the Home Screen and then opens full screen, like an app: see [MOBILE-HOME-SCREEN.md](MOBILE-HOME-SCREEN.md).
+- **Beta update channel (#85, thanks @lucasromanomr).** Settings → Updates → **Update channel**. Stable stays the default. Beta also offers the pre-releases published on GitHub. It applies to script installs; Docker keeps following its image tag. Homeio never offers a downgrade.
+- **App Store source filter (#83, thanks @lucasromanomr).** Filter the catalog by source, together with search, categories and the Installed tab. Results are grouped by source, so a small catalog shows on the first page instead of after the official one.
+
+### Fixed
+
+- **Install failed with `ECONNREFUSED 127.0.0.1:5432` (#82).** On a machine where a PostgreSQL cluster already existed, the new cluster listens on 5433. The installer still wrote 5432 into `DATABASE_URL`, so the database migration failed. It now writes the cluster's real port.
+- **App Store duplicates (#83).** A category declared by several catalogs shows once, and an app present in several catalogs always resolves to the same copy: the official catalog first, then the first configured source.
+- **Bug report template.** It pointed to `/var/log/homeio`, which doesn't exist. It now gives the `journalctl` and `docker logs` commands.
+
+### Security
+
+- **Dependency updates (#81):** `systeminformation` 5.33.16 and `zod` 4.
+
+### Changed
+
+- **Contributors:** CI applies the database migrations before the tests and checks the schema (#84), and runs an integration test for the update channel (#85).
+
+---
+
 ## [1.11.2] - 2026-11-08
 
 ### Added

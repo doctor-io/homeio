@@ -44,7 +44,7 @@ function PreferenceRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3")}>
+    <div className={cn(SETTINGS_PANEL_INSET, "flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:gap-4")}>
       <div className="min-w-0">
         <div className="text-sm text-foreground">{label}</div>
         {description && (
@@ -223,7 +223,7 @@ export function PowerSection({
           </select>
         </PreferenceRow>
 
-        <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3")}>
+        <div className={cn(SETTINGS_PANEL_INSET, "flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:gap-4")}>
           <span className="text-[11px] text-muted-foreground/70">
             {scheduleEnabled
               ? `Reboot will run ${scheduleFrequency === "daily" ? "daily" : `every ${scheduleDayOfWeek}`} at ${scheduleTime}.`
@@ -246,7 +246,7 @@ export function PowerSection({
         text="Factory reset will stop all containers, remove Docker images, custom networks, and volumes, reset the database, delete everything under /DATA, recreate the default directories, and then reboot the machine."
         variant="warning"
       />
-      <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3")}>
+      <div className={cn(SETTINGS_PANEL_INSET, "flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:gap-4")}>
         <div className="min-w-0">
           <div className="text-sm text-foreground">Factory reset server</div>
           <div className="mt-0.5 text-[11px] text-muted-foreground/70">Wipes all data and returns Homeio to a clean state</div>

@@ -6,11 +6,14 @@ import {
   type ActiveAppOperation,
   type AppItem,
 } from "@/modules/apps/components/app-grid-presenters";
-import { Loader2 } from "@/components/icons/platform-icons";
+import { MoreHorizontal } from "@/components/icons/platform-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, type MouseEvent } from "react";
+import { MobileAppLauncher } from "@/modules/apps/components/mobile-app-launcher";
 
 type AppGridContentProps = {
+  mobile?: boolean;
+  onBrowseStore?: () => void;
   activeAppId: string | null;
   activeOperationsCount: number;
   animationsEnabled: boolean;
@@ -24,6 +27,8 @@ type AppGridContentProps = {
 };
 
 export function AppGridContent({
+  mobile = false,
+  onBrowseStore,
   activeAppId,
   activeOperationsCount,
   animationsEnabled,
@@ -80,7 +85,17 @@ export function AppGridContent({
         </div>
       ) : null}
 
-      {isAppsLoading && apps.length === 0 ? (
+      {mobile ? (
+        <MobileAppLauncher
+          activeAppId={activeAppId}
+          apps={apps}
+          isAppsError={isAppsError}
+          isAppsLoading={isAppsLoading}
+          onAppContextMenu={onAppContextMenu}
+          onBrowseStore={onBrowseStore}
+          onOpenApp={onOpenApp}
+        />
+      ) : isAppsLoading && apps.length === 0 ? (
         <div className="mt-24" role="status" aria-live="polite">
           <div className="mx-auto flex max-w-xs flex-col items-center text-center">
             <div className="relative h-1 w-48 overflow-hidden rounded-full bg-glass-border/30">
@@ -93,7 +108,7 @@ export function AppGridContent({
           {/* Skeleton placeholder icons that match the real grid layout */}
           <div
             aria-hidden="true"
-            className="mt-8 grid grid-cols-[repeat(4,minmax(0,5.5rem))] justify-center gap-x-1 gap-y-6 opacity-40 sm:grid-cols-[repeat(5,minmax(0,5.5rem))] md:grid-cols-[repeat(6,minmax(0,5.5rem))] lg:grid-cols-[repeat(8,minmax(0,5.5rem))] xl:grid-cols-[repeat(10,minmax(0,5.5rem))]"
+            className="mt-8 grid grid-cols-[repeat(3,minmax(0,5.5rem))] justify-center gap-x-1 gap-y-6 opacity-40 sm:grid-cols-[repeat(5,minmax(0,5.5rem))] md:grid-cols-[repeat(6,minmax(0,5.5rem))] lg:grid-cols-[repeat(8,minmax(0,5.5rem))] xl:grid-cols-[repeat(10,minmax(0,5.5rem))]"
           >
             {Array.from({ length: 20 }).map((_, i) => (
               <div key={i} className="flex flex-col items-center gap-2 p-2">
@@ -112,14 +127,14 @@ export function AppGridContent({
       ) : apps.length === 0 ? (
         <div className="mt-24 min-h-[12rem]" aria-hidden="true" />
       ) : (
-        <div className="mt-24 grid grid-cols-[repeat(4,minmax(0,5.5rem))] justify-center gap-x-1 gap-y-6 sm:grid-cols-[repeat(5,minmax(0,5.5rem))] md:grid-cols-[repeat(6,minmax(0,5.5rem))] lg:grid-cols-[repeat(8,minmax(0,5.5rem))] xl:grid-cols-[repeat(10,minmax(0,5.5rem))]">
+        <div className="mt-24 grid grid-cols-[repeat(3,minmax(0,5.5rem))] justify-center gap-x-1 gap-y-6 sm:grid-cols-[repeat(5,minmax(0,5.5rem))] md:grid-cols-[repeat(6,minmax(0,5.5rem))] lg:grid-cols-[repeat(8,minmax(0,5.5rem))] xl:grid-cols-[repeat(10,minmax(0,5.5rem))]">
           {apps.map((app) => {
             const visualState = getAppVisualState(app);
             const BadgeIcon = visualState.badgeIcon;
 
             return (
+              <div key={app.id} className="flex min-w-0 flex-col items-center">
               <button
-                key={app.id}
                 onClick={() => onOpenApp(app)}
                 onContextMenu={(event) => onAppContextMenu(event, app)}
                 className={`group flex flex-col items-center gap-2 rounded-xl p-2 cursor-pointer ${
@@ -216,6 +231,19 @@ export function AppGridContent({
                   {app.name}
                 </span>
               </button>
+              <button
+                type="button"
+                aria-label={`Actions for ${app.name}`}
+                aria-expanded={activeAppId === app.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAppContextMenu(event, app);
+                }}
+                className="hidden min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-primary max-sm:flex [@media(pointer:coarse)]:flex"
+              >
+                <MoreHorizontal className="size-5" aria-hidden="true" />
+              </button>
+              </div>
             );
           })}
         </div>

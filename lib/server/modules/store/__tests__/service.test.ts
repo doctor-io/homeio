@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type * as StoreCatalog from "@/lib/server/modules/store/catalog";
+import type { StoreCatalogCategory } from "@/lib/shared/contracts/apps";
 
-vi.mock("@/lib/server/modules/store/catalog", () => ({
+vi.mock("@/lib/server/modules/store/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof StoreCatalog>()),
   findStoreCatalogTemplateByAppId: vi.fn(),
   getStoreCatalogSnapshot: vi.fn(),
 }));
@@ -41,6 +44,14 @@ import {
   getStoreCatalogView,
   startAppLifecycleAction,
 } from "@/lib/server/modules/store/service";
+
+const networkCategory: StoreCatalogCategory = {
+  id: "network",
+  name: "Network",
+  description: "Network apps",
+  appCount: 1,
+  appCountBySource: { "official-casaos": 1 },
+};
 
 function createCatalogApp(overrides: Partial<Awaited<ReturnType<typeof getStoreCatalogSnapshot>>["apps"][number]> = {}) {
   return {
@@ -106,7 +117,7 @@ describe("store service", () => {
     vi.mocked(findCustomStoreTemplateByAppId).mockResolvedValue(null);
     vi.mocked(getStoreCatalogSnapshot).mockResolvedValue({
       apps: [createCatalogApp()],
-      categories: [{ id: "network", name: "Network", description: "Network apps", appCount: 1 }],
+      categories: [networkCategory],
       featuredAppIds: ["adguard-home"],
       recommendedAppIds: ["adguard-home"],
       sourcePath: "/DATA/AppStore/CasaOS-AppStore",
@@ -146,7 +157,7 @@ describe("store service", () => {
           description: "A".repeat(400),
         }),
       ],
-      categories: [{ id: "network", name: "Network", description: "Network apps", appCount: 1 }],
+      categories: [networkCategory],
       featuredAppIds: ["adguard-home"],
       recommendedAppIds: ["adguard-home"],
       sourcePath: "/DATA/AppStore/CasaOS-AppStore",
@@ -168,6 +179,38 @@ describe("store service", () => {
     expect(result.categories[0]?.name).toBe("Network");
     expect(result.featuredAppIds).toContain("adguard-home");
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("matches normalized catalog categories and merges the Custom category", async () => {
+    vi.mocked(getStoreCatalogSnapshot).mockResolvedValue({
+      apps: [createCatalogApp({ categories: ["Network  Tools", "custom"] })],
+      categories: [
+        { ...networkCategory, id: "network-tools", name: "Network Tools", description: "Tools" },
+        { ...networkCategory, id: "custom", name: "Custom", description: "Community apps" },
+      ],
+      featuredAppIds: [],
+      recommendedAppIds: [],
+      sourcePath: "/DATA/AppStore/CasaOS-AppStore",
+      sources: [],
+    });
+    vi.mocked(listInstalledStacksFromDb).mockResolvedValue([]);
+    vi.mocked(listCustomStoreTemplates).mockResolvedValue([{
+      ...createCatalogApp({ appId: "local-app", name: "Local App", categories: ["Media", "Network Tools", "custom"] }),
+      isCustom: true,
+      sourceType: "docker-compose",
+      composeContent: "",
+      sourceText: "",
+    }]);
+
+    const view = await getStoreCatalogView({ category: "Network Tools", search: "AdGuard" });
+    expect(view.apps.map((app) => app.id)).toEqual(["adguard-home"]);
+    expect(view.categories.map(({ id, appCount, appCountBySource }) => [id, appCount, appCountBySource])).toEqual([
+      ["network-tools", 2, { "official-casaos": 1, custom: 1 }],
+      ["custom", 2, { "official-casaos": 1, custom: 1 }],
+      ["media", 1, { custom: 1 }],
+    ]);
+    expect((await getStoreCatalogView({ category: "Custom" })).apps.map((app) => app.id))
+      .toEqual(["adguard-home", "local-app"]);
   });
 
   it("returns detail or null", async () => {

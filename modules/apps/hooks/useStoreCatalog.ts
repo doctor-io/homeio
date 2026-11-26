@@ -3,16 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   StoreAppSummary,
+  StoreCatalogCategory,
   StoreCatalogSource,
 } from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
-
-type StoreCatalogCategory = {
-  id: string;
-  name: string;
-  description: string;
-  appCount: number;
-};
 
 type StoreCatalogResponse = {
   data: StoreAppSummary[];

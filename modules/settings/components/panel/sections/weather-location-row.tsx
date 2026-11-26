@@ -101,18 +101,18 @@ export function WeatherLocationRow({ value, onChange }: WeatherLocationRowProps)
 
   return (
     <div className={cn(SETTINGS_PANEL_INSET, "flex flex-col gap-3 px-4 py-3")}>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
         <div className="min-w-0">
           <div className="text-sm text-foreground">Weather location</div>
           <div className="mt-0.5 text-[11px] text-muted-foreground/70">{describe(value)}</div>
         </div>
-        <form onSubmit={runSearch} className="flex items-center gap-1.5">
+        <form onSubmit={runSearch} className="flex min-w-0 items-center gap-1.5">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search a city"
             aria-label="Search a city"
-            className="h-8 w-44 rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground placeholder:text-muted-foreground/60 transition-all focus:border-primary/40 focus:outline-none"
+            className="min-h-11 min-w-0 flex-1 md:min-h-0 md:h-8 md:w-44 md:flex-none rounded-lg border border-glass-border bg-background/55 px-3 text-xs text-foreground placeholder:text-muted-foreground/60 handheld:text-[length:max(16px,1rem)] transition-all focus:border-primary/40 focus:outline-none"
           />
           <button type="submit" disabled={busy || query.trim().length < 2} className={SMALL_BUTTON} aria-label="Search">
             <Search className="size-3.5" />
@@ -141,7 +141,7 @@ export function WeatherLocationRow({ value, onChange }: WeatherLocationRowProps)
 
       {error ? <div className="text-[11px] text-status-amber">{error}</div> : null}
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <button type="button" onClick={useBrowserLocation} disabled={busy} className={SMALL_BUTTON}>
           Use this browser&apos;s location
         </button>

@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "Homeio",
+  "short_name": "Homeio",
+  "description": "Your home server dashboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#171615",
+  "theme_color": "#171615",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

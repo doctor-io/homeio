@@ -1,6 +1,6 @@
 {
   "name": "homeio",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "description": "Self-hosted home server dashboard — desktop-style UI for managing Docker apps, files, terminal, and system resources.",
   "author": "doctor-io",
   "license": "AGPL-3.0-only",
@@ -22,6 +22,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:integration:updates": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "prepare": "husky",
     "db:init": "tsx ./scripts/db-migrate.ts",
@@ -90,16 +91,17 @@
     "react-hook-form": "^7.72.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "semver": "^7.8.6",
     "server-only": "file:packages/server-only",
     "sonner": "^1.7.1",
-    "systeminformation": "^5.33.13",
+    "systeminformation": "^5.33.16",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
     "ws": "^8.22.0",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",
     "xterm-addon-web-links": "^0.9.0",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
@@ -115,6 +117,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/semver": "^7.8.0",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.12",
     "busboy": "^1.6.0",

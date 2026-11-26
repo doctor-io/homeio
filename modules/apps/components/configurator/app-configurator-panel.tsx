@@ -49,6 +49,7 @@ export type AppConfiguratorPanelProps = {
     saveAppSettings?: (input: SaveAppSettingsInput) => Promise<unknown>;
   };
   onClose?: () => void;
+  withinMobileWindow?: boolean;
 };
 
 function parseDashboardUrl(input: string | undefined) {
@@ -101,6 +102,7 @@ export function AppConfiguratorPanel({
   customDefaults,
   actions,
   onClose,
+  withinMobileWindow,
 }: AppConfiguratorPanelProps) {
   const derivedTargetAppId = target
     ? target.appId || toAppId(target.appName)
@@ -434,13 +436,14 @@ export function AppConfiguratorPanel({
   }
 
   return (
-    <div className="flex h-full flex-col bg-card/90">
+    <div className="flex h-full min-h-0 flex-col bg-card/90 handheld:bg-[var(--mobile-canvas)] handheld:[&_:is(input:not([type=checkbox]):not([type=radio]),select)]:min-h-11 handheld:[&_:is(input:not([type=checkbox]):not([type=radio]),select,textarea)]:text-base">
       <ConfiguratorHeader
         title={title}
         activeView={activeView}
         views={availableViews}
         onViewChange={setActiveView}
         onClose={onClose}
+        withinMobileWindow={withinMobileWindow}
       />
 
       {shouldBlockOnTemplateLoading ? (
@@ -493,7 +496,7 @@ export function AppConfiguratorPanel({
         </>
       )}
 
-      <footer className="flex flex-col border-t border-glass-border px-3 py-2.5 gap-2">
+      <footer className="flex shrink-0 flex-col border-t border-glass-border px-3 py-2.5 gap-2 handheld:bg-[var(--mobile-panel)] handheld:px-[var(--mobile-gutter)]">
         {installingAppId && installingOperation ? (
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-3">
@@ -530,7 +533,7 @@ export function AppConfiguratorPanel({
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-0.5">
               {saveError ? (
-                <span className="truncate text-xs text-status-red">{saveError}</span>
+                <span className="truncate text-xs text-status-red handheld:whitespace-normal handheld:[overflow-wrap:anywhere]">{saveError}</span>
               ) : context === "installed_edit" ? (
                 <span className="text-xs text-muted-foreground">
                   {isSaving ? "Applying changes…" : "Edit and save to redeploy"}
@@ -545,7 +548,7 @@ export function AppConfiguratorPanel({
               type="button"
               onClick={() => void handleSubmit()}
               disabled={isSaving || !canSubmit}
-              className="flex shrink-0 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3.5 py-1.5 md:min-h-0 handheld:min-h-11 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : null}
               {buttonLabel}
