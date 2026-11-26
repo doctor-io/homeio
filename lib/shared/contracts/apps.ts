@@ -62,9 +62,19 @@ export type StoreAppEnvDefinition = {
   default?: string;
 };
 
+export const CUSTOM_STORE_SOURCE_ID = "custom";
+
 export type StoreCatalogSourceKind = "official" | "remote";
 export type StoreAppSourceKind = StoreCatalogSourceKind | "custom";
 export type StoreCatalogSourceStatus = "ready" | "syncing" | "error";
+
+export type StoreCatalogCategory = {
+  id: string;
+  name: string;
+  description: string;
+  appCount: number;
+  appCountBySource: Record<string, number>;
+};
 
 export type StoreCatalogSource = {
   id: string;

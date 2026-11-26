@@ -2,7 +2,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import type { StoreAppDetail, StoreAppSummary } from "@/lib/shared/contracts/apps";
+import {
+  CUSTOM_STORE_SOURCE_ID,
+  type StoreAppDetail,
+  type StoreAppSummary,
+  type StoreCatalogCategory,
+  type StoreCatalogSource,
+} from "@/lib/shared/contracts/apps";
 import { queryKeys } from "@/lib/shared/query-keys";
 import { getStoreOperationLabel, isStoreOperationActiveStatus } from "@/lib/shared/store-operations";
 import { AppStoreInstallMenu } from "@/modules/apps/components/app-store-install-menu";
@@ -40,6 +46,10 @@ import { cn } from "@/lib/utils";
 
 const STORE_PAGE_SIZE = 24;
 const STORE_SECTION_LIMIT = 8;
+
+function getAppSourceId(app: StoreAppSummary) {
+  return app.sourceKind === "custom" ? CUSTOM_STORE_SOURCE_ID : app.sourceId;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -154,28 +164,48 @@ function SourceBadge({ sourceName, sourceKind }: Pick<StoreAppSummary, "sourceNa
   );
 }
 
-// ── Category sidebar ──────────────────────────────────────────────────────────
+// ── Catalog sidebar ───────────────────────────────────────────────────────────
 
-type CatalogCategory = { id: string; name: string; description: string; appCount: number };
-
-function CategorySidebar({
+function CatalogSidebar({
   categories,
   selectedCategory,
-  onSelect,
+  onSelectCategory,
+  sources,
+  selectedSourceId,
+  onSelectSource,
 }: {
-  categories: CatalogCategory[];
+  categories: StoreCatalogCategory[];
   selectedCategory: string | null;
-  onSelect: (category: string | null) => void;
+  onSelectCategory: (category: string | null) => void;
+  sources: StoreCatalogSource[];
+  selectedSourceId: string;
+  onSelectSource: (sourceId: string) => void;
 }) {
   return (
     <aside className={cn("m-2 flex w-48 shrink-0 flex-col overflow-y-auto px-2 py-3", STORE_PANEL_SHELL)}>
+      <label className="mb-3 flex flex-col gap-1.5 px-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
+          Source
+        </span>
+        <select
+          value={selectedSourceId}
+          onChange={(event) => onSelectSource(event.target.value)}
+          className="w-full rounded-lg border border-glass-border bg-background/55 px-2 py-1.5 text-xs text-foreground focus-visible:outline-primary"
+        >
+          <option value="">All Sources</option>
+          {sources.map((source) => (
+            <option key={source.id} value={source.id}>{source.name}</option>
+          ))}
+          <option value={CUSTOM_STORE_SOURCE_ID}>Custom</option>
+        </select>
+      </label>
       <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
         Categories
       </div>
       <div className="flex flex-col gap-0.5">
         <button
           type="button"
-          onClick={() => onSelect(null)}
+          onClick={() => onSelectCategory(null)}
           className={cn(
             "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors",
             selectedCategory === null ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
@@ -187,7 +217,7 @@ function CategorySidebar({
           <button
             key={cat.id}
             type="button"
-            onClick={() => onSelect(cat.name)}
+            onClick={() => onSelectCategory(cat.name)}
             title={cat.description}
             className={cn(
               "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors",
@@ -196,7 +226,7 @@ function CategorySidebar({
           >
             <span className="truncate">{cat.name}</span>
             <span className={cn(STORE_BADGE_SURFACE, "ml-1.5 shrink-0 px-1.5 py-0.5 text-2xs text-muted-foreground")}>
-              {cat.appCount}
+              {selectedSourceId ? (cat.appCountBySource[selectedSourceId] ?? 0) : cat.appCount}
             </span>
           </button>
         ))}
@@ -587,6 +617,7 @@ export function AppStore({
   const debouncedSearch = useDebouncedValue(search.trim(), 250);
   const [filter, setFilter] = useState<"all" | "installed">("all");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceId] = useState("");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [customInstallTemplate, setCustomInstallTemplate] = useState<StoreAppDetail | null>(null);
@@ -612,10 +643,30 @@ export function AppStore({
   });
 
   const catalog = catalogQuery.data;
-  const apps = useMemo(() => catalog?.apps ?? [], [catalog]);
+  const sources = (catalog?.sources ?? storeSourcesQuery.data ?? []).filter((source) => source.enabled);
+  const isSelectedSourceAvailable = selectedSourceId === CUSTOM_STORE_SOURCE_ID ||
+    sources.some((source) => source.id === selectedSourceId);
+  const sourceFilter = isSelectedSourceAvailable ? selectedSourceId : "";
+  const apps = useMemo(
+    () => (catalog?.apps ?? []).filter((app) => !sourceFilter || getAppSourceId(app) === sourceFilter),
+    [catalog, sourceFilter],
+  );
   const categories = catalog?.categories ?? [];
-  const visibleApps = useMemo(() => apps.slice(0, visibleCatalogCount), [apps, visibleCatalogCount]);
-  const hasMoreApps = visibleApps.length < apps.length;
+  const appGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; apps: StoreAppSummary[] }>();
+    for (const app of apps) {
+      const id = getAppSourceId(app);
+      const group = groups.get(id);
+      if (group) {
+        group.apps.push(app);
+      } else {
+        groups.set(id, { id, name: app.sourceName, apps: [app] });
+      }
+    }
+    return Array.from(groups.values()).sort((left, right) => left.name.localeCompare(right.name));
+  }, [apps]);
+  const largestGroupSize = appGroups.reduce((size, group) => Math.max(size, group.apps.length), 0);
+  const hasMoreApps = largestGroupSize > visibleCatalogCount;
 
   const selectedSummary = useMemo(() => apps.find((a) => a.id === selectedAppId) ?? null, [apps, selectedAppId]);
   const detailQuery = useStoreApp(selectedAppId);
@@ -647,12 +698,13 @@ export function AppStore({
     () => (catalog?.recommendedAppIds ?? []).map((id) => appById.get(id)).filter(Boolean) as StoreAppSummary[],
     [appById, catalog?.recommendedAppIds],
   );
-  const shouldShowStrips = filter === "all" && !search.trim() && !selectedCategory;
+  const shouldShowStrips = filter === "all" && !search.trim() && !selectedCategory && !sourceFilter;
 
   useEffect(() => {
     if (!launchRequest) return;
     setFilter("all");
     setSelectedCategory(null);
+    setSelectedSourceId("");
     setActionError(null);
     setSearch(launchRequest.search ?? "");
     setSelectedAppId(launchRequest.appId ?? null);
@@ -675,7 +727,7 @@ export function AppStore({
     return () => { cancelled = true; };
   }, [queryClient]);
 
-  useEffect(() => { setVisibleCatalogCount(STORE_PAGE_SIZE); }, [debouncedSearch, filter, selectedCategory]);
+  useEffect(() => { setVisibleCatalogCount(STORE_PAGE_SIZE); }, [debouncedSearch, filter, selectedCategory, sourceFilter]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
@@ -683,14 +735,14 @@ export function AppStore({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setVisibleCatalogCount((c) => Math.min(c + STORE_PAGE_SIZE, apps.length));
+          setVisibleCatalogCount((c) => Math.min(c + STORE_PAGE_SIZE, largestGroupSize));
         }
       },
       { rootMargin: "240px 0px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [apps.length, hasMoreApps]);
+  }, [hasMoreApps, largestGroupSize]);
 
   async function startInstall(app: StoreAppSummary) {
     setActionError(null);
@@ -877,7 +929,14 @@ export function AppStore({
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <CategorySidebar categories={categories} selectedCategory={selectedCategory} onSelect={setSelectedCategory} />
+        <CatalogSidebar
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+          sources={sources}
+          selectedSourceId={sourceFilter}
+          onSelectSource={setSelectedSourceId}
+        />
 
         <div className={cn("m-2 flex-1 overflow-y-auto p-4", STORE_PANEL_SHELL)}>
           {actionError && (
@@ -930,23 +989,30 @@ export function AppStore({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
-                  {visibleApps.map((app) => (
-                    <CatalogRow
-                      key={app.id}
-                      app={app}
-                      operation={operationsByApp[app.id]}
-                      onClick={() => setSelectedAppId(app.id)}
-                    />
-                  ))}
-                </div>
+                {appGroups.map((group) => (
+                  <section key={group.id} aria-label={group.name} className="space-y-2 pt-2">
+                    {appGroups.length > 1 && (
+                      <h3 className="text-xs font-semibold text-muted-foreground">{group.name}</h3>
+                    )}
+                    <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+                      {group.apps.slice(0, visibleCatalogCount).map((app) => (
+                        <CatalogRow
+                          key={app.id}
+                          app={app}
+                          operation={operationsByApp[app.id]}
+                          onClick={() => setSelectedAppId(app.id)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
 
                 {hasMoreApps && (
                   <div className="flex flex-col items-center gap-3 py-2">
                     <div ref={loadMoreRef} className="h-1 w-full" aria-hidden="true" />
                     <button
                       type="button"
-                      onClick={() => setVisibleCatalogCount((c) => Math.min(c + STORE_PAGE_SIZE, apps.length))}
+                      onClick={() => setVisibleCatalogCount((c) => Math.min(c + STORE_PAGE_SIZE, largestGroupSize))}
                       className="rounded-lg border border-glass-border bg-background/55 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
                     >
                       Load more apps
