@@ -7,12 +7,14 @@ import { FileManagerDialogLayer } from "@/modules/files/components/manager/file-
 import { validateEntryName } from "@/modules/files/components/manager/file-manager-derived";
 import { GoogleDrivePanel } from "@/modules/files/components/panels/google-drive-panel";
 import { buildAssetUrl, toFilePath } from "@/modules/files/hooks/useFiles";
-import type { MouseEvent, RefObject, SetStateAction } from "react";
+import { useMobileWindowPage } from "@/components/ui/mobile-window-page";
+import { useCallback, useState, type MouseEvent, type RefObject, type SetStateAction } from "react";
 import type { FileEntry } from "@/modules/files/components/file-manager-presenters";
 import type { FileInfoResponse, FileReadResponse } from "@/lib/shared/contracts/files";
 import type { ClipboardState, CreateEntryDialogState, FileManagerAction, OpenFileState, PasteConflictState, RenameDialogState, ViewMode } from "@/modules/files/components/manager/file-manager-state";
 
 type FileManagerViewProps = {
+  keyboardEnabled: boolean;
   rootRef: RefObject<HTMLDivElement | null>;
   actions: {
     confirmEmptyTrash: () => Promise<void>;
@@ -118,6 +120,7 @@ type FileManagerViewProps = {
 };
 
 export function FileManagerView({
+  keyboardEnabled,
   rootRef,
   actions,
   canSaveOpenFile,
@@ -199,15 +202,30 @@ export function FileManagerView({
   unzipPending,
   viewMode,
 }: FileManagerViewProps) {
+  const [showLocations, setShowLocations] = useState(false);
+  const [selectingFiles, setSelectingFiles] = useState(false);
+  const goUp = useCallback(() => dispatch({ type: "NAVIGATE_UP" }), [dispatch]);
+  const folderTitle = activeDriveConnection ? null : (currentPathForDisplay.at(-1) ?? currentPath.at(-1) ?? null);
+  const usesWindowBack = useMobileWindowPage(folderTitle, goUp);
   return (
     <div
       ref={rootRef}
-      className="relative flex h-full"
+      className="relative flex h-full min-h-0 min-w-0 flex-col md:flex-row handheld:flex-col"
       onClick={() => {
         dispatch({ type: "HIDE_CONTEXT_MENU" });
         dispatch({ type: "HIDE_BACKGROUND_CONTEXT_MENU" });
       }}
     >
+      <div className="flex shrink-0 items-center gap-1 px-[var(--mobile-gutter)] pt-1 md:hidden handheld:flex">
+        <button type="button" onClick={() => setShowLocations((shown) => !shown)} aria-expanded={showLocations} aria-controls="file-locations" className="min-h-[var(--mobile-touch-target)] rounded-lg px-2.5 text-sm font-medium text-[var(--mobile-accent-text)] focus-visible:outline-2 focus-visible:outline-primary active:bg-primary/15">{showLocations ? "Close locations" : "Locations"}</button>
+        {!activeDriveConnection && !isTrashView && !isStarredView && <button type="button" onClick={onPositionBackgroundContextMenu} className="min-h-[var(--mobile-touch-target)] rounded-lg px-2.5 text-sm font-medium text-[var(--mobile-accent-text)] focus-visible:outline-2 focus-visible:outline-primary active:bg-primary/15">New / Paste</button>}
+        {!activeDriveConnection && !showLocations && (sortedEntries.length > 0 || selectingFiles) && (
+          <button type="button" aria-label={selectingFiles ? "Done selecting" : "Select"} aria-pressed={selectingFiles} onClick={() => setSelectingFiles((value) => !value)} className="ml-auto min-h-[var(--mobile-touch-target)] min-w-[var(--mobile-touch-target)] shrink-0 rounded-lg px-2 text-sm font-medium text-[var(--mobile-accent-text)] active:bg-primary/15 focus-visible:outline-2 focus-visible:outline-primary">
+            {selectingFiles ? "Done" : "Select"}
+          </button>
+        )}
+      </div>
+      <div id="file-locations" className={`${showLocations ? "flex handheld:flex" : "hidden handheld:hidden"} absolute inset-y-12 left-0 z-50 max-w-[85%] md:static md:flex md:max-w-none handheld:absolute handheld:max-w-[85%]`}>
       <FileManagerSidebar
         currentPath={currentPath}
         isSharedView={isSharedView}
@@ -218,24 +236,26 @@ export function FileManagerView({
         sidebarSections={sidebarSections}
         storageUsagePercent={storageUsagePercent}
         storageUsageText={storageUsageText}
-        onNavigateToPath={navigateToPath}
+        onNavigateToPath={(path) => { navigateToPath(path); setShowLocations(false); }}
         onOpenNetworkDialog={() => dispatch({ type: "SHOW_NETWORK_DIALOG" })}
         onOpenGoogleDriveDialog={() => dispatch({ type: "SHOW_GOOGLE_DRIVE_DIALOG" })}
         onOpenUsbDialog={() => dispatch({ type: "SHOW_USB_DIALOG" })}
         onMountDrive={onMountDrive}
         onEjectDrive={onEjectDrive}
       />
+      </div>
       {activeDriveConnection ? (
-        <div className={`m-2 min-w-0 flex-1 overflow-hidden ${FILES_PANEL_SHELL}`}>
+        <div className={`mx-4 mb-2 mt-2 min-w-0 flex-1 overflow-hidden max-[360px]:mx-3 md:m-2 handheld:mx-[var(--mobile-gutter)] ${FILES_PANEL_SHELL}`}>
           <GoogleDrivePanel
             connectionId={activeDriveConnection.id}
             accountEmail={activeDriveConnection.email}
           />
         </div>
       ) : (
-      <div className={`m-2 flex min-w-0 flex-1 flex-col ${FILES_PANEL_SHELL}`}>
+      <div className={`mx-4 mb-2 mt-2 flex min-h-0 min-w-0 flex-1 flex-col max-[360px]:mx-3 md:m-2 handheld:@container/mobile-files handheld:mx-[var(--mobile-gutter)] handheld:mt-0 ${FILES_PANEL_SHELL}`}>
         <FileManagerToolbar
           canNavigateUp={currentPath.length > 0}
+          hasWindowBack={usesWindowBack}
           currentEntriesCount={currentEntriesCount}
           currentPath={currentPath}
           currentPathForDisplay={currentPathForDisplay}
@@ -256,7 +276,7 @@ export function FileManagerView({
           onCycleSortBy={() => dispatch({ type: "SET_SORT_BY", by: sortBy === "name" ? "modified" : sortBy === "modified" ? "size" : "name" })}
           onEmptyTrash={actions.handleEmptyTrash}
           onNavigateToPath={navigateToPath}
-          onNavigateUp={() => dispatch({ type: "NAVIGATE_UP" })}
+          onNavigateUp={goUp}
           onSearchQueryChange={(query) => dispatch({ type: "SET_SEARCH_QUERY", query })}
           onSetViewMode={(mode) => dispatch({ type: "SET_VIEW_MODE", mode })}
           onToggleGlobalSearch={() => dispatch({ type: "TOGGLE_GLOBAL_SEARCH" })}
@@ -267,6 +287,7 @@ export function FileManagerView({
           }}
         />
         <FileManagerFileArea
+          active={keyboardEnabled}
           canSaveOpenFile={canSaveOpenFile}
           directoryErrorMessage={directoryErrorMessage}
           directoryIsError={directoryIsError}
@@ -293,6 +314,7 @@ export function FileManagerView({
           pendingEntryPath={pendingEntryPath}
           searchQuery={searchQuery}
           selectedFiles={selectedFiles}
+          selectingFiles={selectingFiles}
           sortedEntries={sortedEntries}
           totalEntriesCount={totalEntriesCount}
           viewMode={viewMode}
@@ -325,6 +347,7 @@ export function FileManagerView({
           }}
           onEntryClick={onEntryClick}
           onEntryContextMenu={onPositionEntryContextMenu}
+          onToggleSelection={(entry) => dispatch({ type: "TOGGLE_FILE_SELECTION", path: entry.path })}
           onLoadMoreSearch={() => dispatch({ type: "LOAD_MORE_SEARCH" })}
           onOpenEntry={navigateTo}
           onSaveOpenFile={() => {
@@ -349,6 +372,7 @@ export function FileManagerView({
       </div>
       )}
       <FileManagerDialogLayer
+        active={keyboardEnabled}
         clipboardState={clipboardState}
         contextShare={contextShare}
         createEntryDialog={createDialog}

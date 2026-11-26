@@ -11,20 +11,24 @@ import { requireApiSession } from "@/lib/server/modules/auth/api";
 
 export const runtime = "nodejs";
 
-async function getAppearance(): Promise<AppearanceSettings> {
+async function getAppearance(): Promise<{ appearance: AppearanceSettings; hasSavedTheme: boolean }> {
   const rows = await db.select().from(settings).where(eq(settings.id, "singleton")).limit(1);
   if (rows.length === 0 || !rows[0].appearanceJson) {
-    return DEFAULT_APPEARANCE_SETTINGS;
+    return { appearance: DEFAULT_APPEARANCE_SETTINGS, hasSavedTheme: false };
   }
-  return sanitizeAppearanceSettings(rows[0].appearanceJson);
+  const raw = rows[0].appearanceJson as Partial<AppearanceSettings>;
+  return {
+    appearance: sanitizeAppearanceSettings(raw),
+    hasSavedTheme: raw.theme === "dark" || raw.theme === "light" || raw.theme === "system",
+  };
 }
 
 export async function GET(request: Request) {
   const apiSession = await requireApiSession(request);
   if (apiSession.response) return apiSession.response;
   try {
-    const appearance = await getAppearance();
-    return NextResponse.json({ data: appearance });
+    const { appearance, hasSavedTheme } = await getAppearance();
+    return NextResponse.json({ data: appearance, hasSavedTheme });
   } catch {
     return NextResponse.json({ data: DEFAULT_APPEARANCE_SETTINGS });
   }

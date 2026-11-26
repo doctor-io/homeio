@@ -65,7 +65,7 @@ import {
 } from "@/modules/files/components/manager/file-manager-state";
 import { FileManagerView } from "@/modules/files/components/manager/file-manager-view";
 
-export function FileManager() {
+export function FileManager({ keyboardEnabled = true }: { keyboardEnabled?: boolean } = {}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const statusNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -286,31 +286,28 @@ export function FileManager() {
 
   function handleEntryClick(event: MouseEvent, entry: FileEntry) {
     if (event.ctrlKey || event.metaKey) {
-      const next = new Set(state.selectedFiles);
-      if (next.has(entry.name)) next.delete(entry.name);
-      else next.add(entry.name);
-      dispatch({ type: "SET_SELECTED_FILES", files: next });
-      dispatch({ type: "SELECT_FILE", name: entry.name });
+      dispatch({ type: "TOGGLE_FILE_SELECTION", path: entry.path });
       return;
     }
     if (event.shiftKey && state.selectedFile) {
-      const anchor = sortedEntries.findIndex((candidate) => candidate.name === state.selectedFile);
-      const clicked = sortedEntries.findIndex((candidate) => candidate.name === entry.name);
+      const anchor = sortedEntries.findIndex((candidate) => candidate.path === state.selectedFile);
+      const clicked = sortedEntries.findIndex((candidate) => candidate.path === entry.path);
       if (anchor !== -1 && clicked !== -1) {
         const [from, to] = anchor <= clicked ? [anchor, clicked] : [clicked, anchor];
         dispatch({
           type: "SET_SELECTED_FILES",
-          files: new Set(sortedEntries.slice(from, to + 1).map((candidate) => candidate.name)),
+          files: new Set(sortedEntries.slice(from, to + 1).map((candidate) => candidate.path)),
         });
       }
-      dispatch({ type: "SELECT_FILE", name: entry.name });
+      dispatch({ type: "SELECT_FILE", path: entry.path });
       return;
     }
-    dispatch({ type: "SET_SELECTED_FILES", files: new Set([entry.name]) });
-    dispatch({ type: "SELECT_FILE", name: entry.name });
+    dispatch({ type: "SET_SELECTED_FILES", files: new Set([entry.path]) });
+    dispatch({ type: "SELECT_FILE", path: entry.path });
   }
 
   useFileManagerKeyboard({
+    enabled: keyboardEnabled,
     clipboardState: state.clipboardState,
     createEntryDialogOpen: Boolean(state.createEntryDialog),
     currentPath: state.currentPath,
@@ -340,13 +337,14 @@ export function FileManager() {
     const rootRect = rootRef.current?.getBoundingClientRect();
     if (!rootRect) return null;
     return {
-      x: Math.min(Math.max(8, event.clientX - rootRect.left), rootRect.width - dimensions.width - 8),
-      y: Math.min(Math.max(8, event.clientY - rootRect.top), rootRect.height - dimensions.height - 8),
+      x: Math.max(8, Math.min(event.clientX - rootRect.left, rootRect.width - dimensions.width - 8)),
+      y: Math.max(8, Math.min(event.clientY - rootRect.top, rootRect.height - dimensions.height - 8)),
     };
   }
 
   return (
     <FileManagerView
+      keyboardEnabled={keyboardEnabled}
       rootRef={rootRef}
       actions={actions}
       canSaveOpenFile={canSaveOpenFile}
@@ -393,6 +391,7 @@ export function FileManager() {
       onPositionBackgroundContextMenu={(event) => {
         if (viewFlags.isTrashView || viewFlags.isStarredView) return;
         event.preventDefault();
+        event.stopPropagation();
         const next = positionMenu(event, { width: 176, height: 112 });
         if (!next) return;
         dispatch({ type: "SHOW_BACKGROUND_CONTEXT_MENU", ...next });
@@ -400,10 +399,10 @@ export function FileManager() {
       onPositionEntryContextMenu={(event, entry) => {
         event.preventDefault();
         event.stopPropagation();
-        const next = positionMenu(event, { width: 220, height: 260 });
+        const next = positionMenu(event, { width: 220, height: 400 });
         if (!next) return;
         dispatch({ type: "SHOW_CONTEXT_MENU", entry, ...next });
-        dispatch({ type: "SELECT_FILE", name: entry.name });
+        dispatch({ type: "SELECT_FILE", path: entry.path });
       }}
       openFile={state.openFile}
       hasUnsavedChanges={openFileState.hasUnsavedChanges}

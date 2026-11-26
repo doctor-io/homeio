@@ -11,7 +11,7 @@ export function DockerRunView({ state, onChange }: DockerRunViewProps) {
   };
 
   return (
-    <section className="flex-1 overflow-y-auto px-4 py-3">
+    <section className="min-h-0 flex-1 overflow-y-auto px-4 py-3 handheld:overscroll-contain handheld:px-[var(--mobile-gutter)]">
       <p className="mb-3 text-2xs text-muted-foreground">
         Docker Run is available for custom installs only. Paste a full <code>docker run ...</code>{" "}
         command here; <code>docker pull ...</code> is not supported in this tab. Web UI

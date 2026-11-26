@@ -97,7 +97,7 @@ export type SettingsPanelProps = {
   accentOptions: AccentColorOption[];
   onAppearanceChange: (patch: Partial<AppearanceSettings>) => void;
   wallpaperAccentColor: string | null;
-  selectedSection?: string | null;
+  sectionRequest?: { id: string } | null;
   onOpenDiskManager?: () => void;
 };
 

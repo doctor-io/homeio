@@ -38,7 +38,9 @@ export function AppStoreInstallMenu({
         type="button"
         onClick={() => setIsOpen((value) => !value)}
         aria-label="Install menu"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary/15 text-primary rounded-md hover:bg-primary/25 transition-colors cursor-pointer"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        className="inline-flex min-h-11 items-center gap-1.5 px-3 py-1.5 md:min-h-0 handheld:min-h-11 text-xs font-medium bg-primary/15 text-primary rounded-md hover:bg-primary/25 transition-colors cursor-pointer"
       >
         <Plus className="size-3.5" />
         Install
@@ -56,7 +58,7 @@ export function AppStoreInstallMenu({
               setIsOpen(false);
               onInstallCustomClick();
             }}
-            className="w-full text-left px-2.5 py-1.5 text-xs text-foreground hover:bg-secondary/50 rounded-md transition-colors cursor-pointer"
+            className="min-h-11 w-full text-left px-2.5 py-1.5 md:min-h-0 handheld:min-h-11 text-xs text-foreground hover:bg-secondary/50 rounded-md transition-colors cursor-pointer"
           >
             Install Custom App
           </button>
@@ -67,7 +69,7 @@ export function AppStoreInstallMenu({
               setIsOpen(false);
               onManageSourcesClick();
             }}
-            className="w-full text-left px-2.5 py-1.5 text-xs text-foreground hover:bg-secondary/50 rounded-md transition-colors cursor-pointer"
+            className="min-h-11 w-full text-left px-2.5 py-1.5 md:min-h-0 handheld:min-h-11 text-xs text-foreground hover:bg-secondary/50 rounded-md transition-colors cursor-pointer"
           >
             Manage Sources
           </button>

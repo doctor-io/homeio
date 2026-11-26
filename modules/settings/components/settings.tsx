@@ -2,7 +2,6 @@
 
 import { useDesktopPreferences } from "@/hooks/useDesktopPreferences";
 import {
-  useActiveSettingsSection,
   useBackupSettingsController,
   useGeneralSettingsController,
   useNotificationSettingsController,
@@ -19,7 +18,10 @@ import {
 } from "@/modules/settings/components/panel/surface";
 import type { SettingsPanelProps, SettingsSectionId } from "@/modules/settings/components/panel/types";
 import { useSettingsBackend } from "@/modules/settings/hooks/useSettingsBackend";
+import { useMobileWindowPage } from "@/components/ui/mobile-window-page";
 import { cn } from "@/lib/utils";
+import { ChevronLeftIcon, ChevronRight } from "@/components/icons/platform-icons";
+import { useCallback, useState } from "react";
 
 const SIDEBAR_GROUPS: { label: string; ids: SettingsSectionId[] }[] = [
   { label: "System",         ids: ["general", "appearance", "updates"] },
@@ -31,21 +33,27 @@ const SIDEBAR_GROUPS: { label: string; ids: SettingsSectionId[] }[] = [
   { label: "Project",        ids: ["about"] },
 ];
 
+function settingsNavigation(request: SettingsPanelProps["sectionRequest"]) {
+  const section = SETTINGS_SECTIONS.find(({ id }) => id === request?.id);
+  return { request, activeSection: section?.id ?? "general" as const, showingIndex: !section };
+}
+
 export function SettingsPanel({
   appearance,
   wallpaperOptions,
   accentOptions,
   onAppearanceChange,
   wallpaperAccentColor,
-  selectedSection,
+  sectionRequest,
   onOpenDiskManager,
 }: SettingsPanelProps) {
+  const [navigation, setNavigation] = useState(() => settingsNavigation(sectionRequest));
+  if (navigation.request !== sectionRequest) setNavigation(settingsNavigation(sectionRequest));
+  const { activeSection, showingIndex } = navigation;
+  const showIndex = useCallback(() => setNavigation((current) => ({ ...current, showingIndex: true })), []);
+  const setActiveSection = (section: SettingsSectionId) => setNavigation((current) => ({ ...current, activeSection: section, showingIndex: false }));
   const settingsBackend = useSettingsBackend();
   const desktopPreferences = useDesktopPreferences();
-  const { activeSection, setActiveSection } = useActiveSettingsSection(
-    selectedSection,
-    SETTINGS_SECTIONS.map((section) => section.id),
-  );
 
   const generalController = useGeneralSettingsController(
     settingsBackend.generalPreferences,
@@ -86,10 +94,39 @@ export function SettingsPanel({
   const activeDefinition =
     sectionDefinitions.find((section) => section.id === activeSection) ??
     sectionDefinitions[0];
+  const usesWindowTitle = useMobileWindowPage(showingIndex ? null : activeDefinition.label, showIndex);
 
   return (
-    <div className="flex h-full">
-      <aside className={cn("m-2 flex w-52 shrink-0 flex-col", SETTINGS_PANEL_SHELL)}>
+    <div className="flex h-full min-h-0 min-w-0 flex-col md:flex-row handheld:@container/mobile-settings handheld:!flex-col">
+      <nav aria-label="Settings sections" className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-[var(--mobile-gutter)] pb-5 pt-3 md:hidden handheld:!block handheld:@xl/mobile-settings:!grid handheld:@xl/mobile-settings:grid-cols-2 handheld:@xl/mobile-settings:content-start handheld:@xl/mobile-settings:gap-x-4", !showingIndex && "handheld:!hidden handheld:@xl/mobile-settings:!hidden hidden")}>
+        {SIDEBAR_GROUPS.map((group) => {
+          const sections = sectionDefinitions.filter((section) => group.ids.includes(section.id as SettingsSectionId));
+          if (!sections.length) return null;
+          return (
+            <section key={group.label} className="mb-4">
+              <h3 className="mb-2 px-1 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{group.label}</h3>
+              <div className="mobile-list-group divide-y divide-[var(--mobile-divider)]">
+                {sections.map((section) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    aria-label={`Open ${section.label} settings`}
+                    aria-current={activeSection === section.id ? "page" : undefined}
+                    onClick={() => setActiveSection(section.id)}
+                    className={cn("flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm text-foreground transition-colors hover:bg-secondary/50 active:bg-foreground/10 focus-visible:outline-primary", activeSection === section.id && "bg-primary/10 font-semibold")}
+                  >
+                    <section.icon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">{section.label}</span>
+                    {section.badge ? <span className="text-xs font-semibold text-primary">{section.badge}</span> : null}
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </nav>
+      <aside aria-label="Settings sidebar" className={cn("m-2 hidden w-52 shrink-0 flex-col md:flex handheld:!hidden", SETTINGS_PANEL_SHELL)}>
         <div className="flex-1 overflow-y-auto px-2 py-3">
           {SIDEBAR_GROUPS.map((group) => {
             const sections = sectionDefinitions.filter((s) => group.ids.includes(s.id as SettingsSectionId));
@@ -149,15 +186,18 @@ export function SettingsPanel({
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">
+      <main className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto md:block", showingIndex && "hidden handheld:!hidden")}>
+        <div className="min-w-0 max-w-2xl p-4 md:p-5 handheld:mx-auto handheld:!px-[var(--mobile-gutter)] handheld:!py-4">
+          {!usesWindowTitle && <button type="button" onClick={showIndex} className="-ml-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-primary transition-colors hover:text-primary/80 active:bg-foreground/10 focus-visible:outline-primary md:hidden handheld:!inline-flex handheld:min-h-[var(--mobile-touch-target)]">
+            <ChevronLeftIcon className="size-4" aria-hidden="true" /> All settings
+          </button>}
+          <div className={cn("mb-3 flex flex-wrap items-center justify-between gap-3 md:mb-4 handheld:!mb-3", usesWindowTitle && "empty:hidden") }>
+            {!usesWindowTitle && <h2 className="text-base font-semibold text-foreground">
               {activeDefinition.label}
-            </h2>
+            </h2>}
             {!activeDefinition.liveApply && activeDefinition.save ? (
               <button
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-primary/90"
+                className="min-h-11 px-3 py-1.5 text-xs font-medium rounded-lg md:min-h-0 handheld:!min-h-11 bg-primary text-primary-foreground transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:bg-primary/90"
                 disabled={!activeDefinition.save.canSave}
                 title={activeDefinition.save.title}
                 onClick={() => {

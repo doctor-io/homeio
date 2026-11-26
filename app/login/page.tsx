@@ -12,6 +12,7 @@ export default function LoginPage() {
 
   return (
     <FullScreenShell
+      compactOnMobile
       center={
         <div className="w-full max-w-md">
           <Suspense fallback={null}>

@@ -13,6 +13,12 @@ export const metadata: Metadata = {
   title: "Homeio",
   description:
     "Your home server dashboard - manage all your self-hosted services in one place.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Homeio",
+    statusBarStyle: "black-translucent",
+  },
   icons: {
     icon: [
       {
@@ -21,13 +27,16 @@ export const metadata: Metadata = {
         sizes: "512x512",
       },
     ],
-    apple: "/icon.png",
+    apple: "/apple-touch-icon.png",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1a2332",
-  userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4efe8" },
+    { media: "(prefers-color-scheme: dark)", color: "#171615" },
+  ],
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -40,6 +49,7 @@ export default function RootLayout({
       <body
         className={`${_inter.variable} ${_geistMono.variable} font-sans antialiased`}
       >
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(!localStorage.getItem('theme')&&matchMedia('(width < 48rem), (pointer: coarse) and (hover: none)').matches)localStorage.setItem('theme','system')}catch(e){}})()` }} />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

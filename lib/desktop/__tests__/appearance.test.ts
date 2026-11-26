@@ -7,12 +7,12 @@ import {
 } from "@/lib/desktop/appearance";
 
 describe("sanitizeAppearanceSettings", () => {
-  it("forces legacy system theme values to dark", () => {
+  it("preserves the system theme choice", () => {
     expect(
       sanitizeAppearanceSettings({
         theme: "system",
       }).theme,
-    ).toBe("dark");
+    ).toBe("system");
   });
 
   it("clamps radius values into the supported range", () => {

@@ -146,12 +146,9 @@ export function sanitizeWeatherLocation(input: unknown): WeatherLocation | null 
 
 export function sanitizeAppearanceSettings(input: unknown): AppearanceSettings {
   const value = (input ?? {}) as Partial<AppearanceSettings>
-  const sanitizedTheme =
-    value.theme === "system"
-      ? DEFAULT_APPEARANCE_SETTINGS.theme
-      : isDesktopTheme(value.theme)
-        ? value.theme
-        : DEFAULT_APPEARANCE_SETTINGS.theme
+  const sanitizedTheme = isDesktopTheme(value.theme)
+    ? value.theme
+    : DEFAULT_APPEARANCE_SETTINGS.theme
 
   return {
     theme: sanitizedTheme,

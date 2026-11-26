@@ -1,6 +1,7 @@
 "use client";
 
 import { FileManagerBackgroundContextMenu, FileManagerContextMenu } from "@/modules/files/components/menus/file-manager-overlays";
+import { OverlayActivityContext } from "@/components/ui/overlay-activity";
 import {
   CreateEntryDialog,
   EmptyTrashConfirmDialog,
@@ -22,6 +23,7 @@ import type {
 } from "@/modules/files/components/manager/file-manager-state";
 
 type FileManagerDialogLayerProps = {
+  active: boolean;
   clipboardState: ClipboardState | null;
   contextShare:
     | {
@@ -83,6 +85,7 @@ type FileManagerDialogLayerProps = {
 };
 
 export function FileManagerDialogLayer({
+  active,
   clipboardState,
   contextShare,
   createEntryDialog,
@@ -139,7 +142,7 @@ export function FileManagerDialogLayer({
   unzipPending,
 }: FileManagerDialogLayerProps) {
   return (
-    <>
+    <OverlayActivityContext.Provider value={active}>
       {showContextMenu ? (
         <FileManagerContextMenu
           contextShareActive={Boolean(contextShare)}
@@ -242,6 +245,6 @@ export function FileManagerDialogLayer({
         onClose={onCloseUsbDialog}
         onNavigateToUsb={(path) => { onNavigateToUsb(path); onCloseUsbDialog(); }}
       />
-    </>
+    </OverlayActivityContext.Provider>
   );
 }

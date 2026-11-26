@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
 import { FileManager } from "@/modules/files/components/file-manager";
+export const fileManagerElement = (keyboardEnabled = true) => <FileManager keyboardEnabled={keyboardEnabled} />;
 
 export const mockUseFilesDirectory = vi.fn();
 export const mockUseFileContent = vi.fn();

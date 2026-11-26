@@ -24,7 +24,7 @@ function ThresholdRow({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className={cn(SETTINGS_PANEL_INSET, "flex items-center justify-between gap-4 px-4 py-3")}>
+    <div className={cn(SETTINGS_PANEL_INSET, "flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:gap-4")}>
       <div className="min-w-0">
         <div className="text-sm text-foreground">{label}</div>
         {description && (

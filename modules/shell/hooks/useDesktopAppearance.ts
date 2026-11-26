@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { useTheme } from "next-themes"
 import { queryKeys } from "@/lib/shared/query-keys"
 import {
   type AppearanceSettings,
@@ -31,7 +32,7 @@ const iconSizeMap: Record<DesktopIconSize, "small" | "medium" | "large"> = {
 
 function resolveTheme(theme: DesktopTheme) {
   if (theme === "system") {
-    return "dark"
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
   }
   return theme
 }
@@ -44,6 +45,9 @@ function applyAppearanceToDom(settings: AppearanceSettings) {
   root.dataset.desktopAnimations = settings.animationsEnabled ? "on" : "off"
   root.classList.toggle("dark", resolvedTheme === "dark")
   root.style.colorScheme = resolvedTheme
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+    meta.content = resolvedTheme === "dark" ? "#171615" : "#f4efe8"
+  })
   root.style.fontSize = `${fontSizeScaleMap[settings.fontSize]}px`
   root.style.setProperty("--radius", `${settings.radius}px`)
   root.style.setProperty("--primary", settings.accentColor)
@@ -72,8 +76,12 @@ function applyAppearanceToDom(settings: AppearanceSettings) {
 async function fetchAppearance(): Promise<AppearanceSettings> {
   const res = await fetch("/api/v1/settings/appearance", { cache: "no-store" });
   if (!res.ok) return DEFAULT_APPEARANCE_SETTINGS;
-  const json = await res.json() as { data: AppearanceSettings };
-  return sanitizeAppearanceSettings(json.data);
+  const json = await res.json() as { data: AppearanceSettings; hasSavedTheme?: boolean };
+  const appearance = sanitizeAppearanceSettings(json.data);
+  if (json.hasSavedTheme === false && window.matchMedia("(width < 48rem), (pointer: coarse) and (hover: none)").matches) {
+    appearance.theme = "system";
+  }
+  return appearance;
 }
 
 async function saveAppearance(appearance: AppearanceSettings): Promise<void> {
@@ -89,7 +97,9 @@ export function useDesktopAppearance() {
   const [loaded, setLoaded] = useState(false)
   const [wallpaperAccentColor, setWallpaperAccentColor] = useState<string | null>(null)
   const extractingRef = useRef<string | null>(null)
+  const shouldSaveRef = useRef(false)
   const queryClient = useQueryClient()
+  const { setTheme } = useTheme()
 
   useEffect(() => {
     fetchAppearance().then((saved) => {
@@ -107,29 +117,32 @@ export function useDesktopAppearance() {
   }, [appearance.wallpaper])
 
   useEffect(() => {
+    if (!loaded) return
     const resolved = appearance.accentColor === AUTO_ACCENT_VALUE
       ? (wallpaperAccentColor ?? DEFAULT_APPEARANCE_SETTINGS.accentColor)
       : appearance.accentColor
-    applyAppearanceToDom({ ...appearance, accentColor: resolved })
-  }, [appearance, wallpaperAccentColor])
+    const theme = appearance.theme
+    const resolvedAppearance = { ...appearance, theme, accentColor: resolved }
+    setTheme(theme)
+    const apply = () => applyAppearanceToDom(resolvedAppearance)
+    apply()
+    if (theme !== "system") return
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    media.addEventListener("change", apply)
+    return () => media.removeEventListener("change", apply)
+  }, [appearance, loaded, setTheme, wallpaperAccentColor])
 
   useEffect(() => {
     if (!loaded) return
     queryClient.setQueryData(queryKeys.weatherLocation, appearance.weatherLocation)
-    saveAppearance(appearance);
+    if (shouldSaveRef.current) {
+      shouldSaveRef.current = false
+      saveAppearance(appearance)
+    }
   }, [appearance, loaded, queryClient])
 
-  useEffect(() => {
-    if (appearance.theme !== "system") return
-    const media = window.matchMedia("(prefers-color-scheme: dark)")
-    const handleThemeChange = () => {
-      applyAppearanceToDom(appearance)
-    }
-    media.addEventListener("change", handleThemeChange)
-    return () => media.removeEventListener("change", handleThemeChange)
-  }, [appearance])
-
   const updateAppearance = useCallback((patch: Partial<AppearanceSettings>) => {
+    shouldSaveRef.current = true
     setAppearance((prev) => sanitizeAppearanceSettings({ ...prev, ...patch }))
   }, [])
 

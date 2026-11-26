@@ -85,7 +85,7 @@ export function FileManagerSidebar({
   }, [addMenuOpen]);
 
   return (
-    <aside className={cn("m-2 flex w-60 shrink-0 flex-col", FILES_PANEL_SHELL)}>
+    <aside className={cn("m-2 flex w-60 shrink-0 flex-col handheld:bg-[var(--mobile-panel)] handheld:backdrop-blur-none", FILES_PANEL_SHELL)}>
       <div className="flex-1 overflow-y-auto px-3 py-3.5">
         {sidebarSections.map((section) => {
           const isCloud = section.title === "Cloud";

@@ -8,6 +8,7 @@ type ConfiguratorHeaderProps = {
   views: ConfiguratorView[];
   onViewChange: (view: ConfiguratorView) => void;
   onClose?: () => void;
+  withinMobileWindow?: boolean;
 };
 
 function formatViewLabel(view: ConfiguratorView) {
@@ -22,18 +23,20 @@ export function ConfiguratorHeader({
   views,
   onViewChange,
   onClose,
+  withinMobileWindow,
 }: ConfiguratorHeaderProps) {
   return (
-    <header className="flex items-center justify-between border-b border-glass-border px-4 py-3">
+    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-glass-border px-4 py-3 handheld:px-[var(--mobile-gutter)] handheld:py-2">
       <div className="min-w-0">
-        <h3 className="truncate text-lg font-semibold text-foreground">{title}</h3>
-        <div className="mt-2 flex items-center gap-1.5">
+        {!withinMobileWindow && <h3 className="mb-2 truncate text-lg font-semibold text-foreground">{title}</h3>}
+        <div className="flex flex-wrap items-center gap-1.5">
           {views.map((view) => (
             <button
               key={view}
               type="button"
+              aria-pressed={activeView === view}
               onClick={() => onViewChange(view)}
-              className={`cursor-pointer rounded-md border px-2.5 py-1 text-2xs font-medium transition-colors ${
+              className={`min-h-11 cursor-pointer rounded-md border px-2.5 py-1 text-2xs md:min-h-0 handheld:min-h-11 handheld:text-xs font-medium transition-colors ${
                 activeView === view
                   ? "border-primary/50 bg-primary/15 text-primary"
                   : "border-glass-border text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
@@ -44,11 +47,11 @@ export function ConfiguratorHeader({
           ))}
         </div>
       </div>
-      {onClose ? (
+      {onClose && !withinMobileWindow ? (
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg border border-glass-border p-1.5 text-muted-foreground transition-colors hover:bg-secondary/45 hover:text-foreground"
+          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-glass-border p-1.5 md:min-h-0 md:min-w-0 handheld:min-h-11 handheld:min-w-11 text-muted-foreground transition-colors hover:bg-secondary/45 hover:text-foreground"
           aria-label="Close configurator"
           title="Close"
         >

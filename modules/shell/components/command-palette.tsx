@@ -123,37 +123,41 @@ export function CommandPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search Homeio"
-      description="Jump to settings, apps, and desktop tools."
-      className="overflow-hidden border border-white/[0.09] bg-black/60 p-0 shadow-[var(--system-shadow-floating)] [backdrop-filter:blur(40px)_saturate(160%)] [border-radius:var(--system-radius-floating)] max-w-[min(92vw,44rem)]"
+      description="Find settings, apps, and tools."
+      className="overflow-hidden border border-white/[0.09] bg-black/60 p-0 shadow-[var(--system-shadow-floating)] [backdrop-filter:blur(40px)_saturate(160%)] [border-radius:var(--system-radius-floating)] max-w-[min(92vw,44rem)] handheld:top-[calc(env(safe-area-inset-top)+0.5rem)] handheld:max-h-[min(75dvh,38rem,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1rem))] handheld:max-w-[min(36rem,calc(100%-var(--mobile-overlay-gutter)*2))] handheld:translate-y-0 handheld:border-[var(--mobile-divider)] handheld:bg-[var(--mobile-panel)] handheld:[backdrop-filter:none] handheld:[&_[data-slot=command]]:bg-[var(--mobile-panel)] handheld:[&_[cmdk-item]]:min-h-11 handheld:[&_[cmdk-item]]:aria-selected:bg-primary/14 handheld:[&_[cmdk-item]]:aria-selected:text-foreground"
       showCloseButton={false}
     >
       {/* Hero header — matches lock screen / login design language */}
-      <div className="flex flex-col items-center border-b border-white/8 bg-black/22 px-6 py-5">
-        <div className="system-hero-surface flex size-[3.25rem] items-center justify-center bg-black/22 shadow-[var(--system-shadow-dock)]">
+      <div className="flex shrink-0 flex-col items-center border-b border-white/8 bg-black/22 px-6 py-5 handheld:flex-row handheld:gap-2 handheld:border-[var(--mobile-divider)] handheld:bg-[var(--mobile-panel)] handheld:px-3 handheld:py-2">
+        <div className="system-hero-surface flex size-[3.25rem] items-center justify-center bg-black/22 shadow-[var(--system-shadow-dock)] handheld:hidden">
           <Search className="size-6 text-foreground/72" />
         </div>
-        <div className="system-pill-surface mt-3 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/55 uppercase">
+        <div className="system-pill-surface mt-3 px-3 py-1 text-[10px] tracking-[0.22em] text-foreground/55 uppercase handheld:hidden">
           Command Palette
         </div>
-        <div className="mt-3 w-full [&_[data-slot=command-input-wrapper]]:h-10 [&_[data-slot=command-input-wrapper]]:border-0 [&_[data-slot=command-input-wrapper]]:px-0">
-          <div className="system-soft-surface bg-black/22 px-3 shadow-[var(--system-shadow-dock)]">
+        <div className="mt-3 w-full [&_[data-slot=command-input-wrapper]]:h-10 [&_[data-slot=command-input-wrapper]]:border-0 [&_[data-slot=command-input-wrapper]]:px-0 handheld:mt-0 handheld:min-w-0 handheld:flex-1">
+          <div className="system-soft-surface bg-black/22 px-3 shadow-[var(--system-shadow-dock)] handheld:rounded-xl handheld:border handheld:border-[var(--mobile-divider)] handheld:bg-[var(--mobile-canvas)] handheld:shadow-none">
             <CommandInput
               autoFocus
               value={query}
               onValueChange={onQueryChange}
-              placeholder="Search settings, apps, and tools…"
-              className="text-[15px] text-foreground placeholder:text-muted-foreground/50"
+              aria-label="Search settings, apps, and tools"
+              placeholder="Search Homeio"
+              className="text-[15px] text-foreground placeholder:text-muted-foreground/70 handheld:text-[length:max(16px,1rem)]"
             />
           </div>
         </div>
-        <div className="mt-2.5 flex items-center gap-3 text-[10px] text-muted-foreground/40 tracking-widest uppercase">
+        <button type="button" onClick={() => onOpenChange(false)} className="hidden min-h-11 shrink-0 rounded-md px-2 text-sm font-medium text-foreground focus-visible:ring-2 focus-visible:ring-primary handheld:block">
+          Cancel
+        </button>
+        <div className="mt-2.5 flex items-center gap-3 text-[10px] text-muted-foreground/40 tracking-widest uppercase handheld:hidden">
           <span className="system-keycap-surface px-1.5 py-0.5 font-mono">⌘K</span>
           <span className="opacity-50">·</span>
           <span className="system-keycap-surface px-1.5 py-0.5 font-mono">Esc</span>
         </div>
       </div>
 
-      <CommandList className="max-h-[26rem]">
+      <CommandList className="max-h-[26rem] handheld:min-h-0 handheld:max-h-[calc(min(75dvh,38rem)-3.75rem)] handheld:overscroll-contain handheld:pb-2">
         <CommandEmpty>
           <div className="py-8 text-center">
             <p className="text-sm font-medium text-foreground">No matches found</p>

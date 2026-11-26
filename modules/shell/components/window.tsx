@@ -1,6 +1,9 @@
 "use client";
 
 import { Maximize2, Minimize2, Minus, X } from "@/components/icons/platform-icons";
+import { ChevronLeftRegular } from "@fluentui/react-icons";
+import { OverlayActivityContext } from "@/components/ui/overlay-activity";
+import { MobileWindowPageContext, type MobileWindowPage } from "@/components/ui/mobile-window-page";
 import {
   Tooltip,
   TooltipContent,
@@ -10,6 +13,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type WindowProps = {
   title: string;
+  mobile?: boolean;
+  inactive?: boolean;
   icon?: React.ReactNode;
   children: React.ReactNode;
   onClose: () => void;
@@ -29,6 +34,8 @@ const SIDE_DOCK_CLEARANCE = 80;
 
 export function Window({
   title,
+  mobile = false,
+  inactive = false,
   icon,
   children,
   onClose,
@@ -43,6 +50,7 @@ export function Window({
   animationsEnabled = true,
 }: WindowProps) {
   const [isMaximized, setIsMaximized] = useState(false);
+  const [mobilePage, setMobilePage] = useState<MobileWindowPage | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ x: -1, y: -1 });
   const [size, setSize] = useState({ w: defaultWidth, h: defaultHeight });
@@ -51,16 +59,17 @@ export function Window({
   const dragOffset = useRef({ x: 0, y: 0 });
   const windowRef = useRef<HTMLDivElement>(null);
   const preMaxState = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const backSwipe = useRef<{ x: number; y: number } | null>(null);
 
   // Center on mount
   useEffect(() => {
-    if (position.x === -1) {
+    if (!mobile && position.x === -1) {
       setPosition({
         x: Math.max(40, (window.innerWidth - size.w) / 2),
         y: Math.max(50, (window.innerHeight - size.h) / 2 - 20),
       });
     }
-  }, [position.x, size.w, size.h]);
+  }, [mobile, position.x, size.w, size.h]);
 
   useEffect(() => {
     if (!animationsEnabled) {
@@ -179,38 +188,58 @@ export function Window({
             height: "auto",
           };
 
-  if (isMinimized) return null;
+  const hidden = inactive || (isMinimized && !mobile);
+  const back = mobilePage?.onBack ?? onClose;
 
   return (
     <div
       ref={windowRef}
-      className={`absolute flex flex-col overflow-hidden border border-glass-border ${
-        isMaximized
-          ? "rounded-[calc(var(--radius)+0.5rem)] shadow-[0_18px_42px_rgba(0,0,0,0.28)]"
-          : "rounded-[calc(var(--radius)+0.375rem)] shadow-2xl shadow-black/50"
-      } ${
-        animationsEnabled
-          ? "transition-[opacity,transform] duration-200 ease-out"
-          : ""
-      } ${
-        !animationsEnabled || (isVisible && !isClosing)
-          ? "opacity-100 scale-100 translate-y-0"
-          : "opacity-0 scale-95 translate-y-2"
-      }`}
-      style={
-        isMaximized
-          ? maximizedStyle
-          : {
-              left: position.x,
-              top: position.y,
-              width: size.w,
-              height: size.h,
-              zIndex,
-            }
-      }
-      onMouseDown={() => onFocus?.()}
+      role={mobile ? "region" : undefined}
+      aria-label={mobile ? title : undefined}
+      aria-hidden={hidden || undefined}
+      inert={hidden || undefined}
+      className={mobile
+        ? "mobile-window mobile-window-opening absolute z-[110] flex min-h-0 flex-col overflow-hidden bg-[var(--mobile-canvas)]"
+        : `absolute flex flex-col overflow-hidden border border-glass-border ${
+            isMaximized
+              ? "rounded-[calc(var(--radius)+0.5rem)] shadow-[0_18px_42px_rgba(0,0,0,0.28)]"
+              : "rounded-[calc(var(--radius)+0.375rem)] shadow-2xl shadow-black/50"
+          } ${animationsEnabled ? "transition-[opacity,transform] duration-200 ease-out" : ""} ${
+            !animationsEnabled || (isVisible && !isClosing)
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 translate-y-2"
+          }`}
+      style={hidden ? { display: "none" } : mobile ? undefined : isMaximized ? maximizedStyle : {
+        left: position.x, top: position.y, width: size.w, height: size.h, zIndex,
+      }}
+      onMouseDown={mobile ? undefined : () => onFocus?.()}
     >
-      {/* Title bar */}
+      {mobile ? (
+        <header
+          className="mobile-window-header flex shrink-0 items-center gap-1 border-b border-[var(--mobile-divider)]"
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            backSwipe.current = event.touches.length === 1 && touch.clientX >= 24 && !(event.target as Element).closest("button")
+              ? { x: touch.clientX, y: touch.clientY }
+              : null;
+          }}
+          onTouchEnd={(event) => {
+            const start = backSwipe.current;
+            backSwipe.current = null;
+            if (!start || event.touches.length || event.changedTouches.length !== 1) return;
+            const touch = event.changedTouches[0];
+            const dx = touch.clientX - start.x;
+            const dy = touch.clientY - start.y;
+            if (dx >= 80 && dx > Math.abs(dy) * 1.5) back();
+          }}
+          onTouchCancel={() => { backSwipe.current = null; }}
+        >
+          <button type="button" onClick={back} aria-label="Go back" className="mobile-tool">
+            <ChevronLeftRegular className="size-5" aria-hidden="true" />
+          </button>
+          <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-[-0.025em]">{mobilePage?.title ?? title}</h1>
+        </header>
+      ) : (
       <div
         className="flex items-center justify-between h-11 px-4 bg-popover/80 backdrop-blur-2xl border-b border-glass-border select-none shrink-0"
         onMouseDown={handleMouseDown}
@@ -274,13 +303,19 @@ export function Window({
         <div className="w-16" />
       </div>
 
+      )}
+
       {/* Window content */}
-      <div className="flex-1 overflow-hidden bg-card/90 backdrop-blur-2xl">
-        {children}
+      <div className={mobile ? "mobile-window-content min-h-0 flex-1 overflow-hidden" : "flex-1 overflow-hidden bg-card/90 backdrop-blur-2xl"}>
+        <OverlayActivityContext.Provider value={!hidden && !isClosing}>
+          <MobileWindowPageContext.Provider value={mobile ? setMobilePage : null}>
+            {children}
+          </MobileWindowPageContext.Provider>
+        </OverlayActivityContext.Provider>
       </div>
 
       {/* Resize handle */}
-      {!isMaximized && (
+      {!mobile && !isMaximized && (
         <div
           className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
           onMouseDown={handleResizeMouseDown}

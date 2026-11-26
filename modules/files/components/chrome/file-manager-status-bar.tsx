@@ -32,7 +32,7 @@ export function FileManagerStatusBar({
   onTrashSelected,
 }: StatusBarProps) {
   return (
-    <div className="flex items-center justify-between border-t border-glass-border/60 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-1 border-t border-glass-border/60 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground">
       <span className="flex items-center gap-3">
         <span>
           {folderCount > 0 && `${folderCount} folder${folderCount > 1 ? "s" : ""}`}
@@ -68,7 +68,7 @@ export function FileManagerStatusBar({
             {clipboardOperation === "copy" ? "Clipboard" : "Cut"}: {clipboardName}
           </span>
         )}
-        <span className="font-mono text-muted-foreground/50">
+        <span className="hidden font-mono text-muted-foreground/50 md:inline handheld:hidden">
           {rootLabel}
           {currentPathForDisplay.length > 0 ? `/${currentPathForDisplay.join("/")}` : ""}
         </span>

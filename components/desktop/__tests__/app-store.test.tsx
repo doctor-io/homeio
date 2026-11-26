@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppOperationState } from "@/modules/apps/hooks/useStoreActions";
 import type { InstalledStackConfig, StoreAppDetail, StoreAppSummary } from "@/lib/shared/contracts/apps";
@@ -293,6 +293,13 @@ describe("AppStore", () => {
     expect(screen.getByText("Featured")).toBeTruthy();
     expect(screen.getByText("Recommended")).toBeTruthy();
     expect(screen.getByTitle("Media apps")).toBeTruthy();
+  });
+
+  it("applies the mobile category selector to the catalog", () => {
+    setup();
+    fireEvent.change(screen.getByRole("combobox", { name: "Category" }), { target: { value: "Media" } });
+    expect(useStoreCatalogMock).toHaveBeenLastCalledWith({ category: "Media", search: undefined, installedOnly: false });
+    expect(screen.getByText("Plex")).toBeTruthy();
   });
 
   it("opens the source management dialog from the install menu", async () => {
