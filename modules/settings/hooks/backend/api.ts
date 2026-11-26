@@ -5,6 +5,8 @@ import type {
   SystemRestoreAcceptedResponse,
   SystemSecuritySettings,
   SystemUpdateApplyAcceptedResponse,
+  SystemUpdateChannel,
+  SystemUpdateChannelSettings,
   SystemUpdateStatus,
 } from "@/lib/shared/contracts/system";
 import { DEFAULT_SCHEDULED_REBOOT_CONFIG } from "@/modules/settings/hooks/backend/constants";
@@ -72,12 +74,34 @@ export function checkSystemUpdatesRequest(): Promise<SystemUpdateStatus> {
   });
 }
 
-export function applySystemUpdateRequest(): Promise<SystemUpdateApplyAcceptedResponse> {
+export function applySystemUpdateRequest(version?: string): Promise<SystemUpdateApplyAcceptedResponse> {
   return requestSettingsData<SystemUpdateApplyAcceptedResponse>({
-    endpoint: "/api/v1/system/updates/apply",
+    endpoint: version
+      ? `/api/v1/system/updates/apply?version=${encodeURIComponent(version)}`
+      : "/api/v1/system/updates/apply",
     errorMessage: "Failed to schedule Homeio update",
     init: {
       method: "POST",
+    },
+  });
+}
+
+export function fetchSystemUpdateChannelRequest(): Promise<SystemUpdateChannelSettings> {
+  return requestSettingsData<SystemUpdateChannelSettings>({
+    endpoint: "/api/v1/system/updates/channel",
+    errorMessage: "Failed to load the update channel",
+    init: { cache: "no-store" },
+  });
+}
+
+export function saveSystemUpdateChannelRequest(channel: SystemUpdateChannel): Promise<SystemUpdateChannelSettings> {
+  return requestSettingsData<SystemUpdateChannelSettings>({
+    endpoint: "/api/v1/system/updates/channel",
+    errorMessage: "Failed to save the update channel",
+    init: {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel }),
     },
   });
 }

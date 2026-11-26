@@ -1,4 +1,6 @@
 import type * as NodeFsPromises from "node:fs/promises";
+import path from "node:path";
+import { inc } from "semver";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 const { execFileMock, statMock } = vi.hoisted(() => ({
@@ -15,14 +17,23 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return { ...original, stat: statMock };
 });
 
+vi.mock("@/lib/server/modules/system/update-channel-repository", () => ({
+  readUpdateChannel: vi.fn(),
+  withLockedUpdateChannel: vi.fn(),
+  writeUpdateChannel: vi.fn(),
+}));
+
+import { readUpdateChannel, withLockedUpdateChannel, writeUpdateChannel } from "@/lib/server/modules/system/update-channel-repository";
 import {
   buildLatestReleaseApiUrl,
   buildRemotePackageJsonApiUrl,
   buildRemotePackageJsonUrl,
   compareVersions,
+  getSystemUpdateChannel,
   getSystemUpdateStatus,
   resetUpdateStatusCacheForTests,
   scheduleSystemUpdate,
+  setSystemUpdateChannel,
 } from "@/lib/server/modules/system/update-service";
 import packageJson from "@/package.json";
 
@@ -32,14 +43,7 @@ function resolveExecFileCallback(args: unknown[]) {
     throw new Error("Expected execFile callback");
   }
 
-  return maybeCallback as (error: Error | null, stdout?: string, stderr?: string) => void;
-}
-
-function bumpPatchVersion(version: string) {
-  const parts = version.split(".");
-  const last = Number.parseInt(parts.at(-1) ?? "0", 10);
-  parts[parts.length - 1] = String(Number.isFinite(last) ? last + 1 : 1);
-  return parts.join(".");
+  return maybeCallback as (error: Error | null, result: { stdout: string; stderr: string }) => void;
 }
 
 function releaseResponse(tag: string) {
@@ -59,7 +63,7 @@ function branchResponse(version: string) {
 
 function succeedAllExecFileCalls() {
   execFileMock.mockImplementation((_command: string, _args: string[], ...rest: unknown[]) => {
-    resolveExecFileCallback(rest)(null, "", "");
+    resolveExecFileCallback(rest)(null, { stdout: "", stderr: "" });
   });
 }
 
@@ -68,6 +72,9 @@ describe("update-service", () => {
     vi.restoreAllMocks();
     resetUpdateStatusCacheForTests();
     execFileMock.mockReset();
+    statMock.mockReset();
+    vi.mocked(readUpdateChannel).mockReset().mockResolvedValue("stable");
+    vi.mocked(withLockedUpdateChannel).mockReset().mockImplementation((action) => action("stable"));
     // Release mode unless a test opts into following a branch.
     vi.stubEnv("HOMEIO_REPO_BRANCH", "");
     vi.stubEnv("HOMEIO_CONTAINER", "");
@@ -81,6 +88,8 @@ describe("update-service", () => {
     expect(compareVersions("0.1.75", "0.1.74")).toBe(1);
     expect(compareVersions("0.1.74", "0.1.74")).toBe(0);
     expect(compareVersions("0.1.73", "0.1.74")).toBe(-1);
+    expect(compareVersions("v1.2.0-beta.10", "1.2.0-beta.2")).toBe(1);
+    expect(compareVersions("1.2.0-rc.1", "1.2.0")).toBe(-1);
   });
 
   it("builds a raw GitHub package.json url from the repo config", () => {
@@ -97,14 +106,15 @@ describe("update-service", () => {
 
   it("reports that the Docker image cannot update itself", async () => {
     vi.stubEnv("HOMEIO_CONTAINER", "true");
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(releaseResponse(`v${packageJson.version}`));
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(releaseResponse("v1.0.0"));
 
     const status = await getSystemUpdateStatus();
     expect(status.canSelfUpdate).toBe(false);
   });
 
   it("offers the latest published release, not whatever main holds", async () => {
-    const nextVersion = bumpPatchVersion(packageJson.version);
+    const nextVersion = inc(packageJson.version, "patch");
+    if (!nextVersion) throw new Error("The package version must use SemVer.");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(releaseResponse(`v${nextVersion}`));
 
     const status = await getSystemUpdateStatus();
@@ -133,6 +143,44 @@ describe("update-service", () => {
 
     expect(status.latestVersion).toBeNull();
     expect(status.updateAvailable).toBe(false);
+  });
+
+  it("uses the highest published version on Beta without sharing Stable's cache", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(releaseResponse("v1.11.2"))
+      .mockResolvedValueOnce(Response.json([
+        { tag_name: "v2.0.0-beta.2", prerelease: true, draft: false },
+        { tag_name: "v3.0.0-beta.1", prerelease: true, draft: true },
+        { tag_name: "main", prerelease: true, draft: false },
+        { tag_name: "v4.0.0-beta.1", prerelease: false, draft: false },
+      ], { headers: { link: '<https://api.github.com/repos/doctor-io/homeio/releases?page=2>; rel="next"' } }))
+      .mockResolvedValueOnce(Response.json([
+        { tag_name: "v2.0.0-beta.10", prerelease: true, draft: false },
+        { tag_name: "v1.12.0", prerelease: false, draft: false },
+      ]));
+
+    expect((await getSystemUpdateStatus()).latestVersion).toBe("1.11.2");
+    vi.mocked(readUpdateChannel).mockResolvedValueOnce("beta");
+    expect(await getSystemUpdateStatus()).toMatchObject({
+      latestVersion: "2.0.0-beta.10",
+      updateAvailable: true,
+    });
+    expect((await getSystemUpdateStatus()).latestVersion).toBe("1.11.2");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.github.com/repos/doctor-io/homeio/releases?per_page=100&page=2",
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("saves the release channel and preserves an explicit branch override", async () => {
+    expect(await setSystemUpdateChannel("beta")).toEqual({ channel: "beta", disabledReason: null });
+    expect(writeUpdateChannel).toHaveBeenCalledWith("beta");
+    vi.stubEnv("HOMEIO_REPO_BRANCH", "develop");
+    expect((await getSystemUpdateChannel()).disabledReason).toContain("HOMEIO_REPO_BRANCH");
+    await expect(setSystemUpdateChannel("stable")).rejects.toThrow("HOMEIO_REPO_BRANCH");
+    expect(writeUpdateChannel).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a latest release whose tag is not a version", async () => {
@@ -241,10 +289,49 @@ describe("update-service", () => {
         "--setenv=HOMEIO_REPO_URL=https://github.com/doctor-io/homeio.git",
         "bash",
         "-lc",
-        expect.stringContaining("scripts/update.sh"),
+        expect.stringContaining(path.join("scripts", "update.sh")),
       ]),
       expect.any(Function),
     );
+  });
+
+  it("installs the advertised Beta tag and rejects a stale selection or older version", async () => {
+    statMock.mockResolvedValue({});
+    succeedAllExecFileCalls();
+    vi.mocked(readUpdateChannel).mockResolvedValueOnce("beta");
+    vi.mocked(withLockedUpdateChannel).mockImplementationOnce((action) => action("beta"));
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json([
+        { tag_name: "v2.0.0-beta.10", prerelease: true, draft: false },
+      ]))
+      .mockResolvedValueOnce(releaseResponse("v1.12.0"))
+      .mockResolvedValueOnce(releaseResponse("v1.0.0"));
+
+    await scheduleSystemUpdate("2.0.0-beta.10");
+    expect(execFileMock).toHaveBeenCalledWith(
+      "systemd-run",
+      expect.arrayContaining(["--setenv=HOMEIO_REPO_BRANCH=v2.0.0-beta.10"]),
+      expect.any(Function),
+    );
+    await expect(scheduleSystemUpdate("2.0.0-beta.10")).rejects.toThrow("available version has changed");
+    await expect(scheduleSystemUpdate()).rejects.toThrow("no newer Homeio version");
+    expect(execFileMock.mock.calls.filter(([command]) => command === "systemd-run")).toHaveLength(1);
+  });
+
+  it("refuses to launch if an update starts during the release lookup", async () => {
+    statMock.mockResolvedValue({});
+    let updating = false;
+    execFileMock.mockImplementation((command: string, _args: string[], ...rest: unknown[]) => {
+      const stdout = command === "systemctl" && updating ? "homeio-self-update-1.service" : "";
+      resolveExecFileCallback(rest)(null, { stdout, stderr: "" });
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async () => {
+      updating = true;
+      return releaseResponse("v9.9.9");
+    });
+
+    await expect(scheduleSystemUpdate("9.9.9")).rejects.toThrow("already in progress");
+    expect(execFileMock).not.toHaveBeenCalledWith("systemd-run", expect.anything(), expect.anything());
   });
 
   it("installs the configured branch when the server follows one", async () => {
@@ -256,6 +343,7 @@ describe("update-service", () => {
     await scheduleSystemUpdate();
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(withLockedUpdateChannel).not.toHaveBeenCalled();
     expect(execFileMock).toHaveBeenCalledWith(
       "systemd-run",
       expect.arrayContaining(["--setenv=HOMEIO_REPO_BRANCH=v2.0"]),

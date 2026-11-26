@@ -72,6 +72,14 @@ jobs:
       - name: Unit tests
         run: npm run test:coverage
 
+      - name: Update channel integration test
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+          HOMEIO_INTEGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/homeio_update_integration
+        run: |
+          docker exec "$POSTGRES_CONTAINER_ID" createdb --username=postgres homeio_update_integration
+          npm run test:integration:updates
+
       - name: Build
         run: NODE_ENV=production npm run build
 

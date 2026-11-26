@@ -157,6 +157,7 @@ describe("UpdateReminder", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Update now" }));
 
       await waitFor(() => expect(replace).toHaveBeenCalledWith("/updating"));
+      expect(applyMock).toHaveBeenCalledWith("1.10.1");
       expect(persistMock).toHaveBeenCalledWith(
         "update",
         expect.objectContaining({ requestDispatchedAt: expect.any(String) }),
